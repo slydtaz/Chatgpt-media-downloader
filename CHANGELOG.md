@@ -1,3 +1,9 @@
+## 5.0.6
+
+- Corrige a execução de `unittest` no GitHub Actions para Windows: os workflows agora usam `shell: cmd` nos comandos Python nativos do Windows (testes, compilação sintática e PyInstaller), evitando a interpretação de cada linha de stderr do Python como erro terminante do PowerShell.
+- Mantém o teste de retorno real do Python: falhas nos testes continuam bloqueando o build e a publicação. Na matriz multiplataforma, Ubuntu continua executando os testes em Bash.
+- Acrescenta teste de regressão para a configuração dos shells e corrige o script de publicação manual para criar a Release `stable` quando ela ainda não existe, após validar o SHA-256 do EXE local.
+
 ## 5.0.5
 
 - Corrige os workflows do GitHub Actions para mesclar a saída de diagnóstico (stderr) do `unittest` no fluxo de saída normal; a suite que conclui com `OK` não deve ser marcada como falha só pela forma como o PowerShell trata a saída nativa.

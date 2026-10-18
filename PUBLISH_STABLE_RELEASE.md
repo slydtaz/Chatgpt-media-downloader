@@ -1,6 +1,6 @@
 # Publicar a Release estável
 
-A Release oficial usa a tag `stable` e o título inclui a versão real, por exemplo `ChatGPT Media Downloader 5.0.5 — Stable`.
+A Release oficial usa a tag `stable` e o título inclui a versão real, por exemplo `ChatGPT Media Downloader 5.0.6 — Stable`.
 
 ## Publicação automatizada
 
@@ -14,4 +14,4 @@ A Release oficial usa a tag `stable` e o título inclui a versão real, por exem
 - **Usuários finais:** `ChatGPTMediaDownloader.exe` e `SHA256SUMS.txt` anexados à Release `stable`.
 - **Desenvolvedores:** ZIP do código-fonte ou `Code → Download ZIP`, para leitura, auditoria e compilação.
 
-Se o workflow falhar, abra os logs da execução antes de fazer upload manual. A compilação do EXE Windows precisa ocorrer no Windows; não publique um executável sem testá-lo e validar o SHA-256.
+Se o workflow falhar, abra os logs da execução antes de fazer upload manual. O script `PUBLISH_EXE_TO_STABLE.bat` pode criar a Release `stable` se ela ainda não existir, desde que o EXE e o checksum tenham sido gerados e validados localmente no Windows. A compilação do EXE Windows precisa ocorrer no Windows; não publique um executável sem testá-lo e validar o SHA-256.

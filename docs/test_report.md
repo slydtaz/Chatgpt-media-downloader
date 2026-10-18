@@ -33,3 +33,8 @@ No workflow da release 5.0.3, a compilação sintática passou, mas `test_parall
 ## Acompanhamento 5.0.5
 
 A execução no GitHub Actions Windows reportou `OK (skipped=2)` mas o step retornou código 1. Para reduzir a interação do stderr com o shell PowerShell, os workflows agora mesclam a saída do `unittest` no stdout com `2>&1`. O código de saída do processo Python segue sendo usado; é necessário observar a próxima execução remota para confirmar a correção.
+
+
+## Acompanhamento 5.0.6
+
+A execução 5.0.5 também parou antes de imprimir o resumo da suíte quando a saída do Python foi redirecionada com `2>&1`. A alteração seguinte muda os comandos Python nativos no Windows para `shell: cmd`, enquanto o workflow de matriz usa Bash no Ubuntu. O teste de regressão verifica essa separação. É necessária uma nova execução remota para confirmar a correção; nenhum sucesso do Windows Actions é declarado antecipadamente.
