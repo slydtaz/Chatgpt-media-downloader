@@ -45,14 +45,14 @@ jobs:
           $hotfixNumber = $env:HOTFIX_NUMBER
           if ([string]::IsNullOrWhiteSpace($hotfixNumber) -and $env:GITHUB_REF -eq 'refs/heads/main') {
             $commitSubject = git log -1 --format=%s
-            if ($commitSubject -match '\\(hotfix-([1-9]\\d*)\\)') {
+            if ($commitSubject -match '\(hotfix-([1-9]\d*)\)') {
               $hotfixNumber = $Matches[1]
             }
           }
           if ([string]::IsNullOrWhiteSpace($hotfixNumber)) {
             $releaseName = "$version - stable"
           } else {
-            if ($hotfixNumber -notmatch '^[1-9]\\d*$') { throw 'hotfix_number deve ser um número inteiro positivo.' }
+            if ($hotfixNumber -notmatch '^[1-9]\d*$') { throw 'hotfix_number deve ser um número inteiro positivo.' }
             $releaseName = "$version - stable (hotfix-$hotfixNumber)"
           }
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
