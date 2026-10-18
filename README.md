@@ -9,7 +9,7 @@
 [Sugerir uma melhoria](https://github.com/slydtaz/chatgpt-media-downloader/issues/new?template=feature_request.yml)
 
 ![Sistema: Windows](https://img.shields.io/badge/SO-Windows-0078D6)
-![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.1.0-blue)
+![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.1.1-blue)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green)
 
 </div>
@@ -31,7 +31,7 @@ A interface usa navegação lateral e painéis de trabalho inspirados no design 
 3. Faça uma verificação com o Microsoft Defender ou seu antivírus antes de executar.
 4. Abra o EXE. Na primeira execução, o aplicativo prepara suas dependências de mídia (yt-dlp/FFmpeg) a partir de fontes configuradas no projeto.
 
-## 🧑‍💻 Código-fonte para desenvolvedores
+**Atenção para quem está na 5.0.1:** se o reparo automático fechar o programa sem reabri-lo e o aviso crítico voltar a aparecer, instale a nova versão manualmente uma vez a partir da [última release oficial](https://github.com/slydtaz/Chatgpt-media-downloader/releases/latest). O atualizador antigo não consegue garantir que o próprio auxiliar de troca terminou a operação; não repita o reparo indefinidamente.\n\n## 🧑‍💻 Código-fonte para desenvolvedores
 
 O ZIP de código-fonte da Release e o botão **Code → Download ZIP** são destinados a desenvolvedores, auditoria, testes e compilação. Usuários comuns não precisam baixar nem extrair o fonte: basta o EXE oficial. O GitHub também pode mostrar seus ZIP/TAR automáticos de código-fonte em cada Release.
 
@@ -107,7 +107,7 @@ Contribuições são bem-vindas. Leia [`CONTRIBUTING.md`](CONTRIBUTING.md), abra
 
 ## 📚 Documentação
 
-- [Histórico de mudanças da versão 5.1.0](docs/5.1.0_changes.md) · [Versão 5.0.6](docs/5.0.6_changes.md) · [Versão 5.0.5](docs/5.0.5_changes.md) · [Versão 5.0.4](docs/5.0.4_changes.md) · [Versão 5.0.3](docs/5.0.3_changes.md) · [Versão 5.0.2](docs/5.0.2_changes.md) · [Versão 5.0.1](docs/5.0.1_changes.md) · [Versão 5.0.0](docs/5.0.0_changes.md)
+- [Hotfix 5.1.1 — ciclo de reparo e reinicialização](docs/5.1.1_changes.md) · [Versão 5.1.0](docs/5.1.0_changes.md) · [Versão 5.0.6](docs/5.0.6_changes.md) · [Versão 5.0.5](docs/5.0.5_changes.md) · [Versão 5.0.4](docs/5.0.4_changes.md) · [Versão 5.0.3](docs/5.0.3_changes.md) · [Versão 5.0.2](docs/5.0.2_changes.md) · [Versão 5.0.1](docs/5.0.1_changes.md) · [Versão 5.0.0](docs/5.0.0_changes.md)
 - [Matriz de funcionalidades legadas](docs/legacy_functionality_matrix.md)
 - [Modelo de segurança e limites](docs/security_model.md)
 - [Relatório de testes e limitações](docs/test_report.md)
