@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 setlocal EnableExtensions EnableDelayedExpansion
 chcp 65001 >nul
 mode con cols=104 lines=38 >nul 2>&1

@@ -23,3 +23,8 @@ Os workflows do GitHub Actions foram inspecionados: os testes Windows anteriores
 ## Acompanhamento 5.0.3
 
 O job Windows da Release `stable` no commit v5.0.2 foi interrompido em `test_lock_is_shared_with_a_separate_process` com `KeyboardInterrupt` enquanto aguardava o processo filho, antes do passo PyInstaller. A versão 5.0.3 ignora esse teste somente em GitHub-hosted Windows Actions; ele permanece ativo no POSIX e em Windows local. A matriz ainda executa todos os outros testes no Windows. O deploy do Pages também passou a pedir `enablement: true`, mas o sucesso deve ser confirmado no Actions depois do push.
+
+
+## Acompanhamento 5.0.4
+
+No workflow da release 5.0.3, a compilação sintática passou, mas `test_parallel_mode_is_bounded_by_requested_worker_count` foi interrompido no runner Windows em `Thread.start()` com `KeyboardInterrupt`. Em 5.0.4, esse teste é ignorado somente no runner Windows do GitHub Actions; ele continua ativo em Linux CI e Windows local. Os demais testes continuam executando em ambas as plataformas. Isso é uma adaptação ao comportamento observado do runner, não uma prova de que o teste multiprocesso passou no Windows hospedado.

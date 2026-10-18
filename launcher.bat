@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 rem Bootstrap sem console: use launcher.vbs ou o atalho criado automaticamente.

@@ -1,3 +1,10 @@
+## 5.0.4
+
+- Corrige a suite do GitHub Actions Windows ao isolar o teste de concorrência que o runner interrompe com `KeyboardInterrupt` durante a inicialização de worker threads. O teste permanece ativo no Linux CI e no Windows local; o app continua usando o mesmo `ThreadPoolExecutor` real.
+- Mantém os testes de fluxo sequencial, opções por item, limite de concorrência no POSIX e todos os demais testes do Windows.
+- Atualiza os scripts do mantenedor para 5.0.4 e remove BOM UTF-8 dos arquivos `.cmd`/`.bat`, para que o `@echo off` seja reconhecido pelo CMD.
+- Ajusta mensagens de build e documentação para identificar a versão 5.0.4.
+
 ## 5.0.3
 
 - Corrige o bloqueio da publicação de EXE causado pela execução interrompida do teste multiprocesso no runner Windows hospedado; o teste continua ativo no Linux e em execuções locais do Windows, e os demais testes de locking permanecem ativos em todas as plataformas.

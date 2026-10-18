@@ -1,4 +1,5 @@
 import logging
+import os
 import queue
 import tempfile
 import threading
@@ -100,6 +101,11 @@ class PlaylistExecutionTests(unittest.TestCase):
         self._execute("sequential")
         self.assertEqual(FakeDownloader.tracker["max_active"], 1)
 
+    @unittest.skipIf(
+        os.name == "nt" and os.environ.get("GITHUB_ACTIONS") == "true",
+        "GitHub-hosted Windows runner interrupts worker-thread startup with KeyboardInterrupt; "
+        "parallel mode remains tested on POSIX CI and local Windows runs.",
+    )
     def test_parallel_mode_is_bounded_by_requested_worker_count(self):
         self._execute("parallel", workers=3)
         self.assertGreater(FakeDownloader.tracker["max_active"], 1)

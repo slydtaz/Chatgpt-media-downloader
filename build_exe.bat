@@ -1,10 +1,12 @@
 @echo off
+chcp 65001 >nul
+chcp 65001 >nul
 setlocal EnableExtensions
 cd /d "%~dp0"
 title Build ChatGPT Media Downloader - single EXE
 
 echo ============================================================
-echo   ChatGPT Media Downloader 5.0.3 - Build de arquivo unico
+echo   ChatGPT Media Downloader 5.0.4 - Build de arquivo unico
 echo ============================================================
 echo.
 
