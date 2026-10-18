@@ -67,12 +67,6 @@ jobs:
         shell: pwsh
         run: |
           $sourceZip = "dist/ChatGPTMediaDownloader-$env:APP_VERSION-source.zip"
-          git archive --format=zip --output=$sourceZip $env:RELEASE_TAG
-          if (!(Test-Path $sourceZip)) { throw 'Source ZIP was not created' }
-      - name: Package versioned source ZIP
-        shell: pwsh
-        run: |
-          $sourceZip = "dist/ChatGPTMediaDownloader-$env:APP_VERSION-source.zip"
           $listedTag = git tag --list "$env:RELEASE_TAG"
           $archiveRef = if ($listedTag -eq $env:RELEASE_TAG) { $env:RELEASE_TAG } else { $env:GITHUB_SHA }
           git archive --format=zip --output=$sourceZip $archiveRef
