@@ -222,13 +222,15 @@ def _release_candidate(current: str, release: dict, *, frozen: bool) -> Optional
 
 
 def check_for_update(current_version: str = VERSION, *, frozen: Optional[bool] = None) -> Optional[AppUpdate]:
-    """Check the stable Release alias first, then latest, then source main if needed."""
+    """Choose the newest published release first, then fall back to stable alias/source."""
     if frozen is None:
         frozen = bool(getattr(sys, "frozen", False))
 
-    # A prior version Release (for example v5.0.0) must not hide a newer stable
-    # build simply because GitHub still marks the prior release as "latest".
-    release_urls = (f"{API_ROOT}/releases/tags/stable", f"{API_ROOT}/releases/latest")
+    # Versioned releases are the historical source of truth. Prefer GitHub's
+    # latest versioned stable release; only use the mutable stable alias when
+    # latest does not contain a newer build. This prevents an outdated alias from
+    # forcing users through an intermediate update.
+    release_urls = (f"{API_ROOT}/releases/latest", f"{API_ROOT}/releases/tags/stable")
     for release_url in release_urls:
         try:
             release = _request_json(release_url, allow_404=True)
@@ -260,11 +262,11 @@ def check_repair_candidate(current_version: str = VERSION, *, frozen: Optional[b
     if frozen is None:
         frozen = bool(getattr(sys, "frozen", False))
     if frozen:
-        # Prefer the explicit stable alias: GitHub's /releases/latest can still
-        # point to an older version after a stable alias has been moved.
-        release = _request_json(f"{API_ROOT}/releases/tags/stable", allow_404=True)
+        # Prefer a versioned stable Release; use the legacy stable alias only
+        # when no versioned Release is available.
+        release = _request_json(f"{API_ROOT}/releases/latest", allow_404=True)
         if not release or release.get("draft") or release.get("prerelease"):
-            release = _request_json(f"{API_ROOT}/releases/latest", allow_404=True)
+            release = _request_json(f"{API_ROOT}/releases/tags/stable", allow_404=True)
         if not release or release.get("draft") or release.get("prerelease"):
             raise AppUpdateError("Ainda não existe uma Release estável publicada para reparar o executável.")
         candidate = _release_candidate(current_version, release, frozen=True)
@@ -282,9 +284,9 @@ def check_repair_candidate(current_version: str = VERSION, *, frozen: Optional[b
                          str(release.get("html_url") or ""), str(release.get("body") or ""), tag,
                          sums["browser_download_url"], digest, int(exe.get("size") or 0),
                          str(release.get("published_at") or ""), tag)
-    release = _request_json(f"{API_ROOT}/releases/tags/stable", allow_404=True)
+    release = _request_json(f"{API_ROOT}/releases/latest", allow_404=True)
     if not release or release.get("draft") or release.get("prerelease"):
-        release = _request_json(f"{API_ROOT}/releases/latest", allow_404=True)
+        release = _request_json(f"{API_ROOT}/releases/tags/stable", allow_404=True)
     source_version = _source_version()
     if release and not release.get("draft") and not release.get("prerelease"):
         tag = str(release.get("tag_name") or "").strip()

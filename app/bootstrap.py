@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import queue
 import shutil
 import subprocess
@@ -100,6 +101,92 @@ def _is_ours(path: Path, install_id: str) -> bool:
     except (OSError, json.JSONDecodeError):
         return False
     return data.get("install_id") == install_id
+
+def _version_key(value: object) -> tuple[int, ...]:
+    """Compare dotted app versions numerically without requiring packaging."""
+    match = re.search(r"v?(\d+(?:\.\d+){0,5})", str(value or "").strip(), re.IGNORECASE)
+    if not match:
+        return (0,)
+    try:
+        return tuple(int(part) for part in match.group(1).split("."))
+    except ValueError:
+        return (0,)
+
+
+def _version_is_newer(candidate: object, current: object) -> bool:
+    left, right = _version_key(candidate), _version_key(current)
+    width = max(len(left), len(right))
+    return left + (0,) * (width - len(left)) > right + (0,) * (width - len(right))
+
+
+def _installed_version(path: Path, install_id: str) -> str:
+    """Read a version only from an installation owned by this product and ID."""
+    if not _is_ours(path, install_id):
+        return ""
+    try:
+        data = json.loads((path / INSTALL_MARKER).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    return str(data.get("version") or "")
+
+
+def _newest_install_not_older(candidates: list[Path], install_id: str, source_version: str) -> Path | None:
+    """Find an existing owned copy newer than the launcher being started.
+
+    Older shortcuts and downloaded portable copies must never overwrite a newer
+    installation merely because the user opened the old entry point again.
+    """
+    versions = [(candidate, _installed_version(candidate, install_id)) for candidate in candidates]
+    newer = [(candidate, version) for candidate, version in versions if version and _version_is_newer(version, source_version)]
+    if not newer:
+        return None
+    return max(newer, key=lambda item: _version_key(item[1]))[0]
+
+
+def sync_portable_entrypoint(install_root: Path, install_id: str, running_executable: Path | None = None) -> bool:
+    """Refresh the original portable EXE so reopening it cannot roll back an update."""
+    if not _is_ours(install_root, install_id):
+        return False
+    try:
+        marker_path = install_root / INSTALL_MARKER
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+        origin_text = str(marker.get("installed_from") or "").strip()
+        if not origin_text:
+            return False
+        origin = Path(origin_text).expanduser().resolve()
+        current = Path(running_executable or sys.executable).expanduser().resolve()
+        if origin == current or origin.parent == current.parent:
+            return False
+        expected_name = "ChatGPTMediaDownloader.exe" if current.suffix.lower() == ".exe" else current.name
+        if origin.name.lower() != expected_name.lower() or not origin.is_file() or not current.is_file():
+            return False
+        if origin.stat().st_size == current.stat().st_size and _sha256_file(origin) == _sha256_file(current):
+            return False
+
+        staged = origin.with_name(f".{origin.name}.{uuid.uuid4().hex[:10]}.new")
+        try:
+            shutil.copy2(current, staged)
+            if staged.stat().st_size != current.stat().st_size or _sha256_file(staged) != _sha256_file(current):
+                raise RuntimeError("A entrada portátil não passou na verificação SHA-256.")
+            os.replace(staged, origin)
+            if origin.stat().st_size != current.stat().st_size or _sha256_file(origin) != _sha256_file(current):
+                raise RuntimeError("A entrada portátil substituída não corresponde ao executável instalado.")
+        finally:
+            staged.unlink(missing_ok=True)
+
+        marker["portable_entrypoint_synced_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        marker["portable_entrypoint_sha256"] = _sha256_file(current)
+        temp_marker = marker_path.with_name(f".{marker_path.name}.{uuid.uuid4().hex[:8]}.tmp")
+        try:
+            temp_marker.write_text(json.dumps(marker, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+            os.replace(temp_marker, marker_path)
+        finally:
+            temp_marker.unlink(missing_ok=True)
+        return True
+    except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
+        # The installed EXE remains usable even if the original portable path is read-only.
+        return False
+
 
 
 def _remove_directory_contents(path: Path) -> None:
@@ -339,6 +426,11 @@ def ensure_frozen_installation(source_exe: Path, install_id: str, system) -> tup
         except OSError:
             continue
 
+    # Do not allow a stale portable EXE to overwrite a newer owned installation.
+    newer_install = _newest_install_not_older([preferred, user], install_id, VERSION)
+    if newer_install is not None:
+        return newer_install, True
+
     errors: list[str] = []
     for candidate in (preferred, user):
         try:
@@ -366,6 +458,11 @@ def ensure_installation(source: Path, install_id: str, system) -> tuple[Path, bo
                 return candidate, False
         except OSError:
             pass
+
+    # A stale extracted source package must never downgrade an installed version.
+    newer_install = _newest_install_not_older([preferred, user], install_id, VERSION)
+    if newer_install is not None:
+        return newer_install, True
 
     errors: list[str] = []
     for candidate in (preferred, user):
@@ -794,6 +891,14 @@ def main() -> None:
 
             if "--installed" in sys.argv[1:]:
                 installed_root = Path(sys.executable).resolve().parent if frozen else source
+                if frozen and os.name == "nt":
+                    try:
+                        if sync_portable_entrypoint(installed_root, install_id, Path(sys.executable).resolve()):
+                            from .logging_utils import setup_logging
+                            from .config import LOG_DIR
+                            setup_logging(LOG_DIR).info("Entrada portátil sincronizada com a versão instalada %s.", VERSION)
+                    except Exception:
+                        pass
                 if os.name == "nt":
                     create_desktop_shortcut(installed_root)
                 elif system.os_name == "Linux":
@@ -819,7 +924,20 @@ def main() -> None:
                     guard.clear_handoff(token)
                     raise
                 if os.name == "nt" and not frozen:
-                    schedule_source_cleanup(source, install_root)
+                    installed_version = _installed_version(install_root, install_id)
+                    if not _version_is_newer(installed_version, VERSION):
+                        schedule_source_cleanup(source, install_root)
+                    else:
+                        # This was a downgrade-prevention handoff; keep the old source copy intact.
+                        try:
+                            from .logging_utils import setup_logging
+                            from .config import LOG_DIR
+                            setup_logging(LOG_DIR).info(
+                                "Reabertura encaminhada para instalação mais nova %s; origem antiga preservada.",
+                                installed_version,
+                            )
+                        except Exception:
+                            pass
                 return
             run_installed()
         finally:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import platform as _platform
 import tempfile
 import uuid
@@ -12,7 +13,7 @@ from typing import Any
 APP_NAME = "ChatGPT Media Downloader"
 PRODUCT_ID = "com.chatgpt.mediadownloader"
 VENDOR = "ChatGPT"
-VERSION = "5.0.6"
+VERSION = "5.1.0"
 
 
 def _windows_local_appdata() -> Path:
@@ -95,7 +96,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "yt_dlp_path": "",
     "ffmpeg_path": "",
     "ffprobe_path": "",
-    "theme": "system",
+    "theme": "dark",
+    "accent_color": "#8B5CF6",
+    "ui_density": "comfortable",
     "playlist_strategy": "sequential",
     "playlist_parallelism": 3,
     "concurrent_fragments": 4,
@@ -145,8 +148,14 @@ def load_config() -> dict[str, Any]:
         data["auto_video_quality"] = 1080
     if data["audio_bitrate"] not in {128, 192, 320}:
         data["audio_bitrate"] = 192
-    if data.get("theme") not in {"system", "dark", "light"}:
-        data["theme"] = "system"
+    if data.get("theme") not in {"system", "dark", "light", "oled"}:
+        data["theme"] = "dark"
+    accent = str(data.get("accent_color", DEFAULT_CONFIG["accent_color"]) or DEFAULT_CONFIG["accent_color"]).strip()
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}", accent):
+        accent = DEFAULT_CONFIG["accent_color"]
+    data["accent_color"] = accent.upper()
+    if data.get("ui_density") not in {"comfortable", "compact"}:
+        data["ui_density"] = "comfortable"
     if data.get("playlist_strategy") not in {"sequential", "parallel"}:
         data["playlist_strategy"] = "sequential"
     try:
