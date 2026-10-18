@@ -212,15 +212,13 @@ class BootstrapTests(unittest.TestCase):
             marker = Path(td) / "temp" / "startup-repair-pending.json"
             marker.parent.mkdir(parents=True)
             marker.write_text('{"version": "5.1.1"}', encoding="utf-8")
-            with patch.object(config, "STARTUP_REPAIR_PENDING_PATH", marker), \\
-                 patch.object(bootstrap, "show_startup_notice") as notice:
+            with patch.object(config, "STARTUP_REPAIR_PENDING_PATH", marker), patch.object(bootstrap, "show_startup_notice") as notice:
                 handled = bootstrap._offer_startup_repair(RuntimeError("simulated startup failure"))
             self.assertTrue(handled)
             notice.assert_called_once()
             message = notice.call_args.args[0]
             self.assertIn("ciclo infinito", message)
             self.assertIn("releases/latest", message)
-
 
 if __name__ == "__main__":
     unittest.main()
