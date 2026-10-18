@@ -13,6 +13,7 @@ from app.app_update import (
     API_ROOT,
     AppUpdateError,
     _release_candidate,
+    _windows_update_helper_script,
     _safe_extract_zip,
     _stage_source_tree,
     _verify_executable_hash,
@@ -153,6 +154,16 @@ class AppUpdateDiscoveryTests(unittest.TestCase):
         release["assets"] = release["assets"][:1]
         with self.assertRaises(AppUpdateError):
             _release_candidate("5.0.0", release, frozen=True)
+
+
+    def test_windows_repair_helper_waits_for_startup_confirmation_and_keeps_diagnostics(self):
+        script = _windows_update_helper_script()
+        self.assertIn("[Parameter(Mandatory=$true)][bool]$StartupRepair", script)
+        self.assertIn("while (Test-Path -LiteralPath $RepairMarker)", script)
+        self.assertIn("[System.Windows.Forms.MessageBox]::Show", script)
+        self.assertIn("Get-FileHash -LiteralPath", script)
+        self.assertIn("preservando o backup", script)
+        self.assertIn("update-helper", script)  # helper logs identify the update operation
 
 
 class SafeArchiveTests(unittest.TestCase):
