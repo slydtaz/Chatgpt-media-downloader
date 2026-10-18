@@ -33,7 +33,7 @@ jobs:
       - name: Read application version
         shell: pwsh
         env:
-          HOTFIX_NUMBER: \${{ inputs.hotfix_number }}
+          HOTFIX_NUMBER: ${{ inputs.hotfix_number }}
         run: |
           $match = Select-String -Path 'app/config.py' -Pattern '^VERSION\s*=\s*"([^"]+)"'
           if (!$match) { throw 'Could not read VERSION from app/config.py' }
@@ -73,13 +73,13 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: \${{ env.RELEASE_TAG }}
-          target_commitish: \${{ github.sha }}
-          name: \${{ env.RELEASE_NAME }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ env.RELEASE_NAME }}
           body: |
-            \${{ env.RELEASE_NAME }}
+            ${{ env.RELEASE_NAME }}
 
-            Esta é a versão oficial estável \${{ env.APP_VERSION }}. O título só inclui hotfix-N quando a entrada manual declara uma correção crítica urgente.
+            Esta é a versão oficial estável ${{ env.APP_VERSION }}. O título só inclui hotfix-N quando a entrada manual declara uma correção crítica urgente.
 
             Recommended for users: download ChatGPTMediaDownloader.exe.
             SHA256SUMS.txt contains the SHA-256 checksum of the same build.
