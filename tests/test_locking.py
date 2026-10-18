@@ -76,16 +76,31 @@ class CrossProcessLockTests(unittest.TestCase):
             )
             try:
                 deadline = time.monotonic() + 5.0
-                while not ready.exists() and child.poll() is None and time.monotonic() < deadline:
+                ready_content = ""
+                while child.poll() is None and time.monotonic() < deadline:
+                    try:
+                        if ready.exists():
+                            ready_content = ready.read_text(encoding="ascii")
+                            if ready_content == "ACQUIRED":
+                                break
+                    except OSError:
+                        # The child may have created the marker but not finished writing it.
+                        pass
                     time.sleep(0.02)
-                if not ready.exists():
+
+                if ready_content != "ACQUIRED":
+                    try:
+                        ready_content = ready.read_text(encoding="ascii") if ready.exists() else ""
+                    except OSError:
+                        ready_content = ""
+                if ready_content != "ACQUIRED":
                     stdout, stderr = child.communicate(timeout=3)
                     self.fail(
-                        "O processo filho nao adquiriu o bloqueio antes do timeout. "
-                        f"returncode={child.returncode}; stdout={stdout!r}; stderr={stderr!r}"
+                        "O processo filho nao confirmou a aquisicao do bloqueio antes do timeout. "
+                        f"ready={ready_content!r}; returncode={child.returncode}; "
+                        f"stdout={stdout!r}; stderr={stderr!r}"
                     )
 
-                self.assertEqual(ready.read_text(encoding="ascii"), "ACQUIRED")
                 contender = CrossProcessFileLock(path, timeout=0.05)
                 self.assertFalse(contender.acquire(), "um segundo processo nao deve entrar enquanto o filho segura o lock")
                 stdout, stderr = child.communicate(timeout=5)
