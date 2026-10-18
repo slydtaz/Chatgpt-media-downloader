@@ -163,7 +163,7 @@ class AppUpdateDiscoveryTests(unittest.TestCase):
         self.assertIn("[System.Windows.Forms.MessageBox]::Show", script)
         self.assertIn("Get-FileHash -LiteralPath", script)
         self.assertIn("preservando o backup", script)
-        self.assertIn("update-helper", script)  # helper logs identify the update operation
+        self.assertIn("Write-UpdateLog", script)  # persistent helper logging is present
 
 
 class SafeArchiveTests(unittest.TestCase):
