@@ -60,7 +60,7 @@ def startup_repair_is_pending() -> bool:
 def mark_startup_repair_pending(version: str) -> None:
     """Persist a repair hand-off marker until the new GUI confirms startup."""
     payload = json.dumps({"version": str(version)[:32]}, ensure_ascii=False, indent=2)
-    _write_atomic(STARTUP_REPAIR_PENDING_PATH, payload + "\\n")
+    _write_atomic(STARTUP_REPAIR_PENDING_PATH, payload + "\n")
 
 
 def clear_startup_repair_pending() -> bool:
