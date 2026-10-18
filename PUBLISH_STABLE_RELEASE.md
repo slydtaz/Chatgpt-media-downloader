@@ -1,14 +1,17 @@
 # Publicar a Release estável
 
-A Release oficial para usuários finais utiliza a tag `stable` e precisa ter um título com a versão do aplicativo, por exemplo `ChatGPT Media Downloader 5.0.1 — Stable`. O atualizador lê a versão numérica do título quando a tag não é um número de versão.
+A Release oficial usa a tag `stable` e o título inclui a versão real, por exemplo `ChatGPT Media Downloader 5.0.2 — Stable`.
 
-## Publicação manual no Windows
+## Publicação automatizada
 
-1. Envie as alterações de `main` para o repositório.
-2. Crie a tag `stable` sobre o commit de produção e envie-a: `git tag -a stable -m "ChatGPT Media Downloader 5.0.1 stable"` e `git push origin stable`. Não force nem mova uma tag estável publicada sem intenção explícita.
-3. Em **GitHub → Releases → Draft a new release**, selecione a tag `stable` e nomeie a Release `ChatGPT Media Downloader 5.0.1 — Stable`. Marque como a Release mais recente (Latest).
-4. Execute `CREATE_EXE_OWNER_ONLY.bat` no Windows e teste `dist\ChatGPTMediaDownloader.exe`.
-5. Anexe `ChatGPTMediaDownloader.exe` e `SHA256SUMS.txt` à Release stable. O atualizador de executáveis exige ambos os arquivos e valida o SHA-256.
-6. Na descrição da Release, indique que o EXE é recomendado para usuários finais e os fontes/ZIPs automáticos do GitHub são para desenvolvedores.
+1. Execute `EXECUTAR_PUBLICACAO.cmd` no pacote do mantenedor. O script publica o código em `main`, consulta a tag remota `stable` em uma referência temporária e compara o commit real.
+2. Se `main` tiver mudanças novas, o script pede confirmação antes de atualizar a tag `stable`. Não confirma se não desejar publicar esses arquivos como estáveis.
+3. O envio da tag `stable` dispara `.github/workflows/release.yml` em um runner Windows. O workflow executa a compilação e os testes, gera o EXE único e o `SHA256SUMS.txt` e cria/atualiza a Release `stable`.
+4. Acompanhe [GitHub Actions](https://github.com/slydtaz/Chatgpt-media-downloader/actions). A Release só estará pronta quando o workflow concluir com sucesso e anexar ambos os arquivos.
 
-**Importante:** o título precisa conter a versão correta. Para versões futuras, atualize `app/config.py` e o título da Release juntos. O EXE e o hash devem ser do mesmo build testado.
+## Download de usuários e desenvolvedores
+
+- **Usuários finais:** `ChatGPTMediaDownloader.exe` e `SHA256SUMS.txt` anexados à Release `stable`.
+- **Desenvolvedores:** ZIP do código-fonte ou `Code → Download ZIP`, para leitura, auditoria e compilação.
+
+Se o workflow falhar, abra os logs da execução antes de fazer upload manual. A compilação do EXE Windows precisa ocorrer no Windows; não publique um executável sem testá-lo e validar o SHA-256.

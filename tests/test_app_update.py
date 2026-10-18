@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.app_update import (
+    API_ROOT,
     AppUpdateError,
     _release_candidate,
     _safe_extract_zip,
@@ -17,6 +18,7 @@ from app.app_update import (
     _verify_executable_hash,
     AppUpdate,
     check_for_update,
+    check_repair_candidate,
     is_newer_version,
     version_key,
 )
@@ -60,6 +62,40 @@ class AppUpdateDiscoveryTests(unittest.TestCase):
             update = check_for_update("4.9.0", frozen=True)
         self.assertIsNone(update)
         source_version.assert_not_called()
+
+    def test_stable_release_is_checked_before_latest_release(self):
+        stable = {
+            "tag_name": "stable",
+            "name": "ChatGPT Media Downloader 5.0.2 — Stable",
+            "html_url": "https://github.com/slydtaz/Chatgpt-media-downloader/releases/tag/stable",
+            "assets": [
+                {"name": "ChatGPTMediaDownloader.exe", "browser_download_url": "https://github.com/slydtaz/Chatgpt-media-downloader/releases/download/stable/ChatGPTMediaDownloader.exe", "size": 4096, "state": "uploaded"},
+                {"name": "SHA256SUMS.txt", "browser_download_url": "https://github.com/slydtaz/Chatgpt-media-downloader/releases/download/stable/SHA256SUMS.txt", "size": 90, "state": "uploaded"},
+            ],
+        }
+        old_latest = {"tag_name": "v5.0.0", "name": "ChatGPT Media Downloader 5.0.0", "assets": []}
+        with patch("app.app_update._request_json", side_effect=[stable, old_latest]) as request:
+            update = check_for_update("5.0.1", frozen=True)
+        self.assertIsNotNone(update)
+        self.assertEqual(update.version, "5.0.2")
+        self.assertEqual(update.tag_name, "stable")
+        self.assertEqual(request.call_args_list[0].args[0], f"{API_ROOT}/releases/tags/stable")
+
+    def test_executable_repair_prefers_stable_release(self):
+        stable = {
+            "tag_name": "stable",
+            "name": "ChatGPT Media Downloader 5.0.2 — Stable",
+            "html_url": "https://github.com/slydtaz/Chatgpt-media-downloader/releases/tag/stable",
+            "assets": [
+                {"name": "ChatGPTMediaDownloader.exe", "browser_download_url": "https://github.com/slydtaz/Chatgpt-media-downloader/releases/download/stable/ChatGPTMediaDownloader.exe", "size": 4096, "state": "uploaded"},
+                {"name": "SHA256SUMS.txt", "browser_download_url": "https://github.com/slydtaz/Chatgpt-media-downloader/releases/download/stable/SHA256SUMS.txt", "size": 90, "state": "uploaded"},
+            ],
+        }
+        with patch("app.app_update._request_json", side_effect=[stable]) as request:
+            update = check_repair_candidate("5.0.1", frozen=True)
+        self.assertEqual(update.version, "5.0.2")
+        self.assertEqual(update.tag_name, "stable")
+        self.assertEqual(request.call_args_list[0].args[0], f"{API_ROOT}/releases/tags/stable")
 
     def test_stable_release_uses_semantic_version_from_title(self):
         release = {

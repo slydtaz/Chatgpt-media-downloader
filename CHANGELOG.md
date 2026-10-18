@@ -1,3 +1,12 @@
+## 5.0.2
+
+- Corrige a detecção e publicação da tag `stable`: o publicador busca explicitamente a tag remota, compara o commit e pede confirmação antes de atualizá-la.
+- Corrige a compilação sintática no CI do Windows, evitando curinga que o PowerShell não expande.
+- Torna o teste de bloqueio entre processos limitado por tempo e com diagnóstico em Windows, evitando travamento de `stdout.readline()`.
+- Faz a publicação da Release estável construir e anexar automaticamente o EXE único e seu SHA-256 no GitHub Actions.
+- Prioriza a Release `stable` na busca por atualizações, mesmo quando uma Release sem assets aparece como `latest`.
+- Solicita habilitação do GitHub Pages no workflow de deploy e melhora o diagnóstico dos scripts locais de build/upload.
+
 ## 5.0.1
 
 - Atualiza `build_exe.bat` para calcular `SHA256SUMS.txt` depois da compilação, compatível com a validação do atualizador.

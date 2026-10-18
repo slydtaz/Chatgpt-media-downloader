@@ -24,7 +24,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Compile source
-        run: python -m py_compile app/*.py packaged_entry.py
+      - name: Compile source (cross-platform glob)
+        run: python -c "from pathlib import Path; import py_compile; files = list(Path('app').glob('*.py')) + [Path('packaged_entry.py')]; [py_compile.compile(str(p), doraise=True) for p in files]"
       - name: Run unit tests
         run: python -m unittest discover -s tests -v

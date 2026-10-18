@@ -49,38 +49,53 @@ class CrossProcessLockTests(unittest.TestCase):
 
     def test_lock_is_shared_with_a_separate_process(self):
         with tempfile.TemporaryDirectory() as td:
-            path = Path(td) / "multi-process.lock"
+            root = Path(td)
+            path = root / "multi-process.lock"
+            ready = root / "child-ready.txt"
             code = (
                 "import sys,time; from pathlib import Path; "
                 "from app.locking import CrossProcessFileLock; "
                 "lock=CrossProcessFileLock(Path(sys.argv[1]), timeout=1); "
-                "print('ACQUIRED', flush=True) if lock.acquire() else sys.exit(3); "
+                "ok=lock.acquire(); "
+                "sys.exit(3) if not ok else None; "
+                "Path(sys.argv[2]).write_text('ACQUIRED', encoding='ascii'); "
                 "time.sleep(1.2); lock.release()"
             )
             env = dict(os.environ)
             project_root = str(Path(__file__).resolve().parents[1])
             env["PYTHONPATH"] = project_root + os.pathsep + env.get("PYTHONPATH", "")
+            env["PYTHONIOENCODING"] = "utf-8"
             child = subprocess.Popen(
-                [sys.executable, "-c", code, str(path)],
+                [sys.executable, "-c", code, str(path), str(ready)],
                 cwd=project_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True, env=env,
+                text=True, encoding="utf-8", env=env,
             )
             try:
-                self.assertEqual(child.stdout.readline().strip(), "ACQUIRED")
+                deadline = time.monotonic() + 5.0
+                while not ready.exists() and child.poll() is None and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                if not ready.exists():
+                    stdout, stderr = child.communicate(timeout=3)
+                    self.fail(
+                        "O processo filho nao adquiriu o bloqueio antes do timeout. "
+                        f"returncode={child.returncode}; stdout={stdout!r}; stderr={stderr!r}"
+                    )
+
+                self.assertEqual(ready.read_text(encoding="ascii"), "ACQUIRED")
                 contender = CrossProcessFileLock(path, timeout=0.05)
-                self.assertFalse(contender.acquire())
-                child.wait(timeout=5)
-                self.assertEqual(child.returncode, 0, child.stderr.read())
+                self.assertFalse(contender.acquire(), "um segundo processo nao deve entrar enquanto o filho segura o lock")
+                stdout, stderr = child.communicate(timeout=5)
+                self.assertEqual(child.returncode, 0, stderr)
                 self.assertTrue(contender.acquire())
                 contender.release()
             finally:
                 if child.poll() is None:
                     child.kill()
-                    child.wait(timeout=3)
-                if child.stdout:
-                    child.stdout.close()
-                if child.stderr:
-                    child.stderr.close()
+                    try:
+                        child.communicate(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        pass
+
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@
 [Sugerir uma melhoria](https://github.com/slydtaz/chatgpt-media-downloader/issues/new?template=feature_request.yml)
 
 ![Sistema: Windows](https://img.shields.io/badge/SO-Windows-0078D6)
-![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.0.0-blue)
+![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.0.2-blue)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green)
 
 </div>
@@ -31,7 +31,7 @@
 
 O ZIP de código-fonte da Release e o botão **Code → Download ZIP** são destinados a desenvolvedores, auditoria, testes e compilação. Usuários comuns não precisam baixar nem extrair o fonte: basta o EXE oficial. O GitHub também pode mostrar seus ZIP/TAR automáticos de código-fonte em cada Release.
 
-**A atualização automática do executável depende de uma Release estável com `ChatGPTMediaDownloader.exe` e `SHA256SUMS.txt`.** A versão de código-fonte também pode identificar uma versão mais nova na branch `main`. Para compilar/publicar o executável, envie a tag `v5.0.0` e aguarde o workflow de Windows concluir com sucesso. Enquanto isso, use as instruções para executar a partir do código-fonte abaixo.
+**A atualização automática do executável depende de uma Release estável com `ChatGPTMediaDownloader.exe` e `SHA256SUMS.txt`.** A versão de código-fonte também pode identificar uma versão mais nova na branch `main`. A publicação da tag `stable` dispara o workflow do Windows, que testa, compila e anexa `ChatGPTMediaDownloader.exe` e `SHA256SUMS.txt` à Release estável. Também é possível usar tags de versão `v*`. Acompanhe a execução na aba Actions; não publique o EXE antes de o build terminar com sucesso.
 
 ## ✨ O que o programa faz
 
@@ -103,7 +103,7 @@ Contribuições são bem-vindas. Leia [`CONTRIBUTING.md`](CONTRIBUTING.md), abra
 
 ## 📚 Documentação
 
-- [Histórico de mudanças da versão 5.0.1](docs/5.0.1_changes.md) · [Versão 5.0.0](docs/5.0.0_changes.md)
+- [Histórico de mudanças da versão 5.0.2](docs/5.0.2_changes.md) · [Versão 5.0.1](docs/5.0.1_changes.md) · [Versão 5.0.0](docs/5.0.0_changes.md)
 - [Matriz de funcionalidades legadas](docs/legacy_functionality_matrix.md)
 - [Modelo de segurança e limites](docs/security_model.md)
 - [Relatório de testes e limitações](docs/test_report.md)
