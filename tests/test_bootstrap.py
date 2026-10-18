@@ -212,12 +212,13 @@ class BootstrapTests(unittest.TestCase):
             marker = Path(td) / "temp" / "startup-repair-pending.json"
             marker.parent.mkdir(parents=True)
             marker.write_text('{"version": "5.1.1"}', encoding="utf-8")
+            error = RuntimeError("simulated startup failure")
             with patch.object(config, "STARTUP_REPAIR_PENDING_PATH", marker), \
                  patch.object(bootstrap, "_startup_recovery_choice", return_value="cancel") as choice, \
                  patch.object(bootstrap, "show_startup_notice"):
-                handled = bootstrap._offer_startup_repair(RuntimeError("simulated startup failure"))
+                handled = bootstrap._offer_startup_repair(error)
             self.assertFalse(handled)
-            choice.assert_called_once_with(RuntimeError("simulated startup failure"), repair_pending=True)
+            choice.assert_called_once_with(error, repair_pending=True)
             self.assertTrue(marker.exists())
 
     def test_frozen_windows_install_prefers_writable_per_user_folder(self):
