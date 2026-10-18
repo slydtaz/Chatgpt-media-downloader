@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import queue
 import threading
 import time
@@ -8,7 +9,7 @@ import weakref
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import colorchooser, filedialog, messagebox, ttk
 from typing import Callable
 
 from .config import (
@@ -30,19 +31,32 @@ from .uninstall import launch_uninstaller
 
 
 PALETTES = {
-    "dark": {
-        "bg": "#0B1220", "panel": "#172235", "panel2": "#111A2B", "field": "#0D1626",
-        "fg": "#F8FAFC", "muted": "#CBD5E1", "border": "#334155", "accent": "#22D3EE",
-        "accent2": "#60A5FA", "good": "#34D399", "warn": "#FBBF24", "bad": "#FB7185",
-        "button": "#20334D", "button_hover": "#2B4665", "input_fg": "#FFFFFF",
-    },
-    "light": {
-        "bg": "#F4F7FB", "panel": "#FFFFFF", "panel2": "#EEF3F9", "field": "#FFFFFF",
-        "fg": "#0F172A", "muted": "#475569", "border": "#CBD5E1", "accent": "#0891B2",
-        "accent2": "#2563EB", "good": "#047857", "warn": "#B45309", "bad": "#BE123C",
-        "button": "#E2E8F0", "button_hover": "#CBD5E1", "input_fg": "#0F172A",
-    },
+    "dark": {"bg":"#0A0F1B","panel":"#131B2C","panel2":"#1A2540","field":"#0D1525","fg":"#F3F6FC","muted":"#97A5BD","border":"#2B3852","accent":"#8B5CF6","accent2":"#A78BFA","accent_fg":"#FFFFFF","good":"#34D399","warn":"#FBBF24","bad":"#FB7185","button":"#202B43","button_hover":"#2D3A56","input_fg":"#F8FAFF"},
+    "light": {"bg":"#F3F5FA","panel":"#FFFFFF","panel2":"#E8EDF6","field":"#F8FAFD","fg":"#12182A","muted":"#63718A","border":"#D7DFEB","accent":"#6D5DFB","accent2":"#5848E8","accent_fg":"#FFFFFF","good":"#047857","warn":"#B45309","bad":"#BE123C","button":"#E8EDF6","button_hover":"#D7DFEB","input_fg":"#12182A"},
+    "oled": {"bg":"#000000","panel":"#08090D","panel2":"#111318","field":"#050608","fg":"#F5F7FA","muted":"#9AA1AD","border":"#24262D","accent":"#8B5CF6","accent2":"#A78BFA","accent_fg":"#FFFFFF","good":"#34D399","warn":"#FBBF24","bad":"#FB7185","button":"#191B21","button_hover":"#252831","input_fg":"#FFFFFF"},
 }
+
+
+def _valid_hex_color(value: str) -> bool:
+    return bool(re.fullmatch(r"#[0-9a-fA-F]{6}", str(value or "").strip()))
+
+
+def _blend_hex(color: str, toward: str, amount: float = 0.18) -> str:
+    try:
+        a = tuple(int(color[i:i+2], 16) for i in (1,3,5))
+        b = tuple(int(toward[i:i+2], 16) for i in (1,3,5))
+        return "#%02X%02X%02X" % tuple(round(x*(1-amount)+y*amount) for x,y in zip(a,b))
+    except (ValueError, TypeError, IndexError):
+        return color
+
+
+def _contrast_text(value: str) -> str:
+    try:
+        rgb=[int(value[i:i+2],16)/255 for i in (1,3,5)]
+        lin=[v/12.92 if v<=0.04045 else ((v+0.055)/1.055)**2.4 for v in rgb]
+        return "#11131A" if 0.2126*lin[0]+0.7152*lin[1]+0.0722*lin[2] > 0.42 else "#FFFFFF"
+    except (ValueError, TypeError, IndexError):
+        return "#FFFFFF"
 
 
 class Tooltip:
@@ -155,8 +169,8 @@ class MediaDownloaderApp:
         self.logger.info("Inicialização: %s", self.system.architecture_label)
 
         self.root.title(f"ChatGPT Media Downloader v{VERSION}")
-        self.root.geometry("1100x760")
-        self.root.minsize(900, 650)
+        self.root.geometry("1220x820")
+        self.root.minsize(1000, 680)
 
         self.style = ttk.Style(root)
         try:
@@ -227,6 +241,7 @@ class MediaDownloaderApp:
         self._build_help()
         self._build_developer()
         self.show_page("home")
+        self._apply_theme(self.config.get("theme", "dark"))
         self._refresh_dependencies()
         self.root.report_callback_exception = self._report_callback_exception
         self._poll_queue()
@@ -234,173 +249,230 @@ class MediaDownloaderApp:
 
     # ---------- Theme ----------
     def _resolve_theme(self, requested: str) -> str:
-        return detect_system_theme() if requested == "system" else (requested if requested in PALETTES else "light")
+        if requested == "system":
+            return detect_system_theme()
+        return requested if requested in PALETTES else "dark"
 
     def _apply_theme(self, requested: str):
-        self.config["theme"] = requested if requested in {"system", "dark", "light"} else "system"
+        self.config["theme"] = requested if requested in {"system","dark","light","oled"} else "dark"
         self.palette_name = self._resolve_theme(self.config["theme"])
-        c = PALETTES[self.palette_name]
+        c = dict(PALETTES[self.palette_name])
+        accent = str(self.config.get("accent_color","#8B5CF6") or "#8B5CF6").strip()
+        if _valid_hex_color(accent):
+            c["accent"] = accent.upper()
+            c["accent2"] = _blend_hex(accent.upper(),"#FFFFFF" if self.palette_name!="light" else "#000000",0.18)
+            c["accent_fg"] = _contrast_text(accent.upper())
+        else:
+            self.config["accent_color"] = "#8B5CF6"
         self.colors = c
+        compact = self.config.get("ui_density","comfortable") == "compact"
+        nav_pad = (11,7) if compact else (14,10)
         self.root.configure(bg=c["bg"])
-        self.style.configure(".", font=("Segoe UI", 10), background=c["bg"], foreground=c["fg"])
-        self.style.configure("TFrame", background=c["bg"])
-        self.style.configure("Card.TFrame", background=c["panel"], bordercolor=c["border"], relief="solid", borderwidth=1)
-        self.style.configure("TLabel", background=c["bg"], foreground=c["fg"])
-        self.style.configure("Muted.TLabel", background=c["bg"], foreground=c["muted"])
-        self.style.configure("Card.TLabel", background=c["panel"], foreground=c["fg"])
-        self.style.configure("Title.TLabel", background=c["bg"], foreground=c["fg"], font=("Segoe UI", 24, "bold"))
-        self.style.configure("PageTitle.TLabel", background=c["bg"], foreground=c["fg"], font=("Segoe UI", 21, "bold"))
-        self.style.configure("Subtitle.TLabel", background=c["bg"], foreground=c["muted"], font=("Segoe UI", 10))
-        self.style.configure("CardTitle.TLabel", background=c["panel"], foreground=c["fg"], font=("Segoe UI", 11, "bold"))
-        self.style.configure("Accent.TButton", font=("Segoe UI", 10, "bold"), padding=(18, 11), foreground="#06131C", background=c["accent"])
-        self.style.map("Accent.TButton", background=[("active", c["accent2"]), ("disabled", c["border"]), ("!disabled", c["accent"])])
-        self.style.configure("Secondary.TButton", padding=(11, 8), foreground=c["fg"], background=c["button"])
-        self.style.map("Secondary.TButton", background=[("active", c["button_hover"]), ("!disabled", c["button"])])
-        self.style.configure("Nav.TButton", padding=(13, 10), anchor="w", foreground=c["fg"], background=c["bg"])
-        self.style.map("Nav.TButton", background=[("active", c["button"]), ("!disabled", c["bg"])])
-        self.style.configure("Selected.Nav.TButton", padding=(13, 10), anchor="w", foreground=c["fg"], background=c["button_hover"])
-        self.style.map("Selected.Nav.TButton", background=[("active", c["button_hover"]), ("!disabled", c["button_hover"])])
-        self.style.configure("TEntry", padding=9, fieldbackground=c["field"], foreground=c["input_fg"])
-        self.style.configure("TCombobox", padding=7, fieldbackground=c["field"], foreground=c["input_fg"])
-        self.style.configure("TProgressbar", thickness=11, troughcolor=c["panel2"], background=c["accent"])
-        self.style.configure("Treeview", background=c["field"], fieldbackground=c["field"], foreground=c["fg"], rowheight=27, bordercolor=c["border"])
-        self.style.map("Treeview", background=[("selected", c["accent2"])], foreground=[("selected", "#FFFFFF")])
-        self.style.configure("Treeview.Heading", background=c["panel2"], foreground=c["fg"], relief="flat", padding=(8, 7), font=("Segoe UI", 9, "bold"))
-        self.style.map("Treeview.Heading", background=[("active", c["button_hover"])])
-        self.style.configure("Status.TLabel", background=c["panel2"], foreground=c["fg"], padding=8)
-        self.style.configure("SectionBadge.TLabel", background=c["panel2"], foreground=c["accent"], padding=(8, 4))
-        self.style.configure("Help.TButton", width=2, padding=2, foreground=c["accent"], background=c["panel"], borderwidth=0)
-        self.style.configure("Danger.TButton", foreground="#FFFFFF", background=c["bad"])
-        self.style.map("Danger.TButton", background=[("active", c["bad"]), ("!disabled", c["bad"])])
-        if hasattr(self, "log_text"):
-            self.log_text.configure(bg=c["field"], fg=c["fg"], insertbackground=c["fg"])
-        if hasattr(self, "dep_badge"):
-            self.dep_badge.configure(bg=c["bg"])
+        self.style.configure(".",font=("Segoe UI",9 if compact else 10),background=c["bg"],foreground=c["fg"])
+        self.style.configure("TFrame",background=c["bg"])
+        self.style.configure("Card.TFrame",background=c["panel"],bordercolor=c["border"],relief="solid",borderwidth=1)
+        self.style.configure("Hero.TFrame",background=c["panel2"],bordercolor=c["border"],relief="solid",borderwidth=1)
+        self.style.configure("Sidebar.TFrame",background=c["panel2"])
+        self.style.configure("Topbar.TFrame",background=c["bg"])
+        self.style.configure("MiniCard.TFrame",background=c["panel2"],bordercolor=c["border"],relief="solid",borderwidth=1)
+        self.style.configure("TLabel",background=c["bg"],foreground=c["fg"])
+        self.style.configure("Muted.TLabel",background=c["bg"],foreground=c["muted"])
+        self.style.configure("Card.TLabel",background=c["panel"],foreground=c["fg"])
+        self.style.configure("Hero.TLabel",background=c["panel2"],foreground=c["fg"])
+        self.style.configure("HeroMuted.TLabel",background=c["panel2"],foreground=c["muted"])
+        self.style.configure("Eyebrow.TLabel",background=c["bg"],foreground=c["accent"],font=("Segoe UI",9,"bold"))
+        self.style.configure("HeroEyebrow.TLabel",background=c["panel2"],foreground=c["accent"],font=("Segoe UI",9,"bold"))
+        self.style.configure("SidebarTitle.TLabel",background=c["panel2"],foreground=c["fg"],font=("Segoe UI",13,"bold"))
+        self.style.configure("SidebarMuted.TLabel",background=c["panel2"],foreground=c["muted"],font=("Segoe UI",8,"bold"))
+        self.style.configure("Title.TLabel",background=c["bg"],foreground=c["fg"],font=("Segoe UI",25,"bold"))
+        self.style.configure("PageTitle.TLabel",background=c["bg"],foreground=c["fg"],font=("Segoe UI",22,"bold"))
+        self.style.configure("Subtitle.TLabel",background=c["bg"],foreground=c["muted"],font=("Segoe UI",9))
+        self.style.configure("CardTitle.TLabel",background=c["panel"],foreground=c["fg"],font=("Segoe UI",11 if compact else 12,"bold"))
+        self.style.configure("HeroTitle.TLabel",background=c["panel2"],foreground=c["fg"],font=("Segoe UI",20 if compact else 23,"bold"))
+        self.style.configure("MiniLabel.TLabel",background=c["panel2"],foreground=c["muted"],font=("Segoe UI",8 if compact else 9,"bold"))
+        self.style.configure("MiniValue.TLabel",background=c["panel2"],foreground=c["fg"],font=("Segoe UI",11 if compact else 12,"bold"))
+        self.style.configure("Accent.TButton",font=("Segoe UI",10,"bold"),padding=(17,10 if compact else 12),foreground=c["accent_fg"],background=c["accent"])
+        self.style.map("Accent.TButton",background=[("active",c["accent2"]),("disabled",c["border"]),("!disabled",c["accent"])],foreground=[("disabled",c["muted"]),("!disabled",c["accent_fg"])])
+        self.style.configure("Secondary.TButton",padding=(11,7 if compact else 9),foreground=c["fg"],background=c["button"])
+        self.style.map("Secondary.TButton",background=[("active",c["button_hover"]),("!disabled",c["button"])])
+        self.style.configure("Nav.TButton",padding=nav_pad,anchor="w",foreground=c["muted"],background=c["panel2"],borderwidth=0)
+        self.style.map("Nav.TButton",background=[("active",c["button_hover"]),("!disabled",c["panel2"])],foreground=[("active",c["fg"]),("!disabled",c["muted"])])
+        self.style.configure("Selected.Nav.TButton",padding=nav_pad,anchor="w",foreground=c["accent"],background=c["button"],borderwidth=1,relief="flat",font=("Segoe UI",10,"bold"))
+        self.style.map("Selected.Nav.TButton",background=[("active",c["button_hover"]),("!disabled",c["button"])],foreground=[("!disabled",c["accent"])])
+        self.style.configure("TEntry",padding=10 if not compact else 7,fieldbackground=c["field"],foreground=c["input_fg"],bordercolor=c["border"])
+        self.style.configure("TCombobox",padding=8 if not compact else 6,fieldbackground=c["field"],foreground=c["input_fg"],arrowcolor=c["accent"])
+        self.style.map("TCombobox",fieldbackground=[("readonly",c["field"])],foreground=[("readonly",c["input_fg"])])
+        self.style.configure("TProgressbar",thickness=10 if compact else 12,troughcolor=c["panel2"],background=c["accent"])
+        self.style.configure("Treeview",background=c["field"],fieldbackground=c["field"],foreground=c["fg"],rowheight=24 if compact else 31,bordercolor=c["border"])
+        self.style.map("Treeview",background=[("selected",c["accent2"])],foreground=[("selected",c["accent_fg"])])
+        self.style.configure("Treeview.Heading",background=c["panel2"],foreground=c["fg"],relief="flat",padding=(8,7),font=("Segoe UI",9,"bold"))
+        self.style.map("Treeview.Heading",background=[("active",c["button_hover"])])
+        self.style.configure("Status.TLabel",background=c["panel2"],foreground=c["fg"],padding=8)
+        self.style.configure("SectionBadge.TLabel",background=c["panel2"],foreground=c["accent"],padding=(8,4))
+        self.style.configure("Help.TButton",width=2,padding=2,foreground=c["accent"],background=c["panel"],borderwidth=0)
+        self.style.configure("Danger.TButton",foreground="#FFFFFF",background=c["bad"])
+        self.style.map("Danger.TButton",background=[("active",c["bad"]),("!disabled",c["bad"])])
+        self.style.configure("TCheckbutton",background=c["panel"],foreground=c["fg"],padding=(2,3))
+        self.style.map("TCheckbutton",background=[("active",c["panel"])],foreground=[("disabled",c["muted"])])
+        if hasattr(self,"log_text"):
+            self.log_text.configure(bg=c["field"],fg=c["fg"],insertbackground=c["fg"],selectbackground=c["accent"],selectforeground=c["accent_fg"])
+        if hasattr(self,"dep_badge"):
+            self.dep_badge.configure(bg=c["panel2"],fg=c["muted"])
+        if hasattr(self,"playlist_warning"):
+            self.playlist_warning.configure(bg=c["panel2"],fg=c["warn"])
+        if hasattr(self,"hero_accent_bar"):
+            self.hero_accent_bar.configure(bg=c["accent"])
+        def tint(widget):
+            for child in widget.winfo_children():
+                if isinstance(child,tk.Canvas):
+                    try:
+                        child.configure(background=c["bg"],highlightbackground=c["bg"],highlightcolor=c["bg"])
+                    except tk.TclError:
+                        pass
+                tint(child)
+        try:
+            tint(self.root)
+        except tk.TclError:
+            pass
 
     # ---------- Shell ----------
     def _build_shell(self):
-        outer = ttk.Frame(self.root, padding=18)
-        outer.pack(fill="both", expand=True)
-        self.shell = outer
-
-        sidebar = ttk.Frame(outer, padding=(4, 4, 16, 4))
-        sidebar.pack(side="left", fill="y")
-        self.sidebar = sidebar
-        ttk.Label(sidebar, text="CHATGPT", style="Title.TLabel", font=("Segoe UI", 15, "bold")).pack(anchor="w", pady=(6, 0))
-        ttk.Label(sidebar, text="MEDIA DOWNLOADER", style="Subtitle.TLabel").pack(anchor="w", pady=(0, 24))
-
-        for key, text, tip in [
-            ("home", "⌂  Início", "Volta para o downloader principal."),
-            ("playlist", "▤  Gerenciar playlist", "Analise uma playlist, veja a quantidade de itens, escolha o formato por item e exclua entradas específicas."),
-            ("settings", "⚙  Configurações", "Edite pastas, qualidade, bitrate, desempenho, caminhos das ferramentas e tema."),
-            ("dependencies", "◉  Dependências", "Mostra o estado do yt-dlp, FFmpeg e FFprobe e permite instalar/configurar."),
-            ("updates", "⟳  Atualizações", "Verifique novas versões, leia as notas e repare os arquivos do aplicativo."),
-            ("help", "?  Ajuda", "Explica os modos de download, qualidade, bitrate, erros e funcionamento."),
-            ("developer", "⌘  Desenvolvedor", "Exibe dados técnicos da instalação e do sistema."),
+        outer=ttk.Frame(self.root,padding=14)
+        outer.pack(fill="both",expand=True)
+        self.shell=outer
+        sidebar=ttk.Frame(outer,style="Sidebar.TFrame",padding=(15,17,15,14),width=238)
+        sidebar.pack(side="left",fill="y",padx=(0,14))
+        sidebar.pack_propagate(False)
+        self.sidebar=sidebar
+        brand=ttk.Frame(sidebar,style="Sidebar.TFrame")
+        brand.pack(fill="x",pady=(0,24))
+        mark=tk.Label(brand,text="↧",bg=self.colors["accent"],fg=self.colors["accent_fg"],font=("Segoe UI",21,"bold"),width=2,height=1,padx=5,pady=3)
+        mark.pack(side="left",padx=(0,10))
+        titles=ttk.Frame(brand,style="Sidebar.TFrame")
+        titles.pack(side="left",fill="x",expand=True)
+        ttk.Label(titles,text="MEDIA STUDIO",style="SidebarTitle.TLabel").pack(anchor="w")
+        ttk.Label(titles,text="CHATGPT DOWNLOADER",style="SidebarMuted.TLabel").pack(anchor="w",pady=(1,0))
+        ttk.Label(sidebar,text="ESPAÇO DE TRABALHO",style="Eyebrow.TLabel").pack(anchor="w",padx=(7,0),pady=(0,7))
+        for key,text,tip in [
+            ("home","⌂   Início","Baixe vídeo ou áudio, acompanhe o progresso e consulte as mensagens."),
+            ("playlist","▤   Playlists","Analise uma playlist, escolha itens e personalize formato e qualidade por mídia."),
+            ("settings","⚙   Aparência e ajustes","Personalize cores, tema, densidade, pastas, qualidade e desempenho."),
+            ("dependencies","◈   Dependências","Confira e configure yt-dlp, FFmpeg e FFprobe."),
+            ("updates","⟳   Atualizações","Confira versões, atualize o aplicativo ou restaure os arquivos oficiais."),
+            ("help","?   Central de ajuda","Guias rápidos, opções de qualidade, playlists e segurança."),
+            ("developer","⌘   Diagnóstico","Versão, caminhos, dados técnicos e desinstalação."),
         ]:
-            button = ttk.Button(sidebar, text=text, style="Nav.TButton", command=lambda k=key: self.show_page(k))
-            button.pack(fill="x", pady=3)
-            self.nav_buttons[key] = button
-            Tooltip(button, tip)
-
-        ttk.Separator(sidebar).pack(fill="x", pady=15)
-        self.dep_badge = tk.Label(sidebar, text="●  verificando", bg=self.colors["bg"], fg=self.colors["muted"], font=("Segoe UI", 9, "bold"))
-        self.dep_badge.pack(anchor="w", padx=8, pady=(0, 6))
-        ttk.Label(sidebar, text=self.system.architecture_label, style="Subtitle.TLabel", wraplength=150).pack(anchor="w", padx=8)
-
-        content_wrap = ttk.Frame(outer)
-        content_wrap.pack(side="left", fill="both", expand=True)
-        self.content_wrap = content_wrap
-
-        header = ttk.Frame(content_wrap)
-        header.pack(fill="x", pady=(0, 12))
-        self.page_title_var = tk.StringVar(value="Início")
-        ttk.Label(header, textvariable=self.page_title_var, style="PageTitle.TLabel").pack(side="left")
-        ttk.Label(header, text=f"v{VERSION}", style="Subtitle.TLabel").pack(side="left", padx=(10, 0), pady=(9, 0))
-
-        self.pages_area = ttk.Frame(content_wrap)
-        self.pages_area.pack(fill="both", expand=True)
-
-    # ---------- Home ----------
+            button=ttk.Button(sidebar,text=text,style="Nav.TButton",command=lambda k=key:self.show_page(k))
+            button.pack(fill="x",pady=3)
+            self.nav_buttons[key]=button
+            Tooltip(button,tip)
+        spacer=ttk.Frame(sidebar,style="Sidebar.TFrame")
+        spacer.pack(fill="both",expand=True)
+        ttk.Separator(sidebar).pack(fill="x",pady=(14,12))
+        self.dep_badge=tk.Label(sidebar,text="●  verificando dependências",bg=self.colors["panel2"],fg=self.colors["muted"],anchor="w",font=("Segoe UI",9,"bold"),padx=7,pady=7)
+        self.dep_badge.pack(fill="x",pady=(0,8))
+        ttk.Label(sidebar,text=self.system.architecture_label,style="SidebarMuted.TLabel",wraplength=198).pack(anchor="w",padx=7)
+        ttk.Label(sidebar,text=f"Versão {VERSION}",style="SidebarMuted.TLabel").pack(anchor="w",padx=7,pady=(3,0))
+        content_wrap=ttk.Frame(outer)
+        content_wrap.pack(side="left",fill="both",expand=True)
+        self.content_wrap=content_wrap
+        header=ttk.Frame(content_wrap,style="Topbar.TFrame")
+        header.pack(fill="x",pady=(4,16))
+        header_left=ttk.Frame(header,style="Topbar.TFrame")
+        header_left.pack(side="left",fill="x",expand=True)
+        ttk.Label(header_left,text="MEDIA WORKSPACE  /  DOWNLOADS",style="Eyebrow.TLabel").pack(anchor="w",pady=(0,3))
+        self.page_title_var=tk.StringVar(value="Início")
+        ttk.Label(header_left,textvariable=self.page_title_var,style="PageTitle.TLabel").pack(anchor="w")
+        self.page_subtitle_var=tk.StringVar(value="Seu espaço para vídeos, músicas e playlists.")
+        ttk.Label(header_left,textvariable=self.page_subtitle_var,style="Muted.TLabel").pack(anchor="w",pady=(2,0))
+        header_actions=ttk.Frame(header,style="Topbar.TFrame")
+        header_actions.pack(side="right",anchor="n",padx=(10,0),pady=(9,0))
+        ttk.Label(header_actions,text=f"v{VERSION}",style="SectionBadge.TLabel").pack(side="left",padx=(0,8))
+        self.header_update_btn=ttk.Button(header_actions,text="Atualizações  ↗",style="Secondary.TButton",command=lambda:self.show_page("updates"))
+        self.header_update_btn.pack(side="left")
+        self.pages_area=ttk.Frame(content_wrap)
+        self.pages_area.pack(fill="both",expand=True)
     def _card(self, parent, padding=16):
         return ttk.Frame(parent, style="Card.TFrame", padding=padding)
 
     def _build_home(self):
-        frame = ttk.Frame(self.pages_area)
-        self.page_frames["home"] = frame
-        main = frame
-
-        top = self._card(main, 18)
-        top.pack(fill="x", pady=(0, 12))
-        ttk.Label(top, text="Baixar mídia", style="CardTitle.TLabel").pack(anchor="w")
-        ttk.Label(top, text="Cole uma URL HTTP/HTTPS e escolha como deseja salvar o conteúdo.", style="Card.TLabel").pack(anchor="w", pady=(4, 12))
-        self.url_entry = ttk.Entry(top, textvariable=self.url_var, font=("Segoe UI", 12))
+        frame=ttk.Frame(self.pages_area)
+        self.page_frames["home"]=frame
+        hero=ttk.Frame(frame,style="Hero.TFrame",padding=(22,20))
+        hero.pack(fill="x",pady=(0,13))
+        self.hero_accent_bar=tk.Frame(hero,bg=self.colors["accent"],width=4,bd=0,highlightthickness=0)
+        self.hero_accent_bar.pack(side="left",fill="y",padx=(0,18))
+        hero_body=ttk.Frame(hero,style="Hero.TFrame")
+        hero_body.pack(side="left",fill="both",expand=True)
+        hero_top=ttk.Frame(hero_body,style="Hero.TFrame")
+        hero_top.pack(fill="x")
+        ttk.Label(hero_top,text="DOWNLOAD WORKSPACE",style="HeroEyebrow.TLabel").pack(side="left")
+        ttk.Label(hero_top,text="VÍDEO  ·  ÁUDIO  ·  PLAYLISTS",style="HeroMuted.TLabel",font=("Segoe UI",8,"bold")).pack(side="right")
+        ttk.Label(hero_body,text="Sua mídia. Do seu jeito.",style="HeroTitle.TLabel").pack(anchor="w",pady=(7,2))
+        ttk.Label(hero_body,text="Cole um link, personalize a saída e acompanhe tudo em um só lugar.",style="HeroMuted.TLabel",wraplength=760).pack(anchor="w",pady=(0,15))
+        self.url_entry=ttk.Entry(hero_body,textvariable=self.url_var,font=("Segoe UI",12))
         self.url_entry.pack(fill="x")
         self.url_entry.focus_set()
-        self.url_entry.bind("<Return>", lambda _e: self.start_download())
-        self.url_var.trace_add("write", self._update_playlist_warning)
-        self.playlist_warning = tk.Label(
-            top, text="⚠ URL de playlist detectada — analise os itens para escolher o que baixar",
-            bg=self.colors["panel"], fg="#ff4d5a", anchor="e", font=("Segoe UI", 9, "bold")
-        )
-        self.playlist_warning.pack(fill="x", pady=(5, 0))
+        self.url_entry.bind("<Return>",lambda _e:self.start_download())
+        self.url_var.trace_add("write",self._update_playlist_warning)
+        self.playlist_warning=tk.Label(hero_body,text="⚠  Link de playlist detectado — analise os itens antes de baixar.",bg=self.colors["panel2"],fg=self.colors["warn"],anchor="w",font=("Segoe UI",9,"bold"),padx=3)
+        self.playlist_warning.pack(fill="x",pady=(7,0))
         self.playlist_warning.pack_forget()
-
-        controls = ttk.Frame(top, style="Card.TFrame")
-        controls.pack(fill="x", pady=(12, 0))
-        ttk.Label(controls, text="Tipo", style="Card.TLabel").pack(side="left")
-        self.mode = ttk.Combobox(controls, textvariable=self.mode_var, state="readonly",
-                                 values=["Automático — vídeo", "Vídeo", "Música — MP3"], width=20)
-        self.mode.pack(side="left", padx=(7, 20))
-        self.mode.bind("<<ComboboxSelected>>", lambda _e: self._sync_quality())
-        ttk.Label(controls, text="Qualidade / bitrate", style="Card.TLabel").pack(side="left")
-        self.quality = ttk.Combobox(controls, textvariable=self.quality_var, state="readonly", width=16)
-        self.quality.pack(side="left", padx=(7, 20))
+        controls=ttk.Frame(hero_body,style="Hero.TFrame")
+        controls.pack(fill="x",pady=(13,0))
+        mode_box=ttk.Frame(controls,style="Hero.TFrame")
+        mode_box.pack(side="left",fill="x",expand=True)
+        ttk.Label(mode_box,text="FORMATO",style="MiniLabel.TLabel").pack(anchor="w",pady=(0,4))
+        self.mode=ttk.Combobox(mode_box,textvariable=self.mode_var,state="readonly",values=["Automático — vídeo","Vídeo","Música — MP3"],width=23)
+        self.mode.pack(anchor="w")
+        self.mode.bind("<<ComboboxSelected>>",lambda _e:self._sync_quality())
+        quality_box=ttk.Frame(controls,style="Hero.TFrame")
+        quality_box.pack(side="left",fill="x",expand=True,padx=(14,0))
+        ttk.Label(quality_box,text="QUALIDADE / BITRATE",style="MiniLabel.TLabel").pack(anchor="w",pady=(0,4))
+        self.quality=ttk.Combobox(quality_box,textvariable=self.quality_var,state="readonly",width=19)
+        self.quality.pack(anchor="w")
         self._sync_quality()
-        self.download_btn = ttk.Button(controls, text="BAIXAR", style="Accent.TButton", command=self.start_download)
+        buttons=ttk.Frame(controls,style="Hero.TFrame")
+        buttons.pack(side="right",anchor="s",padx=(12,0))
+        self.download_btn=ttk.Button(buttons,text="↓  BAIXAR AGORA",style="Accent.TButton",command=self.start_download)
         self.download_btn.pack(side="right")
-        self.analyze_playlist_btn = ttk.Button(controls, text="Analisar playlist…", style="Secondary.TButton", command=self._start_playlist_analysis)
-        self.analyze_playlist_btn.pack(side="right", padx=(0, 8))
-
-        progress_card = self._card(main, 16)
-        progress_card.pack(fill="x", pady=(0, 12))
-        pr = ttk.Frame(progress_card, style="Card.TFrame")
+        self.analyze_playlist_btn=ttk.Button(buttons,text="Analisar playlist",style="Secondary.TButton",command=self._start_playlist_analysis)
+        self.analyze_playlist_btn.pack(side="right",padx=(0,8))
+        progress_card=self._card(frame,16)
+        progress_card.pack(fill="x",pady=(0,13))
+        pr=ttk.Frame(progress_card,style="Card.TFrame")
         pr.pack(fill="x")
-        ttk.Label(pr, text="Progresso", style="CardTitle.TLabel").pack(side="left")
-        self.percent_label = ttk.Label(pr, text="0%", style="CardTitle.TLabel")
+        ttk.Label(pr,text="Sessão atual",style="CardTitle.TLabel").pack(side="left")
+        self.percent_label=ttk.Label(pr,text="0%",style="CardTitle.TLabel")
         self.percent_label.pack(side="right")
-        self.progress = ttk.Progressbar(progress_card, maximum=100, variable=self.percent_var)
-        self.progress.pack(fill="x", pady=(10, 12))
-        metrics = ttk.Frame(progress_card, style="Card.TFrame")
+        self.progress=ttk.Progressbar(progress_card,maximum=100,variable=self.percent_var)
+        self.progress.pack(fill="x",pady=(10,14))
+        metrics=ttk.Frame(progress_card,style="Card.TFrame")
         metrics.pack(fill="x")
-        for label, var in (("Status", self.status_var), ("Velocidade", self.speed_var), ("Tamanho", self.size_var), ("ETA", self.eta_var), ("Estágio", self.stage_var)):
-            box = ttk.Frame(metrics, style="Card.TFrame")
-            box.pack(side="left", fill="x", expand=True)
-            ttk.Label(box, text=label.upper(), style="Muted.TLabel").pack(anchor="w")
-            ttk.Label(box, textvariable=var, style="Card.TLabel").pack(anchor="w", pady=(2, 0))
-
-        log_card = self._card(main, 12)
-        log_card.pack(fill="both", expand=True)
-        top_log = ttk.Frame(log_card, style="Card.TFrame")
+        for label,var in (("STATUS",self.status_var),("VELOCIDADE",self.speed_var),("TAMANHO",self.size_var),("TEMPO RESTANTE",self.eta_var),("ETAPA",self.stage_var)):
+            box=ttk.Frame(metrics,style="MiniCard.TFrame",padding=(10,9))
+            box.pack(side="left",fill="both",expand=True,padx=(0,7))
+            ttk.Label(box,text=label,style="MiniLabel.TLabel").pack(anchor="w")
+            ttk.Label(box,textvariable=var,style="MiniValue.TLabel",wraplength=140).pack(anchor="w",pady=(4,0))
+        log_card=self._card(frame,13)
+        log_card.pack(fill="both",expand=True)
+        top_log=ttk.Frame(log_card,style="Card.TFrame")
         top_log.pack(fill="x")
-        ttk.Label(top_log, text="Mensagens e detalhes", style="CardTitle.TLabel").pack(side="left")
-        ttk.Button(top_log, text="Limpar", style="Secondary.TButton", command=self._clear_log).pack(side="right")
-        log_frame = ttk.Frame(log_card, style="Card.TFrame")
-        log_frame.pack(fill="both", expand=True, pady=(8, 0))
-        self.log_text = tk.Text(log_frame, bg=self.colors["field"], fg=self.colors["fg"], insertbackground=self.colors["fg"],
-                                relief="flat", wrap="word", font=("Consolas", 9), padx=10, pady=10)
-        self.log_text.pack(side="left", fill="both", expand=True)
-        scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
-        scroll.pack(side="right", fill="y")
-        self.log_text.configure(yscrollcommand=scroll.set, state="disabled")
-
-        footer = ttk.Frame(main)
-        footer.pack(fill="x", pady=(10, 0))
-        self.cancel_btn = ttk.Button(footer, text="Cancelar download", style="Secondary.TButton", command=self.cancel_download, state="disabled")
+        ttk.Label(top_log,text="Atividade recente",style="CardTitle.TLabel").pack(side="left")
+        ttk.Label(top_log,text="LOG LOCAL",style="Muted.TLabel",font=("Segoe UI",8,"bold")).pack(side="left",padx=(9,0),pady=(2,0))
+        ttk.Button(top_log,text="Limpar",style="Secondary.TButton",command=self._clear_log).pack(side="right")
+        log_frame=ttk.Frame(log_card,style="Card.TFrame")
+        log_frame.pack(fill="both",expand=True,pady=(9,0))
+        self.log_text=tk.Text(log_frame,bg=self.colors["field"],fg=self.colors["fg"],insertbackground=self.colors["fg"],selectbackground=self.colors["accent"],selectforeground=self.colors["accent_fg"],relief="flat",wrap="word",font=("Cascadia Code",9),padx=12,pady=10,borderwidth=0)
+        self.log_text.pack(side="left",fill="both",expand=True)
+        scroll=ttk.Scrollbar(log_frame,orient="vertical",command=self.log_text.yview)
+        scroll.pack(side="right",fill="y")
+        self.log_text.configure(yscrollcommand=scroll.set,state="disabled")
+        footer=ttk.Frame(frame)
+        footer.pack(fill="x",pady=(9,0))
+        ttk.Label(footer,text="Dica: use o gerenciador de playlists para escolher itens individualmente.",style="Muted.TLabel").pack(side="left")
+        self.cancel_btn=ttk.Button(footer,text="Cancelar download",style="Secondary.TButton",command=self.cancel_download,state="disabled")
         self.cancel_btn.pack(side="right")
-
-    # ---------- Playlist manager ----------
-    @staticmethod
     def _strategy_label(value: str) -> str:
         return "Paralelo (mais rápido)" if value == "parallel" else "Um por vez (recomendado)"
 
@@ -521,113 +593,157 @@ class MediaDownloaderApp:
         ttk.Button(actions, text="⏮ Inicial", style="Secondary.TButton", command=lambda k=key: self.reset_setting(k, "baseline")).pack(side="right")
 
     def _build_settings(self):
-        frame = ttk.Frame(self.pages_area)
-        self.page_frames["settings"] = frame
-        scroll = ScrollableFrame(frame)
-        scroll.pack(fill="both", expand=True)
-        body = scroll.body
-        ttk.Label(body, text="Controle do aplicativo", style="Subtitle.TLabel").pack(anchor="w", pady=(0, 12))
-
-        self._setting_row(body, "music_dir", "Pasta de músicas", "Define onde os arquivos MP3 são salvos.", browse="dir")
-        self._setting_row(body, "video_dir", "Pasta de vídeos", "Define onde os vídeos são salvos. Esses arquivos não são removidos na desinstalação.", browse="dir")
-        self._setting_row(body, "auto_video_quality", "Qualidade automática", "É a resolução alvo do modo Automático/Vídeo. O downloader escolhe o melhor formato compatível até esse limite.", choices=["480", "720", "1080", "1440", "2160"])
-        self._setting_row(body, "audio_bitrate", "Bitrate de áudio", "É a qualidade alvo do MP3: 128, 192 ou 320 kbps.", choices=["128", "192", "320"])
-        self._setting_row(body, "yt_dlp_path", "Caminho do yt-dlp", "Força o aplicativo a usar um executável específico. Deixe vazio para detecção automática.", browse="file")
-        self._setting_row(body, "ffmpeg_path", "Caminho do FFmpeg", "Executável usado para mesclar vídeo e fazer conversões de áudio.", browse="file")
-        self._setting_row(body, "ffprobe_path", "Caminho do FFprobe", "Executável de inspeção do FFmpeg. Deixe vazio para localizar junto do FFmpeg.", browse="file")
-        self._setting_row(body, "playlist_strategy", "Execução de playlists", "Um por vez usa menos recursos e facilita diagnosticar falhas. Paralelo executa vários itens simultaneamente e pode aumentar consumo de CPU, memória, disco e rede.", choices=["Um por vez (recomendado)", "Paralelo (mais rápido)"])
-        self._setting_row(body, "playlist_parallelism", "Downloads simultâneos", "Quantidade máxima de itens em paralelo. Valores altos podem saturar sua rede, memória ou disco; recomendado 2–4.", choices=["2", "3", "4", "6"])
-        self._setting_row(body, "concurrent_fragments", "Fragmentos por mídia", "Número de fragmentos de um mesmo vídeo baixados em paralelo. Não é a mesma coisa que downloads simultâneos de itens.", choices=["1", "2", "4", "8", "16"])
-        self._setting_row(body, "retries", "Tentativas em falhas de rede", "Quantas tentativas o yt-dlp faz em operações com falha. Mais tentativas podem ajudar em conexões instáveis, mas demoram mais.", choices=["2", "3", "5", "10"])
-        self._setting_row(body, "video_container", "Contêiner de vídeo", "MP4 costuma ser mais compatível. MKV é útil quando você precisa guardar faixas e formatos de forma flexível.", choices=["mp4", "mkv"])
-        self._setting_row(body, "subtitle_mode", "Legendas de vídeo", "Desativadas não salva legendas; manuais baixa legendas enviadas pelo criador; manuais + automáticas inclui legendas automáticas quando disponíveis.", choices=["Desativadas", "Legendas manuais", "Manuais + automáticas"])
-        self._setting_row(body, "theme", "Tema", "Define aparência: Escuro, Claro ou Sistema (usa a preferência do sistema operacional).", choices=["system", "dark", "light"])
-        self.settings_vars["theme"].trace_add("write", lambda *_: self._preview_theme_from_setting())
-
-        actions = ttk.Frame(body)
-        actions.pack(fill="x", pady=(12, 24))
-        Tooltip(ttk.Button(actions, text="Salvar configurações", style="Accent.TButton"), "Salva todas as alterações nesta tela sem precisar fechar o aplicativo.")
-        ttk.Button(actions, text="Salvar configurações", style="Accent.TButton", command=self.save_settings).pack(side="right")
-        ttk.Button(actions, text="Reverter tudo para padrão", style="Secondary.TButton", command=lambda: self.reset_all("default")).pack(side="left")
-        ttk.Button(actions, text="Reverter tudo para configuração inicial", style="Secondary.TButton", command=lambda: self.reset_all("baseline")).pack(side="left", padx=(8, 0))
-
-        note = self._card(body, 12)
-        note.pack(fill="x", pady=(0, 20))
-        ttk.Label(note, text="Importante", style="CardTitle.TLabel").pack(anchor="w")
-        ttk.Label(note, text="Alterações só ficam permanentes ao clicar em 'Salvar configurações'. O botão 'Inicial' usa a configuração registrada no fim da primeira instalação/inicialização de dependências.", style="Card.TLabel", wraplength=720, justify="left").pack(anchor="w", pady=(5, 0))
+        frame=ttk.Frame(self.pages_area)
+        self.page_frames["settings"]=frame
+        scroll=ScrollableFrame(frame)
+        scroll.pack(fill="both",expand=True)
+        body=scroll.body
+        ttk.Label(body,text="Personalize a experiência e configure o comportamento do downloader.",style="Subtitle.TLabel").pack(anchor="w",pady=(0,12))
+        appearance=self._card(body,15)
+        appearance.pack(fill="x",pady=(0,12))
+        ttk.Label(appearance,text="Aparência",style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(appearance,text="Tema, cor de destaque e densidade da interface ficam salvos no seu perfil.",style="Card.TLabel",wraplength=780,justify="left").pack(anchor="w",pady=(4,11))
+        self.settings_vars["theme"]=tk.StringVar(value=self._display_setting_value("theme",self.config.get("theme","dark")))
+        self.settings_vars["ui_density"]=tk.StringVar(value=self._display_setting_value("ui_density",self.config.get("ui_density","comfortable")))
+        theme_density=ttk.Frame(appearance,style="Card.TFrame")
+        theme_density.pack(fill="x")
+        theme_box=ttk.Frame(theme_density,style="Card.TFrame")
+        theme_box.pack(side="left",fill="x",expand=True,padx=(0,12))
+        ttk.Label(theme_box,text="TEMA",style="Muted.TLabel",font=("Segoe UI",8,"bold")).pack(anchor="w",pady=(0,4))
+        ttk.Combobox(theme_box,textvariable=self.settings_vars["theme"],values=["Sistema","Escuro","Claro","Preto OLED"],state="readonly").pack(fill="x")
+        density_box=ttk.Frame(theme_density,style="Card.TFrame")
+        density_box.pack(side="left",fill="x",expand=True)
+        ttk.Label(density_box,text="ESPAÇAMENTO",style="Muted.TLabel",font=("Segoe UI",8,"bold")).pack(anchor="w",pady=(0,4))
+        ttk.Combobox(density_box,textvariable=self.settings_vars["ui_density"],values=["Confortável","Compacto"],state="readonly").pack(fill="x")
+        self.settings_vars["accent_color"]=tk.StringVar(value=str(self.config.get("accent_color","#8B5CF6")))
+        accent_row=ttk.Frame(appearance,style="Card.TFrame")
+        accent_row.pack(fill="x",pady=(13,0))
+        accent_entry_wrap=ttk.Frame(accent_row,style="Card.TFrame")
+        accent_entry_wrap.pack(side="left",fill="x",expand=True)
+        ttk.Label(accent_entry_wrap,text="COR DE DESTAQUE · HEX",style="Muted.TLabel",font=("Segoe UI",8,"bold")).pack(anchor="w",pady=(0,4))
+        ttk.Entry(accent_entry_wrap,textvariable=self.settings_vars["accent_color"]).pack(fill="x")
+        ttk.Button(accent_row,text="Escolher cor…",style="Secondary.TButton",command=self._choose_accent_color).pack(side="left",padx=(10,0),anchor="s")
+        ttk.Button(accent_row,text="↺ Padrão",style="Secondary.TButton",command=lambda:self.reset_setting("accent_color","default")).pack(side="left",padx=(7,0),anchor="s")
+        presets=ttk.Frame(appearance,style="Card.TFrame")
+        presets.pack(fill="x",pady=(10,0))
+        ttk.Label(presets,text="PALETAS RÁPIDAS",style="Muted.TLabel",font=("Segoe UI",8,"bold")).pack(side="left",padx=(0,10))
+        for name,color in (("Violeta","#8B5CF6"),("Azul","#3B82F6"),("Ciano","#06B6D4"),("Verde","#10B981"),("Rosa","#EC4899"),("Âmbar","#F59E0B")):
+            ttk.Button(presets,text=name,style="Secondary.TButton",command=lambda c=color:self.settings_vars["accent_color"].set(c)).pack(side="left",padx=(0,5))
+        self.settings_vars["theme"].trace_add("write",lambda *_:self._preview_theme_from_setting())
+        self.settings_vars["ui_density"].trace_add("write",lambda *_:self._preview_theme_from_setting())
+        self.settings_vars["accent_color"].trace_add("write",lambda *_:self._preview_theme_from_setting())
+        self._setting_row(body,"music_dir","Pasta de músicas","Define onde os arquivos MP3 são salvos.",browse="dir")
+        self._setting_row(body,"video_dir","Pasta de vídeos","Define onde os vídeos são salvos.",browse="dir")
+        self._setting_row(body,"auto_video_quality","Qualidade automática","Resolução alvo do modo Automático/Vídeo.",choices=["480","720","1080","1440","2160"])
+        self._setting_row(body,"audio_bitrate","Bitrate de áudio","Qualidade alvo do MP3.",choices=["128","192","320"])
+        self._setting_row(body,"yt_dlp_path","Caminho do yt-dlp","Caminho opcional do executável.",browse="file")
+        self._setting_row(body,"ffmpeg_path","Caminho do FFmpeg","Executável para mesclar vídeo e converter áudio.",browse="file")
+        self._setting_row(body,"ffprobe_path","Caminho do FFprobe","Executável para inspecionar mídia.",browse="file")
+        self._setting_row(body,"playlist_strategy","Execução de playlists","Sequencial usa menos recursos; paralelo processa itens simultaneamente.",choices=["Um por vez (recomendado)","Paralelo (mais rápido)"])
+        self._setting_row(body,"playlist_parallelism","Downloads simultâneos","Quantidade máxima de itens em paralelo.",choices=["2","3","4","6"])
+        self._setting_row(body,"concurrent_fragments","Fragmentos por mídia","Fragmentos baixados simultaneamente.",choices=["1","2","4","8","16"])
+        self._setting_row(body,"retries","Tentativas em falhas de rede","Número de tentativas em falhas de rede.",choices=["2","3","5","10"])
+        self._setting_row(body,"video_container","Contêiner de vídeo","Formato de contêiner para vídeos.",choices=["mp4","mkv"])
+        self._setting_row(body,"subtitle_mode","Legendas de vídeo","Selecione quais legendas salvar.",choices=["Desativadas","Legendas manuais","Manuais + automáticas"])
+        actions=ttk.Frame(body)
+        actions.pack(fill="x",pady=(12,24))
+        ttk.Button(actions,text="Salvar personalização",style="Accent.TButton",command=self.save_settings).pack(side="right")
+        ttk.Button(actions,text="Reverter tudo para padrão",style="Secondary.TButton",command=lambda:self.reset_all("default")).pack(side="left")
+        ttk.Button(actions,text="Reverter para instalação inicial",style="Secondary.TButton",command=lambda:self.reset_all("baseline")).pack(side="left",padx=(8,0))
+        note=self._card(body,12)
+        note.pack(fill="x",pady=(0,20))
+        ttk.Label(note,text="Como as personalizações são salvas",style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(note,text="Tema, cor principal e espaçamento são aplicados como prévia. Clique em Salvar personalização para gravar tudo. Preferências, pastas e histórico ficam no perfil do usuário.",style="Card.TLabel",wraplength=780,justify="left").pack(anchor="w",pady=(5,0))
+    def _choose_accent_color(self):
+        current=self.settings_vars.get("accent_color",tk.StringVar(value="#8B5CF6")).get()
+        initial=current if _valid_hex_color(current) else "#8B5CF6"
+        chosen=colorchooser.askcolor(color=initial,parent=self.root,title="Escolher cor de destaque")[1]
+        if chosen and _valid_hex_color(chosen):
+            self.settings_vars["accent_color"].set(chosen.upper())
 
     def _preview_theme_from_setting(self):
-        value = self.settings_vars.get("theme", tk.StringVar(value="system")).get()
-        if value in {"system", "dark", "light"}:
-            self._apply_theme(value)
-
-    def reset_setting(self, key: str, source: str):
-        source_config = DEFAULT_CONFIG if source == "default" else load_installation_baseline()
-        value = source_config.get(key, DEFAULT_CONFIG.get(key, ""))
-        self.settings_vars[key].set(self._display_setting_value(key, value))
-        if key == "theme":
-            self._apply_theme(str(value))
-
-    def reset_all(self, source: str):
-        source_config = DEFAULT_CONFIG if source == "default" else load_installation_baseline()
+        if not hasattr(self,"settings_vars"):
+            return
+        self.config["theme"]=self._stored_setting_value("theme",self.settings_vars.get("theme",tk.StringVar(value="Escuro")).get())
+        self.config["ui_density"]=self._stored_setting_value("ui_density",self.settings_vars.get("ui_density",tk.StringVar(value="Confortável")).get())
+        accent=self.settings_vars.get("accent_color",tk.StringVar(value="#8B5CF6")).get()
+        if _valid_hex_color(accent):
+            self.config["accent_color"]=accent.upper()
+        self._apply_theme(self.config.get("theme","dark"))
+    def reset_setting(self,key: str,source: str):
+        source_config=DEFAULT_CONFIG if source=="default" else load_installation_baseline()
+        value=source_config.get(key,DEFAULT_CONFIG.get(key,""))
+        self.settings_vars[key].set(self._display_setting_value(key,value))
+        if key in {"theme","ui_density","accent_color"}:
+            self._preview_theme_from_setting()
+    def reset_all(self,source: str):
+        source_config=DEFAULT_CONFIG if source=="default" else load_installation_baseline()
         for key in self.settings_vars:
-            self.settings_vars[key].set(self._display_setting_value(key, source_config.get(key, DEFAULT_CONFIG.get(key, ""))))
-        self._apply_theme(str(self.settings_vars["theme"].get()))
-        messagebox.showinfo("Configurações", "Os valores foram revertidos nesta tela. Clique em 'Salvar configurações' para gravá-los.")
-
+            self.settings_vars[key].set(self._display_setting_value(key,source_config.get(key,DEFAULT_CONFIG.get(key,""))))
+        self._preview_theme_from_setting()
+        messagebox.showinfo("Configurações","Os valores foram revertidos nesta tela. Clique em Salvar personalização para gravá-los.")
     @staticmethod
-    def _display_setting_value(key: str, value):
-        if key == "playlist_strategy":
-            return "Paralelo (mais rápido)" if value == "parallel" else "Um por vez (recomendado)"
-        if key == "subtitle_mode":
-            return {"off": "Desativadas", "manual": "Legendas manuais", "all": "Manuais + automáticas"}.get(str(value), "Desativadas")
+    def _display_setting_value(key: str,value):
+        if key=="playlist_strategy":
+            return "Paralelo (mais rápido)" if value=="parallel" else "Um por vez (recomendado)"
+        if key=="subtitle_mode":
+            return {"off":"Desativadas","manual":"Legendas manuais","all":"Manuais + automáticas"}.get(str(value),"Desativadas")
+        if key=="theme":
+            return {"system":"Sistema","dark":"Escuro","light":"Claro","oled":"Preto OLED"}.get(str(value),"Escuro")
+        if key=="ui_density":
+            return {"comfortable":"Confortável","compact":"Compacto"}.get(str(value),"Confortável")
         return str(value)
-
     @staticmethod
-    def _stored_setting_value(key: str, value):
-        if key == "playlist_strategy":
+    def _stored_setting_value(key: str,value):
+        if key=="playlist_strategy":
             return "parallel" if str(value).startswith("Paralelo") else "sequential"
-        if key == "subtitle_mode":
-            return {"Desativadas": "off", "Legendas manuais": "manual", "Manuais + automáticas": "all"}.get(str(value), "off")
-        if key in {"auto_video_quality", "audio_bitrate", "playlist_parallelism", "concurrent_fragments", "retries"}:
+        if key=="subtitle_mode":
+            return {"Desativadas":"off","Legendas manuais":"manual","Manuais + automáticas":"all"}.get(str(value),"off")
+        if key=="theme":
+            return {"Sistema":"system","Escuro":"dark","Claro":"light","Preto OLED":"oled"}.get(str(value),str(value))
+        if key=="ui_density":
+            return {"Confortável":"comfortable","Compacto":"compact"}.get(str(value),str(value))
+        if key in {"auto_video_quality","audio_bitrate","playlist_parallelism","concurrent_fragments","retries"}:
             try:
                 return int(value)
-            except (ValueError, TypeError):
+            except (ValueError,TypeError):
                 return DEFAULT_CONFIG.get(key)
-        return str(value).strip() if isinstance(value, str) else value
-
+        return str(value).strip() if isinstance(value,str) else value
     def save_settings(self):
         try:
-            q = int(self.settings_vars["auto_video_quality"].get())
-            b = int(self.settings_vars["audio_bitrate"].get())
-            parallelism = int(self.settings_vars["playlist_parallelism"].get())
-            fragments = int(self.settings_vars["concurrent_fragments"].get())
-            retries = int(self.settings_vars["retries"].get())
+            q=int(self.settings_vars["auto_video_quality"].get())
+            b=int(self.settings_vars["audio_bitrate"].get())
+            parallelism=int(self.settings_vars["playlist_parallelism"].get())
+            fragments=int(self.settings_vars["concurrent_fragments"].get())
+            retries=int(self.settings_vars["retries"].get())
         except ValueError:
-            messagebox.showerror("Configuração", "Qualidade, bitrate, concorrência, fragmentos e tentativas precisam ser numéricos.")
+            messagebox.showerror("Configuração","Qualidade, bitrate, concorrência, fragmentos e tentativas precisam ser numéricos.")
             return
-        if not validate_quality(q) or not validate_bitrate(b) or parallelism not in {2, 3, 4, 6} or fragments not in {1, 2, 4, 8, 16} or retries not in {2, 3, 5, 10}:
-            messagebox.showerror("Configuração", "Verifique os valores permitidos nas listas: qualidade, bitrate, downloads simultâneos, fragmentos e tentativas.")
+        if not validate_quality(q) or not validate_bitrate(b) or parallelism not in {2,3,4,6} or fragments not in {1,2,4,8,16} or retries not in {2,3,5,10}:
+            messagebox.showerror("Configuração","Verifique os valores permitidos nas listas: qualidade, bitrate, downloads simultâneos, fragmentos e tentativas.")
             return
-        new_config = dict(self.config)
+        accent=str(self.settings_vars.get("accent_color",tk.StringVar(value="#8B5CF6")).get()).strip()
+        if not _valid_hex_color(accent):
+            messagebox.showerror("Aparência","Informe a cor como HEX de seis dígitos, por exemplo #8B5CF6.")
+            return
+        new_config=dict(self.config)
         for key in self.settings_vars:
-            new_config[key] = self._stored_setting_value(key, self.settings_vars[key].get())
-        new_config["auto_video_quality"] = q
-        new_config["audio_bitrate"] = b
+            new_config[key]=self._stored_setting_value(key,self.settings_vars[key].get())
+        new_config["accent_color"]=accent.upper()
+        new_config["auto_video_quality"]=q
+        new_config["audio_bitrate"]=b
         try:
             save_config(new_config)
-            self.config = load_config()
-            self.playlist_strategy_var.set(self._strategy_label(self.config.get("playlist_strategy", "sequential")))
-            self.playlist_parallelism_var.set(str(self.config.get("playlist_parallelism", 3)))
-            self._apply_theme(self.config.get("theme", "system"))
+            self.config=load_config()
+            self.playlist_strategy_var.set(self._strategy_label(self.config.get("playlist_strategy","sequential")))
+            self.playlist_parallelism_var.set(str(self.config.get("playlist_parallelism",3)))
+            self._apply_theme(self.config.get("theme","dark"))
             self._sync_quality()
             self._refresh_dependencies(force=True)
-            self._append_log("Configurações salvas.")
-            messagebox.showinfo("Configurações", "Configurações salvas com sucesso.")
+            self._append_log("Configurações e aparência salvas.")
+            messagebox.showinfo("Configuração","Personalização salva com sucesso.")
         except OSError as exc:
-            messagebox.showerror("Configuração", f"Não foi possível salvar: {exc}")
-
-    # ---------- Dependencies ----------
+            messagebox.showerror("Configuração",f"Não foi possível salvar: {exc}")
     def _build_dependencies(self):
         frame = ttk.Frame(self.pages_area)
         self.page_frames["dependencies"] = frame
@@ -1133,34 +1249,33 @@ class MediaDownloaderApp:
         self.root.after(100, self.root.destroy)
 
     # ---------- Page navigation ----------
-    def show_page(self, name: str):
+    def show_page(self,name: str):
         if name not in self.page_frames:
             return
         Tooltip.dismiss_all()
         for frame in self.page_frames.values():
             frame.pack_forget()
-        self.page_frames[name].pack(fill="both", expand=True)
-        self.current_page = name
-        title = {"home": "Início", "playlist": "Gerenciar playlist", "settings": "Configurações", "dependencies": "Dependências", "updates": "Atualizações", "help": "Ajuda", "developer": "Desenvolvedor"}[name]
+        self.page_frames[name].pack(fill="both",expand=True)
+        self.current_page=name
+        title={"home":"Início","playlist":"Playlists","settings":"Aparência e ajustes","dependencies":"Dependências","updates":"Atualizações","help":"Central de ajuda","developer":"Diagnóstico"}[name]
+        subtitle={"home":"Seu espaço para vídeos, músicas e playlists.","playlist":"Escolha exatamente o que baixar e defina opções por item.","settings":"Personalize o visual e ajuste o comportamento do downloader.","dependencies":"Ferramentas locais e estado da instalação.","updates":"Atualizações verificadas, reparação e recuperação da instalação.","help":"Orientações rápidas para tirar o melhor do aplicativo.","developer":"Informações úteis para diagnóstico técnico."}[name]
         self.page_title_var.set(title)
-        for key, button in self.nav_buttons.items():
-            button.configure(style="Selected.Nav.TButton" if key == name else "Nav.TButton")
-        if name == "settings":
+        self.page_subtitle_var.set(subtitle)
+        for key,button in self.nav_buttons.items():
+            button.configure(style="Selected.Nav.TButton" if key==name else "Nav.TButton")
+        if name=="settings":
             self._sync_settings_form()
-        elif name == "dependencies":
+        elif name=="dependencies":
             self._refresh_dependencies()
-        elif name == "developer":
+        elif name=="developer":
             self._update_developer_vars()
-
     def _sync_settings_form(self):
-        for key, var in self.settings_vars.items():
-            var.set(self._display_setting_value(key, self.config.get(key, DEFAULT_CONFIG.get(key, ""))))
-        self._apply_theme(self.config.get("theme", "system"))
-        if hasattr(self, "playlist_strategy_var"):
-            self.playlist_strategy_var.set(self._strategy_label(self.config.get("playlist_strategy", "sequential")))
-            self.playlist_parallelism_var.set(str(self.config.get("playlist_parallelism", 3)))
-
-    # ---------- Download ----------
+        for key,var in self.settings_vars.items():
+            var.set(self._display_setting_value(key,self.config.get(key,DEFAULT_CONFIG.get(key,""))))
+        self._apply_theme(self.config.get("theme","dark"))
+        if hasattr(self,"playlist_strategy_var"):
+            self.playlist_strategy_var.set(self._strategy_label(self.config.get("playlist_strategy","sequential")))
+            self.playlist_parallelism_var.set(str(self.config.get("playlist_parallelism",3)))
     def _sync_quality(self):
         if "Música" in self.mode_var.get():
             values = ["128 kbps", "192 kbps", "320 kbps"]

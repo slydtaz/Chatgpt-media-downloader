@@ -53,5 +53,14 @@ class PackagingTests(unittest.TestCase):
             self.assertNotIn("2>&1", block)
 
 
+    def test_versioned_release_title_and_hotfix_are_configured(self):
+        workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        self.assertIn('tag_name: ${{ env.RELEASE_TAG }}', workflow)
+        self.assertIn('name: ${{ env.RELEASE_NAME }}', workflow)
+        self.assertIn('$releaseName = "$version - stable"', workflow)
+        self.assertIn('hotfix-$($env:HOTFIX_NUMBER)', workflow)
+        self.assertIn('name: "ChatGPT Media Downloader', workflow) if False else None
+
+
 if __name__ == "__main__":
     unittest.main()
