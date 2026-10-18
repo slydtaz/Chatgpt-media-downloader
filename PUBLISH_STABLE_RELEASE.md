@@ -1,6 +1,6 @@
 # Publicar a Release estável
 
-As Releases estáveis versionadas usam uma tag como `v5.1.0` e título `5.1.0 - stable`. A Release histórica associada à tag `stable` é mantida sem alteração por compatibilidade.
+As Releases estáveis versionadas usam uma tag como `v5.1.0` e título `5.1.0 - stable`. Correções críticas que exigem atualização imediata usam `5.1.0 - stable (hotfix-1)`, com o número sequencial real. A primeira Release da tag `stable` é mantida sem alteração por compatibilidade.
 
 ## Publicação automatizada
 
