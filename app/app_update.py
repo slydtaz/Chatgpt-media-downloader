@@ -599,8 +599,11 @@ try {
   if (!(Test-Path -LiteralPath $StagedPath)) { throw "O pacote preparado não foi encontrado: $StagedPath" }
 
   if ($Mode -eq 'executable') {
+    if (!(Test-Path -LiteralPath $TargetRoot -PathType Container)) {
+      New-Item -ItemType Directory -Force -Path $TargetRoot | Out-Null
+    }
     $target = Join-Path $TargetRoot 'ChatGPTMediaDownloader.exe'
-    if (!(Test-Path -LiteralPath $target)) { throw "O executável instalado não existe: $target" }
+    $hadOldTarget = Test-Path -LiteralPath $target -PathType Leaf
     $stagedInfo = Get-Item -LiteralPath $StagedPath
     if ($stagedInfo.Length -lt 1048576) { throw 'O executável preparado é pequeno demais.' }
     $expectedHash = (Get-FileHash -LiteralPath $StagedPath -Algorithm SHA256).Hash.ToUpperInvariant()
@@ -610,15 +613,17 @@ try {
     $copyHash = (Get-FileHash -LiteralPath $next -Algorithm SHA256).Hash.ToUpperInvariant()
     if ($copyHash -ne $expectedHash) { throw 'A cópia temporária do executável falhou na verificação SHA-256.' }
 
-    $movedOld = $false
-    for ($attempt = 1; $attempt -le 20; $attempt++) {
-      try {
-        Move-Item -LiteralPath $target -Destination $backup
-        $movedOld = $true
-        break
-      } catch {
-        if ($attempt -eq 20) { throw }
-        Start-Sleep -Milliseconds 500
+    $movedOld = !$hadOldTarget
+    if ($hadOldTarget) {
+      for ($attempt = 1; $attempt -le 20; $attempt++) {
+        try {
+          Move-Item -LiteralPath $target -Destination $backup
+          $movedOld = $true
+          break
+        } catch {
+          if ($attempt -eq 20) { throw }
+          Start-Sleep -Milliseconds 500
+        }
       }
     }
     if (!$movedOld) { throw 'Não foi possível liberar o executável antigo para substituição.' }
@@ -627,6 +632,34 @@ try {
       Move-Item -LiteralPath $next -Destination $target
       $installedHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToUpperInvariant()
       if ($installedHash -ne $expectedHash) { throw 'O executável instalado não corresponde ao arquivo validado.' }
+
+      # Create/update the ownership marker before the new EXE tries to self-install.
+      $markerPath = Join-Path $TargetRoot '.chatgpt-media-downloader-install.json'
+      $installIdPath = Join-Path $env:LOCALAPPDATA 'ChatGPT\MediaDownloader\install_id.txt'
+      if (!(Test-Path -LiteralPath $installIdPath -PathType Leaf)) { throw "O ID da instalação não foi encontrado: $installIdPath" }
+      $installId = (Get-Content -LiteralPath $installIdPath -Raw).Trim()
+      if ([string]::IsNullOrWhiteSpace($installId)) { throw 'O ID da instalação está vazio.' }
+      $markerData = [ordered]@{
+        vendor = 'ChatGPT'
+        product_id = 'com.chatgpt.mediadownloader'
+        install_id = $installId
+        version = $Version
+        installed_from = 'GitHub updater'
+        updated_at = (Get-Date).ToString('s')
+      }
+      if (Test-Path -LiteralPath $markerPath -PathType Leaf) {
+        $oldMarker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
+        if ($oldMarker.vendor -ne 'ChatGPT' -or $oldMarker.product_id -ne 'com.chatgpt.mediadownloader') {
+          throw 'O marcador do destino pertence a outro produto; a instalação foi cancelada.'
+        }
+        if (![string]::IsNullOrWhiteSpace([string]$oldMarker.install_id)) { $markerData.install_id = [string]$oldMarker.install_id }
+        if (![string]::IsNullOrWhiteSpace([string]$oldMarker.installed_from)) { $markerData.installed_from = [string]$oldMarker.installed_from }
+      }
+      $markerData | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $markerPath -Encoding UTF8
+      $savedMarker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
+      if ($savedMarker.product_id -ne 'com.chatgpt.mediadownloader' -or $savedMarker.install_id -ne $installId) {
+        throw 'A validação do marcador da instalação falhou.'
+      }
       $replacementCommitted = $true
 
       if ($Reopen) {
