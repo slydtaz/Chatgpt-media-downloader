@@ -55,8 +55,8 @@ class PackagingTests(unittest.TestCase):
 
         runner = (ROOT / "tests" / "run_unittest_ci.ps1").read_text(encoding="utf-8")
         self.assertIn("Start-Process", runner)
-        self.assertIn("-RedirectStandardOutput", runner)
-        self.assertIn("-RedirectStandardError", runner)
+        self.assertIn("RedirectStandardOutput = $stdoutPath", runner)
+        self.assertIn("RedirectStandardError = $stderrPath", runner)
         self.assertIn("$process.ExitCode", runner)
 
 
