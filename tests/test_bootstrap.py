@@ -207,18 +207,41 @@ class BootstrapTests(unittest.TestCase):
 
 
 
-    def test_startup_repair_marker_suppresses_repeated_critical_repair_prompt(self):
+    def test_pending_startup_repair_shows_choice_without_automatic_repair(self):
         with tempfile.TemporaryDirectory() as td:
             marker = Path(td) / "temp" / "startup-repair-pending.json"
             marker.parent.mkdir(parents=True)
             marker.write_text('{"version": "5.1.1"}', encoding="utf-8")
-            with patch.object(config, "STARTUP_REPAIR_PENDING_PATH", marker), patch.object(bootstrap, "show_startup_notice") as notice:
+            with patch.object(config, "STARTUP_REPAIR_PENDING_PATH", marker), \
+                 patch.object(bootstrap, "_startup_recovery_choice", return_value="cancel") as choice, \
+                 patch.object(bootstrap, "show_startup_notice"):
                 handled = bootstrap._offer_startup_repair(RuntimeError("simulated startup failure"))
-            self.assertTrue(handled)
-            notice.assert_called_once()
-            message = notice.call_args.args[0]
-            self.assertIn("ciclo infinito", message)
-            self.assertIn("releases/latest", message)
+            self.assertFalse(handled)
+            choice.assert_called_once_with(RuntimeError("simulated startup failure"), repair_pending=True)
+            self.assertTrue(marker.exists())
+
+    def test_frozen_windows_install_prefers_writable_per_user_folder(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            source_exe = root / "ProgramFiles" / (bootstrap.INSTALL_FOLDER_PREFIX + "ABCDEF123456") / "ChatGPTMediaDownloader.exe"
+            source_exe.parent.mkdir(parents=True)
+            source_exe.write_bytes(b"existing installed executable")
+            install_id = "ABCDEF12-3456-7890-ABCD-1234567890AB"
+            (source_exe.parent / bootstrap.INSTALL_MARKER).write_text(json.dumps({
+                "vendor": "ChatGPT", "product_id": bootstrap.PRODUCT_ID,
+                "install_id": install_id, "version": bootstrap.VERSION,
+            }), encoding="utf-8")
+            user_root = root / "LocalAppData" / "Programs" / "ChatGPT" / (bootstrap.INSTALL_FOLDER_PREFIX + "ABCDEF123456")
+            system_root = source_exe.parent
+            system = SystemInfo("Windows", "Windows x64", "x64", "Windows x64", "AMD64", 64)
+            with patch.object(bootstrap, "preferred_install_root", return_value=system_root), \
+                 patch.object(bootstrap, "per_user_install_root", return_value=user_root), \
+                 patch.object(bootstrap, "_directory_is_writable", return_value=False), \
+                 patch.object(bootstrap, "remove_old_owned_installations"):
+                target, migrated = bootstrap.ensure_frozen_installation(source_exe, install_id, system)
+            self.assertEqual(target, user_root)
+            self.assertTrue(migrated)
+            self.assertTrue((user_root / bootstrap.INSTALL_MARKER).is_file())
 
 if __name__ == "__main__":
     unittest.main()
