@@ -69,6 +69,14 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(version, package_version)
         self.assertIn(f"ChatGPT Media Downloader {version} - Build", build_script)
         self.assertIn(f"vers%C3%A3o-fonte%20{version}", readme)
+        version_info = (ROOT / "windows_version_info.txt").read_text(encoding="utf-8")
+        spec = (ROOT / "ChatGPTMediaDownloader.spec").read_text(encoding="utf-8")
+        version_tuple = ", ".join(version.split("."))
+        self.assertIn(f"filevers=({version_tuple}, 0)", version_info)
+        self.assertIn(f"prodvers=({version_tuple}, 0)", version_info)
+        self.assertIn('version=str(ROOT / "windows_version_info.txt")', spec)
+        self.assertIn("github.com/slydtaz/Chatgpt-media-downloader", version_info)
+        self.assertIn("nao afiliado a OpenAI", version_info)
 
     def test_versioned_release_title_and_hotfix_are_configured(self):
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
