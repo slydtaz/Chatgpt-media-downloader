@@ -846,10 +846,10 @@ def _offer_startup_repair(original_error: BaseException) -> bool:
     # to relaunch it. Do not start the same repair flow indefinitely on each boot.
     if startup_repair_is_pending():
         show_startup_notice(
-            "A tentativa anterior de reparo não confirmou a abertura do aplicativo.\\n\\n"
+            "A tentativa anterior de reparo não confirmou a abertura do aplicativo.\n\n"
             "Para evitar um ciclo infinito, o reparo automático foi interrompido. "
-            "Instale manualmente a versão oficial mais recente:\\n"
-            "https://github.com/slydtaz/Chatgpt-media-downloader/releases/latest\\n\\n"
+            "Instale manualmente a versão oficial mais recente:\n"
+            "https://github.com/slydtaz/Chatgpt-media-downloader/releases/latest\n\n"
             f"Se precisar de diagnóstico, consulte os logs em: {LOG_DIR}"
         )
         return True
@@ -866,8 +866,8 @@ def _offer_startup_repair(original_error: BaseException) -> bool:
         try:
             should_repair = messagebox.askyesno(
                 "Falha crítica — reparar instalação",
-                "O aplicativo falhou durante a inicialização.\\n\\n"
-                "Deseja baixar novamente os arquivos oficiais do GitHub e tentar restaurar a instalação?\\n\\n"
+                "O aplicativo falhou durante a inicialização.\n\n"
+                "Deseja baixar novamente os arquivos oficiais do GitHub e tentar restaurar a instalação?\n\n"
                 "As preferências e mídias guardadas nas pastas de dados do usuário não serão apagadas.",
                 parent=root,
             )
@@ -891,7 +891,7 @@ def _offer_startup_repair(original_error: BaseException) -> bool:
             raise
 
         show_startup_notice(
-            "O pacote oficial foi baixado e validado. O aplicativo será fechado para aplicar o reparo.\\n\\n"
+            "O pacote oficial foi baixado e validado. O aplicativo será fechado para aplicar o reparo.\n\n"
             "O processo auxiliar vai confirmar que a nova interface abriu antes de remover o backup. "
             "Se houver falha, ela será registrada no log do atualizador."
         )
@@ -902,8 +902,8 @@ def _offer_startup_repair(original_error: BaseException) -> bool:
         try:
             from .locking import show_startup_notice as notify
             notify(
-                "O reparo automático não pôde ser preparado.\\n\\n"
-                f"Erro de inicialização: {original_error}\\n\\nFalha no reparo: {repair_error}\\n\\n"
+                "O reparo automático não pôde ser preparado.\n\n"
+                f"Erro de inicialização: {original_error}\n\nFalha no reparo: {repair_error}\n\n"
                 "Confira sua conexão e a existência de uma Release oficial no GitHub."
             )
         except Exception:
