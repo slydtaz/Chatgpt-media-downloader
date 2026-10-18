@@ -413,26 +413,51 @@ def _transactional_install_executable(source_exe: Path, destination: Path, insta
             shutil.rmtree(stage, ignore_errors=True)
 
 
+def _directory_is_writable(path: Path) -> bool:
+    """Check whether the current user can replace files in an existing install folder."""
+    if not path.is_dir():
+        return False
+    probe = path / f".cgm-write-check-{uuid.uuid4().hex}"
+    try:
+        with probe.open("xb") as handle:
+            handle.write(b"ok")
+        return True
+    except OSError:
+        return False
+    finally:
+        try:
+            probe.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def ensure_frozen_installation(source_exe: Path, install_id: str, system) -> tuple[Path, bool]:
     """Self-install a PyInstaller one-file executable without a source project tree."""
     preferred = preferred_install_root(install_id, system)
     user = per_user_install_root(install_id, system)
     resolved_exe = source_exe.resolve()
 
-    for candidate in (preferred, user):
+    # Prefer a per-user installation on Windows. It can be repaired and updated
+    # without requiring admin rights to replace an EXE under Program Files.
+    candidates = (user, preferred) if system.os_name == "Windows" else (preferred, user)
+    for candidate in candidates:
         try:
             if resolved_exe.parent == candidate.resolve() and _is_ours(candidate, install_id):
-                return candidate, False
+                if candidate == user or _directory_is_writable(candidate):
+                    return candidate, False
+                # A non-elevated process cannot safely update this system install.
+                # Reinstall into the user profile and use that copy going forward.
+                break
         except OSError:
             continue
 
-    # Do not allow a stale portable EXE to overwrite a newer owned installation.
+    # A stale portable EXE must never downgrade a newer owned installation.
     newer_install = _newest_install_not_older([preferred, user], install_id, VERSION)
     if newer_install is not None:
         return newer_install, True
 
     errors: list[str] = []
-    for candidate in (preferred, user):
+    for candidate in candidates:
         try:
             candidate.parent.mkdir(parents=True, exist_ok=True)
             if candidate.exists() and not _is_product_install(candidate):
@@ -832,9 +857,78 @@ def run_installed() -> None:
     app_main()
 
 
+def _startup_recovery_choice(original_error: BaseException, *, repair_pending: bool) -> str:
+    """Show explicit recovery choices instead of silently repeating a failed repair."""
+    from .config import LOG_DIR
+    import tkinter as tk
+    from tkinter import ttk
+
+    root = tk.Tk()
+    root.withdraw()
+    dialog = tk.Toplevel(root)
+    dialog.title("ChatGPT Media Downloader — recuperação")
+    dialog.geometry("690x360")
+    dialog.resizable(False, False)
+    dialog.transient(root)
+    result = {"choice": "cancel"}
+
+    frame = ttk.Frame(dialog, padding=20)
+    frame.pack(fill="both", expand=True)
+    heading = "A tentativa anterior de reparo não foi confirmada." if repair_pending else "O aplicativo encontrou uma falha grave ao iniciar."
+    ttk.Label(frame, text=heading, font=("Segoe UI", 14, "bold"), wraplength=640).pack(anchor="w", pady=(0, 10))
+    explanation = (
+        "Escolha como continuar. Reparar baixa novamente o pacote da Release oficial e valida o SHA-256. "
+        "Desinstalar remove os arquivos identificados do aplicativo e as configurações/ferramentas locais; "
+        "as pastas de músicas e vídeos baixados não são removidas."
+    )
+    ttk.Label(frame, text=explanation, wraplength=640, justify="left").pack(anchor="w", pady=(0, 10))
+    error_text = f"{type(original_error).__name__}: {str(original_error)}".strip()
+    ttk.Label(
+        frame,
+        text=("Erro: " + (error_text[:600] if error_text else "detalhes não disponíveis") + "\n\nLogs: " + str(LOG_DIR)),
+        wraplength=640, justify="left",
+    ).pack(anchor="w", pady=(0, 18))
+
+    actions = ttk.Frame(frame)
+    actions.pack(fill="x", side="bottom")
+
+    def choose(value: str) -> None:
+        result["choice"] = value
+        try:
+            dialog.grab_release()
+        except tk.TclError:
+            pass
+        dialog.destroy()
+
+    ttk.Button(actions, text="Tentar reparar", command=lambda: choose("repair")).pack(side="left")
+    ttk.Button(actions, text="Desinstalar aplicativo", command=lambda: choose("uninstall")).pack(side="left", padx=(8, 0))
+    ttk.Button(actions, text="Cancelar", command=lambda: choose("cancel")).pack(side="right")
+    dialog.protocol("WM_DELETE_WINDOW", lambda: choose("cancel"))
+    dialog.bind("<Escape>", lambda _event: choose("cancel"))
+    dialog.grab_set()
+    dialog.focus_force()
+    root.wait_window(dialog)
+    root.destroy()
+    return result["choice"]
+
+
+def _startup_repair_target_root(*, frozen: Optional[bool] = None, windows: Optional[bool] = None) -> Path:
+    """Choose a repair target the current user can replace without admin rights."""
+    from .config import IS_FROZEN
+    if frozen is None:
+        frozen = IS_FROZEN
+    if windows is None:
+        windows = os.name == "nt"
+    if frozen and windows:
+        install_id = ensure_install_id()
+        return per_user_install_root(install_id, detect_system())
+    return current_project_root()
+
+
 def _offer_startup_repair(original_error: BaseException) -> bool:
-    """Offer recovery once; wait for a repaired build to confirm that its GUI opens."""
+    """Offer repair, uninstall, or cancel when the application cannot start."""
     from .config import (
+        APP_DATA,
         IS_FROZEN,
         LOG_DIR,
         clear_startup_repair_pending,
@@ -842,44 +936,57 @@ def _offer_startup_repair(original_error: BaseException) -> bool:
         startup_repair_is_pending,
     )
 
-    # The helper from a previous run may have replaced the executable but failed
-    # to relaunch it. Do not start the same repair flow indefinitely on each boot.
-    if startup_repair_is_pending():
+    pending = startup_repair_is_pending()
+    try:
+        choice = _startup_recovery_choice(original_error, repair_pending=pending)
+    except Exception as dialog_error:
         show_startup_notice(
-            "A tentativa anterior de reparo não confirmou a abertura do aplicativo.\n\n"
-            "Para evitar um ciclo infinito, o reparo automático foi interrompido. "
-            "Instale manualmente a versão oficial mais recente:\n"
-            "https://github.com/slydtaz/Chatgpt-media-downloader/releases/latest\n\n"
-            f"Se precisar de diagnóstico, consulte os logs em: {LOG_DIR}"
+            "Não foi possível abrir o painel de recuperação.\n\n"
+            f"Erro original: {original_error}\nErro do painel: {dialog_error}\n\n"
+            f"Consulte os logs em: {LOG_DIR}"
         )
-        return True
+        return False
+
+    if choice == "uninstall":
+        try:
+            from .uninstall import launch_uninstaller
+
+            install_root = current_project_root()
+            if not _is_product_install(install_root):
+                # Never delete an arbitrary folder such as Downloads or a source checkout.
+                install_root = None
+            launch_uninstaller(APP_DATA, install_root)
+            show_startup_notice(
+                "A desinstalação foi iniciada. O processo de limpeza continuará depois que esta janela fechar.\n\n"
+                "As pastas escolhidas para salvar músicas e vídeos não serão removidas."
+            )
+            return True
+        except Exception as uninstall_error:
+            show_startup_notice(
+                "Não foi possível iniciar a desinstalação.\n\n"
+                f"Erro: {uninstall_error}\n\nSe a instalação estiver em Program Files, confirme a permissão do Windows."
+            )
+            return False
+
+    if choice != "repair":
+        return False
+
+    # A retry must be explicit: clear a previous failed hand-off marker only
+    # after the user chooses to try again. No repair is launched automatically.
+    if pending and not clear_startup_repair_pending():
+        show_startup_notice(
+            "Não foi possível limpar o marcador da tentativa anterior.\n\n"
+            f"Verifique as permissões e consulte: {LOG_DIR}"
+        )
+        return False
 
     pending_written = False
     scheduled = False
     try:
-        import tkinter as tk
-        from tkinter import messagebox
         from .app_update import check_repair_candidate, prepare_update, schedule_apply_update
 
-        root = tk.Tk()
-        root.withdraw()
-        try:
-            should_repair = messagebox.askyesno(
-                "Falha crítica — reparar instalação",
-                "O aplicativo falhou durante a inicialização.\n\n"
-                "Deseja baixar novamente os arquivos oficiais do GitHub e tentar restaurar a instalação?\n\n"
-                "As preferências e mídias guardadas nas pastas de dados do usuário não serão apagadas.",
-                parent=root,
-            )
-        finally:
-            root.destroy()
-        if not should_repair:
-            return False
-
         candidate = check_repair_candidate(VERSION, frozen=IS_FROZEN)
-        prepared = prepare_update(candidate, target_root=current_project_root())
-        # The OS helper waits for the new GUI to remove this marker before it
-        # declares success and deletes the previous installation's backup.
+        prepared = prepare_update(candidate, target_root=_startup_repair_target_root())
         mark_startup_repair_pending(candidate.version)
         pending_written = True
         try:
@@ -892,8 +999,8 @@ def _offer_startup_repair(original_error: BaseException) -> bool:
 
         show_startup_notice(
             "O pacote oficial foi baixado e validado. O aplicativo será fechado para aplicar o reparo.\n\n"
-            "O processo auxiliar vai confirmar que a nova interface abriu antes de remover o backup. "
-            "Se houver falha, ela será registrada no log do atualizador."
+            "A nova interface precisa abrir para confirmar a recuperação; se isso falhar, você poderá escolher "
+            "reparar novamente ou desinstalar na próxima abertura."
         )
         return True
     except Exception as repair_error:
@@ -909,6 +1016,7 @@ def _offer_startup_repair(original_error: BaseException) -> bool:
         except Exception:
             pass
         return False
+
 
 def main() -> None:
     guard = None

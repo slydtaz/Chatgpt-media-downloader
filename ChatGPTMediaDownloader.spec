@@ -49,6 +49,7 @@ exe = EXE(
     a.datas,
     [],
     name="ChatGPTMediaDownloader",
+    version=str(ROOT / "windows_version_info.txt"),
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

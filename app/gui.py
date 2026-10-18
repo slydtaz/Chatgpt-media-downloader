@@ -924,6 +924,11 @@ class MediaDownloaderApp:
             state="disabled", command=self._show_cached_update_prompt,
         )
         self.app_update_install_button.pack(side="left", padx=(8, 0))
+        self.app_uninstall_button = ttk.Button(
+            buttons, text="Desinstalar aplicativo", style="Secondary.TButton",
+            command=self._start_uninstall,
+        )
+        self.app_uninstall_button.pack(side="left", padx=(8, 0))
         self.app_update_repair_button = ttk.Button(
             buttons, text="Reparar todos os arquivos", style="Secondary.TButton",
             command=self._start_app_repair,
@@ -1070,6 +1075,40 @@ class MediaDownloaderApp:
         dialog.geometry(f"+{x}+{y}")
         dialog.grab_set()
         dialog.focus_force()
+
+    def _start_uninstall(self):
+        if self._app_update_busy or self._app_update_checking:
+            messagebox.showwarning(
+                "Desinstalar aplicativo",
+                "Aguarde a atualização ou reparação terminar antes de desinstalar.",
+                parent=self.root,
+            )
+            return
+        confirmed = messagebox.askyesno(
+            "Desinstalar ChatGPT Media Downloader",
+            "Deseja desinstalar o aplicativo?\n\n"
+            "Isso remove a instalação e os dados locais do aplicativo (configurações, logs e ferramentas). "
+            "As pastas de músicas e vídeos configuradas para os downloads não serão removidas.\n\n"
+            "Se a instalação estiver em Program Files, o Windows poderá pedir permissão de administrador.",
+            parent=self.root,
+        )
+        if not confirmed:
+            return
+        try:
+            launch_uninstaller(APP_DATA, INSTALL_ROOT)
+        except Exception as exc:
+            messagebox.showerror(
+                "Falha ao desinstalar",
+                f"Não foi possível iniciar o desinstalador.\n\nDetalhes: {exc}",
+                parent=self.root,
+            )
+            return
+        messagebox.showinfo(
+            "Desinstalação iniciada",
+            "Feche o aplicativo quando esta mensagem desaparecer. O desinstalador terminará a limpeza depois que o processo fechar.",
+            parent=self.root,
+        )
+        self.root.destroy()
 
     def _start_app_repair(self, *, confirmed: bool = False):
         if self._app_update_busy or self._app_update_checking:

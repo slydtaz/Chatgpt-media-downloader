@@ -1,3 +1,11 @@
+## 5.1.2 - stable (hotfix-2)
+
+- A tela de falha crítica agora oferece opções explícitas para tentar reparar, desinstalar ou cancelar; uma tentativa fracassada já não impede o usuário de abrir esse menu outra vez.
+- O instalador do executável prefere uma pasta por usuário no Windows, reduzindo falhas de atualização causadas por permissões insuficientes em Program Files.
+- Adiciona botão de desinstalação nas configurações e rotina de limpeza que verifica o marcador do produto antes de remover arquivos; pastas de músicas/vídeos baixados não são removidas.
+- Incorpora metadados de versão PE (versão, nome, descrição, copyright e link do repositório) e documenta que esses campos não substituem uma assinatura digital.
+- O workflow oferece assinatura Authenticode e verificação quando certificados confiáveis forem configurados por secrets do repositório; sem certificado, a Release declara explicitamente que o EXE não está assinado.
+
 ## 5.1.1 - stable (hotfix-1)
 
 - Corrige o ciclo de reparo crítico em que o auxiliar podia fechar o programa, falhar na substituição/reabertura e deixar a versão antiga oferecendo o mesmo reparo repetidamente.
