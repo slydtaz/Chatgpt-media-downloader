@@ -1,7 +1,7 @@
 ## 5.1.1 - stable (hotfix-1)
 
 - Corrige o ciclo de reparo crítico em que o auxiliar podia fechar o programa, falhar na substituição/reabertura e deixar a versão antiga oferecendo o mesmo reparo repetidamente.
-- O auxiliar do Windows agora registra o resultado em `%LOCALAPPDATA%\\ChatGPT\\MediaDownloader\\logs\\update-helper.log`, valida a cópia do EXE por SHA-256, tenta novamente trocas bloqueadas e só remove o backup após confirmar a inicialização.
+- O auxiliar do Windows agora registra o resultado em `%LOCALAPPDATA%/ChatGPT/MediaDownloader/logs/update-helper.log`, valida a cópia do EXE por SHA-256, tenta novamente trocas bloqueadas e só remove o backup após confirmar a inicialização.
 - O bootstrap persiste um marcador do reparo; a nova interface o remove depois de construir a janela. Se o início não for confirmado, o próximo lançamento interrompe a oferta automática repetitiva e orienta a instalação manual.
 - Usuários presos na 5.0.1 devem instalar o EXE oficial 5.1.1 manualmente uma vez; o atualizador antigo não pode ser corrigido antes de a versão nova ser instalada.
 
