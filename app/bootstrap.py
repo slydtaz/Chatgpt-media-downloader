@@ -912,10 +912,14 @@ def _startup_recovery_choice(original_error: BaseException, *, repair_pending: b
     return result["choice"]
 
 
-def _startup_repair_target_root() -> Path:
+def _startup_repair_target_root(*, frozen: Optional[bool] = None, windows: Optional[bool] = None) -> Path:
     """Choose a repair target the current user can replace without admin rights."""
     from .config import IS_FROZEN
-    if IS_FROZEN and os.name == "nt":
+    if frozen is None:
+        frozen = IS_FROZEN
+    if windows is None:
+        windows = os.name == "nt"
+    if frozen and windows:
         install_id = ensure_install_id()
         return per_user_install_root(install_id, detect_system())
     return current_project_root()
