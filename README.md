@@ -18,6 +18,10 @@
 
 > **Aviso de nome:** “ChatGPT” no nome é apenas parte do identificador do projeto. Este software é independente e **não é afiliado, patrocinado, certificado ou distribuído pela OpenAI**.
 
+## 🎨 Aparência e personalização
+
+A interface usa navegação lateral e painéis de trabalho inspirados no design moderno de launchers. Personalize o tema **Escuro**, **Claro** ou **Preto OLED**, escolha uma cor de destaque (HEX ou paletas rápidas) e altere o espaçamento entre **Confortável** e **Compacto**. O estilo segue convenções gerais vistas em launchers como o [SKlauncher](https://docs.skmedix.pl/4.0/), sem copiar seus recursos ou identidade visual.
+
 ## 📥 Download oficial para usuários
 
 **Recomendado:** abra **[Releases estáveis — baixar](https://github.com/slydtaz/chatgpt-media-downloader/releases/latest)** e baixe `ChatGPTMediaDownloader.exe`. Esse é o pacote de um único arquivo para quem só quer instalar e usar o programa; confira também `SHA256SUMS.txt` da mesma Release.

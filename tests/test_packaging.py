@@ -58,7 +58,7 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('tag_name: ${{ env.RELEASE_TAG }}', workflow)
         self.assertIn('name: ${{ env.RELEASE_NAME }}', workflow)
         self.assertIn('$releaseName = "$version - stable"', workflow)
-        self.assertIn('hotfix-$($env:HOTFIX_NUMBER)', workflow)
+        self.assertIn('stable (hotfix-$($env:HOTFIX_NUMBER))', workflow)
 
 
 if __name__ == "__main__":

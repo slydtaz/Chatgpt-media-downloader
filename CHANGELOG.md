@@ -2,7 +2,7 @@
 
 - Corrige uma falha no bootstrap em que abrir novamente um EXE/árvore de código-fonte antigo podia sobrescrever uma instalação mais nova, fazendo parecer que o auto-updater não tinha aplicado a atualização.
 - Preserva e encaminha para uma instalação comprovadamente mais recente; ao iniciar a nova instalação no Windows, sincroniza o EXE portátil original com cópia verificada por SHA-256.
-- Prioriza a Release versionada mais recente em verificações e reparações; Releases futuras usam o título `x.x.x - stable`. A Release histórica `stable` permanece sem alteração.
+- Prioriza a Release versionada mais recente em verificações e reparações; Releases futuras usam o título `x.x.x - stable`; correções críticas urgentes usam `x.x.x - stable (hotfix-N)`. A Release histórica `stable` permanece sem alteração.
 - Redesenha a interface com navegação lateral, área de trabalho, painel de sessão e status no estilo de um launcher moderno.
 - Adiciona temas Escuro, Claro e Preto OLED, seis cores rápidas, cor HEX personalizada e densidade Confortável/Compacta.
 - Adiciona testes de regressão para impedir downgrade por entrypoint antigo, sincronizar o EXE portátil e preferir a Release versionada mais recente.

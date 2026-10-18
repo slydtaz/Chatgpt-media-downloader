@@ -82,6 +82,25 @@ class AppUpdateDiscoveryTests(unittest.TestCase):
         self.assertEqual(request.call_args_list[0].args[0], f"{API_ROOT}/releases/latest")
         self.assertEqual(request.call_args_list[1].args[0], f"{API_ROOT}/releases/tags/stable")
 
+
+    def test_newest_versioned_release_beats_older_stable_alias(self):
+        newest = {
+            "tag_name": "v5.1.0",
+            "name": "5.1.0 - stable",
+            "html_url": "https://github.com/slydtaz/Chatgpt-media-downloader/releases/tag/v5.1.0",
+            "assets": [
+                {"name": "ChatGPTMediaDownloader.exe", "browser_download_url": "https://github.com/slydtaz/Chatgpt-media-downloader/releases/download/v5.1.0/ChatGPTMediaDownloader.exe", "size": 4096, "state": "uploaded"},
+                {"name": "SHA256SUMS.txt", "browser_download_url": "https://github.com/slydtaz/Chatgpt-media-downloader/releases/download/v5.1.0/SHA256SUMS.txt", "size": 90, "state": "uploaded"},
+            ],
+        }
+        with patch("app.app_update._request_json", return_value=newest) as request:
+            update = check_for_update("5.0.6", frozen=True)
+        self.assertIsNotNone(update)
+        self.assertEqual(update.version, "5.1.0")
+        self.assertEqual(update.tag_name, "v5.1.0")
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(request.call_args_list[0].args[0], f"{API_ROOT}/releases/latest")
+
     def test_executable_repair_prefers_stable_release(self):
         stable = {
             "tag_name": "stable",
