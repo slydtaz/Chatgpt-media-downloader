@@ -55,8 +55,8 @@ class UninstallerSafetyTests(unittest.TestCase):
             try:
                 text = script.read_text(encoding="utf-8-sig")
                 self.assertIn("Get-Process -Id", text) if script.suffix == ".ps1" else self.assertIn("kill -0", text)
-                self.assertIn(str(app_data), text)
-                self.assertIn(str(install), text)
+                self.assertIn(str(app_data.resolve()), text)
+                self.assertIn(str(install.resolve()), text)
                 self.assertNotIn("Music", text)
                 self.assertNotIn("Videos", text)
             finally:
