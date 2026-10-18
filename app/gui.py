@@ -1986,5 +1986,13 @@ class MediaDownloaderApp:
 def run() -> None:
     root = tk.Tk()
     app = MediaDownloaderApp(root)
+    # A startup repair is confirmed only after the complete main window was built.
+    # This lets the OS helper retain the old package until the new GUI is alive.
+    try:
+        from .config import clear_startup_repair_pending
+        if not clear_startup_repair_pending():
+            app.logger.warning("Não foi possível limpar o marcador de reparo após abrir a interface.")
+    except Exception:
+        app.logger.warning("Falha ao confirmar a abertura após reparo.", exc_info=True)
     root.protocol("WM_DELETE_WINDOW", root.destroy)
     root.mainloop()
