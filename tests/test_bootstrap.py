@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app import bootstrap
+from app import bootstrap, config
 from app.platform import SystemInfo
 
 
@@ -206,6 +206,19 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(updated_marker.get("portable_entrypoint_sha256"), bootstrap._sha256_file(installed_exe))
 
 
+
+    def test_startup_repair_marker_suppresses_repeated_critical_repair_prompt(self):
+        with tempfile.TemporaryDirectory() as td:
+            marker = Path(td) / "temp" / "startup-repair-pending.json"
+            marker.parent.mkdir(parents=True)
+            marker.write_text('{"version": "5.1.1"}', encoding="utf-8")
+            with patch.object(config, "STARTUP_REPAIR_PENDING_PATH", marker), patch.object(bootstrap, "show_startup_notice") as notice:
+                handled = bootstrap._offer_startup_repair(RuntimeError("simulated startup failure"))
+            self.assertTrue(handled)
+            notice.assert_called_once()
+            message = notice.call_args.args[0]
+            self.assertIn("ciclo infinito", message)
+            self.assertIn("releases/latest", message)
 
 if __name__ == "__main__":
     unittest.main()

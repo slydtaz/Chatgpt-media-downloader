@@ -42,11 +42,18 @@ jobs:
           if (-not [string]::IsNullOrWhiteSpace($refName) -and $refName -match '^v\d+\.\d+\.\d+$') {
             $releaseTag = $refName
           }
-          if ([string]::IsNullOrWhiteSpace($env:HOTFIX_NUMBER)) {
+          $hotfixNumber = $env:HOTFIX_NUMBER
+          if ([string]::IsNullOrWhiteSpace($hotfixNumber) -and $env:GITHUB_REF -eq 'refs/heads/main') {
+            $commitSubject = git log -1 --format=%s
+            if ($commitSubject -match '\(hotfix-([1-9]\d*)\)') {
+              $hotfixNumber = $Matches[1]
+            }
+          }
+          if ([string]::IsNullOrWhiteSpace($hotfixNumber)) {
             $releaseName = "$version - stable"
           } else {
-            if ($env:HOTFIX_NUMBER -notmatch '^[1-9]\d*$') { throw 'hotfix_number deve ser um número inteiro positivo.' }
-            $releaseName = "$version - stable (hotfix-$($env:HOTFIX_NUMBER))"
+            if ($hotfixNumber -notmatch '^[1-9]\d*$') { throw 'hotfix_number deve ser um número inteiro positivo.' }
+            $releaseName = "$version - stable (hotfix-$hotfixNumber)"
           }
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "RELEASE_TAG=$releaseTag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8

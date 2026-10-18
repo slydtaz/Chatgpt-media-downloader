@@ -56,6 +56,20 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("RedirectStandardError = $true", runner)
         self.assertIn("$process.ExitCode", runner)
 
+
+    def test_application_version_metadata_is_consistent(self):
+        import re
+
+        config = (ROOT / "app" / "config.py").read_text(encoding="utf-8")
+        metadata = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        build_script = (ROOT / "build_exe.bat").read_text(encoding="utf-8")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        version = re.search(r'^VERSION\s*=\s*"([^"]+)"', config, re.MULTILINE).group(1)
+        package_version = re.search(r'^version\s*=\s*"([^"]+)"', metadata, re.MULTILINE).group(1)
+        self.assertEqual(version, package_version)
+        self.assertIn(f"ChatGPT Media Downloader {version} - Build", build_script)
+        self.assertIn(f"vers%C3%A3o-fonte%20{version}", readme)
+
     def test_versioned_release_title_and_hotfix_are_configured(self):
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         self.assertIn('tag_name: ${{ env.RELEASE_TAG }}', workflow)
@@ -63,7 +77,9 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("      - 'v*'", workflow)
         self.assertIn('git archive --format=zip', workflow)
         self.assertIn('$releaseName = "$version - stable"', workflow)
-        self.assertIn('$releaseName = "$version - stable (hotfix-$($env:HOTFIX_NUMBER))"', workflow)
+        self.assertIn("$commitSubject = git log -1 --format=%s", workflow)
+        self.assertIn("$commitSubject -match", workflow)
+        self.assertIn('$releaseName = "$version - stable (hotfix-$hotfixNumber)"', workflow)
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ from pathlib import Path, PurePosixPath
 from typing import Callable, Optional
 from urllib.parse import urlsplit
 
-from .config import APP_DATA, INSTALL_ID_PATH, INSTALL_ROOT, PRODUCT_ID, VENDOR, VERSION
+from .config import APP_DATA, INSTALL_ID_PATH, INSTALL_ROOT, PRODUCT_ID, STARTUP_REPAIR_PENDING_PATH, VENDOR, VERSION
 
 OWNER = "slydtaz"
 REPOSITORY = "Chatgpt-media-downloader"
@@ -509,86 +509,263 @@ def _ps_quote(value: str | Path) -> str:
     return str(value).replace("'", "''")
 
 
-def schedule_apply_update(prepared: PreparedUpdate, *, launch_after: bool, python_executable: str = sys.executable) -> None:
-    """Spawn an OS helper to swap the package only after this process has exited."""
-    if os.name == "nt":
-        helper = APP_DATA / "temp" / f"apply-update-{uuid.uuid4().hex[:10]}.ps1"
-        helper.parent.mkdir(parents=True, exist_ok=True)
-        script = r'''param(
+def _windows_update_helper_script() -> str:
+    """Build the Windows hand-off script with durable diagnostics and safe rollback."""
+    return r'''param(
   [Parameter(Mandatory=$true)][int]$WaitPid,
   [Parameter(Mandatory=$true)][ValidateSet('source','executable')][string]$Mode,
   [Parameter(Mandatory=$true)][string]$TargetRoot,
   [Parameter(Mandatory=$true)][string]$StagedPath,
   [Parameter(Mandatory=$true)][string]$Version,
   [Parameter(Mandatory=$true)][bool]$Reopen,
-  [Parameter(Mandatory=$true)][string]$PythonExe
+  [Parameter(Mandatory=$true)][string]$PythonExe,
+  [Parameter(Mandatory=$true)][string]$LogPath,
+  [Parameter(Mandatory=$true)][string]$RepairMarker,
+  [Parameter(Mandatory=$true)][bool]$StartupRepair
 )
 $ErrorActionPreference = 'Stop'
 $TargetRoot = [System.IO.Path]::GetFullPath($TargetRoot)
 $StagedPath = [System.IO.Path]::GetFullPath($StagedPath)
+$LogPath = [System.IO.Path]::GetFullPath($LogPath)
+$RepairMarker = [System.IO.Path]::GetFullPath($RepairMarker)
 $token = [Guid]::NewGuid().ToString('N').Substring(0,10)
+$backup = $null
+$next = $null
+$target = $null
+$child = $null
+$replacementCommitted = $false
+
+function Write-UpdateLog([string]$Message) {
+  try {
+    $logDirectory = Split-Path -Parent $LogPath
+    New-Item -ItemType Directory -Force -Path $logDirectory | Out-Null
+    Add-Content -LiteralPath $LogPath -Value ("{0} | {1}" -f (Get-Date).ToString('s'), $Message) -Encoding UTF8
+  } catch { }
+}
+
+function Show-UpdateError([string]$Message) {
+  try {
+    Add-Type -AssemblyName System.Windows.Forms
+    $text = $Message + [Environment]::NewLine + [Environment]::NewLine +
+      "O backup, quando disponível, foi preservado. Consulte: " + $LogPath +
+      [Environment]::NewLine + "Download oficial: https://github.com/slydtaz/Chatgpt-media-downloader/releases/latest"
+    [System.Windows.Forms.MessageBox]::Show(
+      $text,
+      'ChatGPT Media Downloader — falha na atualização',
+      [System.Windows.Forms.MessageBoxButtons]::OK,
+      [System.Windows.Forms.MessageBoxIcon]::Error
+    ) | Out-Null
+  } catch { }
+}
+
+function Wait-ForStartupConfirmation {
+  if (!$Reopen) { return }
+  if ($StartupRepair) {
+    $deadline = [DateTime]::UtcNow.AddSeconds(300)
+    while (Test-Path -LiteralPath $RepairMarker) {
+      if ($child) {
+        $child.Refresh()
+        if ($child.HasExited) {
+          throw "O aplicativo novo encerrou antes de confirmar a inicialização (código $($child.ExitCode))."
+        }
+      }
+      if ([DateTime]::UtcNow -ge $deadline) {
+        throw 'O aplicativo novo não confirmou a abertura dentro de cinco minutos.'
+      }
+      Start-Sleep -Seconds 1
+    }
+    Write-UpdateLog 'A interface nova confirmou a inicialização; o marcador de reparo foi removido.'
+  } else {
+    Start-Sleep -Seconds 8
+    if ($child) {
+      $child.Refresh()
+      if ($child.HasExited) {
+        throw "O aplicativo encerrou logo após reiniciar (código $($child.ExitCode))."
+      }
+    }
+  }
+}
+
+Write-UpdateLog ("Início da troca; modo=$Mode; versão=$Version; PID=$WaitPid; reparo inicial=$StartupRepair")
 try {
-  while (Get-Process -Id $WaitPid -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 350 }
+  $waitDeadline = [DateTime]::UtcNow.AddSeconds(120)
+  while (Get-Process -Id $WaitPid -ErrorAction SilentlyContinue) {
+    if ([DateTime]::UtcNow -ge $waitDeadline) {
+      throw 'O aplicativo original continuou aberto por mais de dois minutos; a troca foi cancelada.'
+    }
+    Start-Sleep -Milliseconds 250
+  }
+
+  if (!(Test-Path -LiteralPath $StagedPath)) { throw "O pacote preparado não foi encontrado: $StagedPath" }
+
   if ($Mode -eq 'executable') {
     $target = Join-Path $TargetRoot 'ChatGPTMediaDownloader.exe'
     if (!(Test-Path -LiteralPath $target)) { throw "O executável instalado não existe: $target" }
-    if (!(Test-Path -LiteralPath $StagedPath)) { throw "O novo executável não foi encontrado: $StagedPath" }
-    $backup = "$target.backup-$token"
-    Copy-Item -LiteralPath $target -Destination $backup
+    $stagedInfo = Get-Item -LiteralPath $StagedPath
+    if ($stagedInfo.Length -lt 1048576) { throw 'O executável preparado é pequeno demais.' }
+    $expectedHash = (Get-FileHash -LiteralPath $StagedPath -Algorithm SHA256).Hash.ToUpperInvariant()
+    $next = $target + '.new-' + $token
+    $backup = $target + '.backup-' + $token
+    Copy-Item -LiteralPath $StagedPath -Destination $next -Force
+    $copyHash = (Get-FileHash -LiteralPath $next -Algorithm SHA256).Hash.ToUpperInvariant()
+    if ($copyHash -ne $expectedHash) { throw 'A cópia temporária do executável falhou na verificação SHA-256.' }
+
+    $movedOld = $false
+    for ($attempt = 1; $attempt -le 20; $attempt++) {
+      try {
+        Move-Item -LiteralPath $target -Destination $backup
+        $movedOld = $true
+        break
+      } catch {
+        if ($attempt -eq 20) { throw }
+        Start-Sleep -Milliseconds 500
+      }
+    }
+    if (!$movedOld) { throw 'Não foi possível liberar o executável antigo para substituição.' }
+
     try {
-      Move-Item -LiteralPath $StagedPath -Destination $target -Force
-      if (!(Test-Path -LiteralPath $target)) { throw 'O novo executável não foi encontrado após a troca.' }
-      Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
+      Move-Item -LiteralPath $next -Destination $target
+      $installedHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToUpperInvariant()
+      if ($installedHash -ne $expectedHash) { throw 'O executável instalado não corresponde ao arquivo validado.' }
+      $replacementCommitted = $true
+
+      if ($Reopen) {
+        $child = Start-Process -FilePath $target -ArgumentList '--installed' -WorkingDirectory $TargetRoot -PassThru
+        Wait-ForStartupConfirmation
+      }
+      Remove-Item -LiteralPath $backup -Force
+      $backup = $null
     } catch {
-      if (Test-Path -LiteralPath $backup) { Copy-Item -LiteralPath $backup -Destination $target -Force }
-      throw
+      $swapError = $_
+      if ($child) {
+        try {
+          $child.Refresh()
+          if (!$child.HasExited) {
+            Stop-Process -Id $child.Id -Force -ErrorAction SilentlyContinue
+            $child.WaitForExit(5000) | Out-Null
+          }
+        } catch { }
+      }
+      if ($StartupRepair -and $replacementCommitted) {
+        Write-UpdateLog ("A versão nova foi validada, mas a inicialização não foi confirmada; mantendo a versão nova e preservando o backup: " + $swapError)
+      } else {
+        if (Test-Path -LiteralPath $target) {
+          $failedPath = $target + '.failed-' + $token
+          try { Move-Item -LiteralPath $target -Destination $failedPath -Force }
+          catch { Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue }
+        }
+        if ($backup -and (Test-Path -LiteralPath $backup)) {
+          Move-Item -LiteralPath $backup -Destination $target -Force
+          $backup = $null
+          Write-UpdateLog 'A versão anterior do executável foi restaurada.'
+        }
+      }
+      throw $swapError
     }
   } else {
-    if (!(Test-Path -LiteralPath $StagedPath)) { throw "A pasta preparada não foi encontrada: $StagedPath" }
-    $backup = "$TargetRoot.backup-$token"
+    if (!(Test-Path -LiteralPath $TargetRoot)) { throw "A instalação atual não existe: $TargetRoot" }
+    $backup = $TargetRoot + '.backup-' + $token
     Move-Item -LiteralPath $TargetRoot -Destination $backup
     try {
       Move-Item -LiteralPath $StagedPath -Destination $TargetRoot
-      if (!(Test-Path -LiteralPath (Join-Path $TargetRoot 'app\bootstrap.py'))) { throw 'A instalação atualizada está incompleta.' }
-      Remove-Item -LiteralPath $backup -Recurse -Force -ErrorAction SilentlyContinue
+      $required = @(
+        'app\main.py',
+        'app\bootstrap.py',
+        'app\config.py',
+        'launcher.vbs',
+        'launcher.sh',
+        'PROJECT_ID',
+        '.chatgpt-media-downloader-install.json'
+      )
+      foreach ($relative in $required) {
+        if (!(Test-Path -LiteralPath (Join-Path $TargetRoot $relative) -PathType Leaf)) {
+          throw "A instalação preparada está incompleta; arquivo ausente: $relative"
+        }
+      }
+      $productId = (Get-Content -LiteralPath (Join-Path $TargetRoot 'PROJECT_ID') -Raw).Trim()
+      if ($productId -ne 'com.chatgpt.mediadownloader') { throw 'O Product ID da instalação nova não corresponde ao aplicativo.' }
+      $configText = Get-Content -LiteralPath (Join-Path $TargetRoot 'app\config.py') -Raw
+      $versionMatch = [regex]::Match($configText, '(?m)^VERSION\s*=\s*["'']([^"'']+)["'']')
+      if (!$versionMatch.Success -or $versionMatch.Groups[1].Value -ne $Version) {
+        throw 'A versão da instalação nova não corresponde à versão validada.'
+      }
+      $replacementCommitted = $true
+
+      if ($Reopen) {
+        $child = Start-Process -FilePath $PythonExe -ArgumentList @('-m','app.bootstrap','--installed') -WorkingDirectory $TargetRoot -PassThru
+        Wait-ForStartupConfirmation
+      }
+      Remove-Item -LiteralPath $backup -Recurse -Force
+      $backup = $null
     } catch {
-      if (!(Test-Path -LiteralPath $TargetRoot) -and (Test-Path -LiteralPath $backup)) { Move-Item -LiteralPath $backup -Destination $TargetRoot }
-      throw
+      $swapError = $_
+      if ($child) {
+        try {
+          $child.Refresh()
+          if (!$child.HasExited) {
+            Stop-Process -Id $child.Id -Force -ErrorAction SilentlyContinue
+            $child.WaitForExit(5000) | Out-Null
+          }
+        } catch { }
+      }
+      if ($StartupRepair -and $replacementCommitted) {
+        Write-UpdateLog ("A fonte nova foi instalada, mas a inicialização não foi confirmada; mantendo a versão nova e preservando o backup: " + $swapError)
+      } else {
+        if (Test-Path -LiteralPath $TargetRoot) {
+          $failedPath = $TargetRoot + '.failed-' + $token
+          try { Move-Item -LiteralPath $TargetRoot -Destination $failedPath }
+          catch { Remove-Item -LiteralPath $TargetRoot -Recurse -Force -ErrorAction SilentlyContinue }
+        }
+        if ($backup -and (Test-Path -LiteralPath $backup)) {
+          Move-Item -LiteralPath $backup -Destination $TargetRoot
+          $backup = $null
+          Write-UpdateLog 'A instalação anterior foi restaurada.'
+        }
+      }
+      throw $swapError
     }
   }
-  $marker = Join-Path $TargetRoot '.chatgpt-media-downloader-install.json'
-  if (Test-Path -LiteralPath $marker) {
-    try {
-      $markerData = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
-      $markerData.version = $Version
-      $markerData.updated_at = (Get-Date).ToString('s')
-      $markerData | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $marker -Encoding UTF8
-    } catch { }
-  }
-  if ($Reopen) {
-    if ($Mode -eq 'executable') {
-      Start-Process -FilePath (Join-Path $TargetRoot 'ChatGPTMediaDownloader.exe') -ArgumentList '--installed' -WorkingDirectory $TargetRoot
-    } else {
-      Start-Process -FilePath $PythonExe -ArgumentList @('-m','app.bootstrap','--installed') -WorkingDirectory $TargetRoot
-    }
-  }
+
+  Write-UpdateLog ("Atualização aplicada com sucesso; versão=$Version")
+  if ($next -and (Test-Path -LiteralPath $next)) { Remove-Item -LiteralPath $next -Force -ErrorAction SilentlyContinue }
+  if (Test-Path -LiteralPath $StagedPath) { Remove-Item -LiteralPath $StagedPath -Force -ErrorAction SilentlyContinue }
   exit 0
 } catch {
-  $log = Join-Path $env:TEMP 'ChatGPTMediaDownloader-update-error.txt'
-  $_ | Out-String | Set-Content -LiteralPath $log -Encoding UTF8
-  if (Test-Path -LiteralPath $backup) { Write-Output "Backup preservado: $backup" }
+  $errorMessage = ($_ | Out-String).Trim()
+  Write-UpdateLog ("FALHA; versão=$Version; erro=" + $errorMessage)
+  if ($backup -and (Test-Path -LiteralPath $backup) -and !$StartupRepair) {
+    Write-UpdateLog ("Backup preservado para recuperação: " + $backup)
+  } elseif ($backup -and (Test-Path -LiteralPath $backup)) {
+    Write-UpdateLog ("Backup preservado após falha de inicialização: " + $backup)
+  }
+  Show-UpdateError $errorMessage
   exit 1
 } finally {
-  Start-Sleep -Milliseconds 1000
+  Start-Sleep -Milliseconds 500
   Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 }
 '''
+
+
+def schedule_apply_update(prepared: PreparedUpdate, *, launch_after: bool, python_executable: str = sys.executable, startup_repair: bool = False) -> None:
+    """Spawn an OS helper to swap the package only after this process has exited."""
+    if os.name == "nt":
+        helper = APP_DATA / "temp" / f"apply-update-{uuid.uuid4().hex[:10]}.ps1"
+        helper.parent.mkdir(parents=True, exist_ok=True)
+        script = _windows_update_helper_script()
         helper.write_text(script, encoding="utf-8-sig")
+        if startup_repair and not launch_after:
+            helper.unlink(missing_ok=True)
+            raise AppUpdateError("O reparo de inicialização precisa reabrir o aplicativo para confirmar a recuperação.")
+        log_path = APP_DATA / "logs" / "update-helper.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
         args = [
             "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(helper),
             "-WaitPid", str(os.getpid()), "-Mode", prepared.kind, "-TargetRoot", str(prepared.target_root),
             "-StagedPath", str(prepared.path), "-Version", prepared.version,
             "-Reopen", ("true" if launch_after else "false"), "-PythonExe", python_executable,
+            "-LogPath", str(log_path), "-RepairMarker", str(STARTUP_REPAIR_PENDING_PATH),
+            "-StartupRepair", ("true" if startup_repair else "false"),
         ]
         try:
             kwargs = {"close_fds": True, "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)}

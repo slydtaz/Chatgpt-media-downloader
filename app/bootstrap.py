@@ -833,12 +833,33 @@ def run_installed() -> None:
 
 
 def _offer_startup_repair(original_error: BaseException) -> bool:
-    """Offer a clean GitHub restore when startup fails before the main GUI can open."""
+    """Offer recovery once; wait for a repaired build to confirm that its GUI opens."""
+    from .config import (
+        IS_FROZEN,
+        LOG_DIR,
+        clear_startup_repair_pending,
+        mark_startup_repair_pending,
+        startup_repair_is_pending,
+    )
+
+    # The helper from a previous run may have replaced the executable but failed
+    # to relaunch it. Do not start the same repair flow indefinitely on each boot.
+    if startup_repair_is_pending():
+        show_startup_notice(
+            "A tentativa anterior de reparo não confirmou a abertura do aplicativo.\n\n"
+            "Para evitar um ciclo infinito, o reparo automático foi interrompido. "
+            "Instale manualmente a versão oficial mais recente:\n"
+            "https://github.com/slydtaz/Chatgpt-media-downloader/releases/latest\n\n"
+            f"Se precisar de diagnóstico, consulte os logs em: {LOG_DIR}"
+        )
+        return True
+
+    pending_written = False
+    scheduled = False
     try:
         import tkinter as tk
         from tkinter import messagebox
         from .app_update import check_repair_candidate, prepare_update, schedule_apply_update
-        from .config import IS_FROZEN
 
         root = tk.Tk()
         root.withdraw()
@@ -854,14 +875,30 @@ def _offer_startup_repair(original_error: BaseException) -> bool:
             root.destroy()
         if not should_repair:
             return False
+
         candidate = check_repair_candidate(VERSION, frozen=IS_FROZEN)
         prepared = prepare_update(candidate, target_root=current_project_root())
-        schedule_apply_update(prepared, launch_after=True)
+        # The OS helper waits for the new GUI to remove this marker before it
+        # declares success and deletes the previous installation's backup.
+        mark_startup_repair_pending(candidate.version)
+        pending_written = True
+        try:
+            schedule_apply_update(prepared, launch_after=True, startup_repair=True)
+            scheduled = True
+        except Exception:
+            clear_startup_repair_pending()
+            pending_written = False
+            raise
+
         show_startup_notice(
-            "Os arquivos oficiais foram baixados e validados. O aplicativo será fechado para concluir o reparo e abrir novamente."
+            "O pacote oficial foi baixado e validado. O aplicativo será fechado para aplicar o reparo.\n\n"
+            "O processo auxiliar vai confirmar que a nova interface abriu antes de remover o backup. "
+            "Se houver falha, ela será registrada no log do atualizador."
         )
         return True
     except Exception as repair_error:
+        if pending_written and not scheduled:
+            clear_startup_repair_pending()
         try:
             from .locking import show_startup_notice as notify
             notify(
@@ -872,7 +909,6 @@ def _offer_startup_repair(original_error: BaseException) -> bool:
         except Exception:
             pass
         return False
-
 
 def main() -> None:
     guard = None

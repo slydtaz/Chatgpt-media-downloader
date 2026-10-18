@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import json
 import shutil
+import subprocess
 import tempfile
 import unittest
 import zipfile
@@ -13,6 +15,7 @@ from app.app_update import (
     API_ROOT,
     AppUpdateError,
     _release_candidate,
+    _windows_update_helper_script,
     _safe_extract_zip,
     _stage_source_tree,
     _verify_executable_hash,
@@ -153,6 +156,44 @@ class AppUpdateDiscoveryTests(unittest.TestCase):
         release["assets"] = release["assets"][:1]
         with self.assertRaises(AppUpdateError):
             _release_candidate("5.0.0", release, frozen=True)
+
+
+    def test_windows_repair_helper_waits_for_startup_confirmation_and_keeps_diagnostics(self):
+        script = _windows_update_helper_script()
+        self.assertIn("[Parameter(Mandatory=$true)][bool]$StartupRepair", script)
+        self.assertIn("while (Test-Path -LiteralPath $RepairMarker)", script)
+        self.assertIn("[System.Windows.Forms.MessageBox]::Show", script)
+        self.assertIn("Get-FileHash -LiteralPath", script)
+        self.assertIn("preservando o backup", script)
+        self.assertIn("Write-UpdateLog", script)  # persistent helper logging is present
+
+
+    @unittest.skipUnless(os.name == "nt", "PowerShell syntax is checked only on Windows.")
+    def test_windows_repair_helper_parses_without_powershell_errors(self):
+        powershell = shutil.which("powershell.exe")
+        if not powershell:
+            self.skipTest("Windows PowerShell is not available in this environment.")
+        with tempfile.TemporaryDirectory() as td:
+            helper_path = Path(td) / "apply-update-check.ps1"
+            helper_path.write_text(_windows_update_helper_script(), encoding="utf-8-sig")
+            env = os.environ.copy()
+            env["CGMD_HELPER_SCRIPT"] = str(helper_path)
+            command = (
+                "$tokens=$null; $errors=$null; "
+                "[System.Management.Automation.Language.Parser]::ParseFile("
+                "$env:CGMD_HELPER_SCRIPT, [ref]$tokens, [ref]$errors) | Out-Null; "
+                "if ($errors.Count -gt 0) { "
+                "$errors | ForEach-Object { Write-Error $_ }; exit 1 }"
+            )
+            result = subprocess.run(
+                [powershell, "-NoProfile", "-NonInteractive", "-Command", command],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=env,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stdout + "\n" + result.stderr)
 
 
 class SafeArchiveTests(unittest.TestCase):

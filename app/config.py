@@ -13,7 +13,7 @@ from typing import Any
 APP_NAME = "ChatGPT Media Downloader"
 PRODUCT_ID = "com.chatgpt.mediadownloader"
 VENDOR = "ChatGPT"
-VERSION = "5.1.0"
+VERSION = "5.1.1"
 
 
 def _windows_local_appdata() -> Path:
@@ -40,11 +40,36 @@ LOG_DIR = APP_DATA / "logs"
 CONFIG_PATH = APP_DATA / "config" / "config.json"
 BASELINE_CONFIG_PATH = APP_DATA / "config" / "installation_baseline.json"
 INSTALL_ID_PATH = APP_DATA / "install_id.txt"
+STARTUP_REPAIR_PENDING_PATH = TEMP_DIR / "startup-repair-pending.json"
 
 
 def ensure_dirs() -> None:
     for directory in (APP_DATA, TOOLS_DIR, TEMP_DIR, LOG_DIR, CONFIG_PATH.parent):
         directory.mkdir(parents=True, exist_ok=True)
+
+
+def startup_repair_is_pending() -> bool:
+    """Return whether a previous startup repair still needs GUI confirmation."""
+    try:
+        return STARTUP_REPAIR_PENDING_PATH.exists()
+    except OSError:
+        # If the state cannot be inspected, fail closed to prevent a repair loop.
+        return True
+
+
+def mark_startup_repair_pending(version: str) -> None:
+    """Persist a repair hand-off marker until the new GUI confirms startup."""
+    payload = json.dumps({"version": str(version)[:32]}, ensure_ascii=False, indent=2)
+    _write_atomic(STARTUP_REPAIR_PENDING_PATH, payload + "\n")
+
+
+def clear_startup_repair_pending() -> bool:
+    """Clear the hand-off marker after the GUI has successfully constructed."""
+    try:
+        STARTUP_REPAIR_PENDING_PATH.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
 
 
 def _write_atomic(path: Path, data: str) -> None:
