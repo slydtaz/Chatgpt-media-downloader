@@ -16,7 +16,7 @@ Extraia o ZIP, abra o terminal na pasta `chatgpt-media-downloader` e execute:
 ```bash
 git init -b main
 git add .
-git commit -m "chore: publish ChatGPT Media Downloader 5.0.5"
+git commit -m "chore: publish ChatGPT Media Downloader 5.0.6"
 git remote add origin https://github.com/slydtaz/chatgpt-media-downloader.git
 git push -u origin main
 ```
