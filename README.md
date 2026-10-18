@@ -9,7 +9,7 @@
 [Sugerir uma melhoria](https://github.com/slydtaz/chatgpt-media-downloader/issues/new?template=feature_request.yml)
 
 ![Sistema: Windows](https://img.shields.io/badge/SO-Windows-0078D6)
-![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.0.6-blue)
+![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.1.0-blue)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green)
 
 </div>
@@ -18,9 +18,13 @@
 
 > **Aviso de nome:** “ChatGPT” no nome é apenas parte do identificador do projeto. Este software é independente e **não é afiliado, patrocinado, certificado ou distribuído pela OpenAI**.
 
+## 🎨 Aparência e personalização
+
+A interface usa navegação lateral e painéis de trabalho inspirados no design moderno de launchers. Personalize o tema **Escuro**, **Claro** ou **Preto OLED**, escolha uma cor de destaque (HEX ou paletas rápidas) e altere o espaçamento entre **Confortável** e **Compacto**. O estilo segue convenções gerais vistas em launchers como o [SKlauncher](https://docs.skmedix.pl/4.0/), sem copiar seus recursos ou identidade visual.
+
 ## 📥 Download oficial para usuários
 
-**Recomendado:** abra **[Releases estáveis — baixar](https://github.com/slydtaz/chatgpt-media-downloader/releases/tag/stable)** e baixe `ChatGPTMediaDownloader.exe`. Esse é o pacote de um único arquivo para quem só quer instalar e usar o programa; confira também `SHA256SUMS.txt` da mesma Release.
+**Recomendado:** abra **[Releases estáveis — baixar](https://github.com/slydtaz/chatgpt-media-downloader/releases/latest)** e baixe `ChatGPTMediaDownloader.exe`. Esse é o pacote de um único arquivo para quem só quer instalar e usar o programa; confira também `SHA256SUMS.txt` da mesma Release.
 
 1. Baixe `ChatGPTMediaDownloader.exe` da Release estável.
 2. (Recomendado) Compare o SHA-256 do arquivo com `SHA256SUMS.txt` da mesma Release.
@@ -31,7 +35,7 @@
 
 O ZIP de código-fonte da Release e o botão **Code → Download ZIP** são destinados a desenvolvedores, auditoria, testes e compilação. Usuários comuns não precisam baixar nem extrair o fonte: basta o EXE oficial. O GitHub também pode mostrar seus ZIP/TAR automáticos de código-fonte em cada Release.
 
-**A atualização automática do executável depende de uma Release estável com `ChatGPTMediaDownloader.exe` e `SHA256SUMS.txt`.** A versão de código-fonte também pode identificar uma versão mais nova na branch `main`. A publicação da tag `stable` dispara o workflow do Windows, que testa, compila e anexa `ChatGPTMediaDownloader.exe` e `SHA256SUMS.txt` à Release estável. Também é possível usar tags de versão `v*`. Acompanhe a execução na aba Actions; não publique o EXE antes de o build terminar com sucesso.
+**A atualização automática do executável depende de uma Release estável com `ChatGPTMediaDownloader.exe` e `SHA256SUMS.txt`.** A versão de código-fonte também pode identificar uma versão mais nova na branch `main`. A publicação de uma versão estável cria uma Release versionada com título no formato `x.x.x - stable`, compila o EXE e anexa `SHA256SUMS.txt`. A Release histórica sob a tag `stable` permanece como compatibilidade; o atualizador prioriza a versão estável versionada mais recente. Acompanhe a execução na aba Actions; não publique o EXE antes de o build terminar com sucesso.
 
 ## ✨ O que o programa faz
 
@@ -103,7 +107,7 @@ Contribuições são bem-vindas. Leia [`CONTRIBUTING.md`](CONTRIBUTING.md), abra
 
 ## 📚 Documentação
 
-- [Histórico de mudanças da versão 5.0.6](docs/5.0.6_changes.md) · [Versão 5.0.5](docs/5.0.5_changes.md) · [Versão 5.0.4](docs/5.0.4_changes.md) · [Versão 5.0.3](docs/5.0.3_changes.md) · [Versão 5.0.2](docs/5.0.2_changes.md) · [Versão 5.0.1](docs/5.0.1_changes.md) · [Versão 5.0.0](docs/5.0.0_changes.md)
+- [Histórico de mudanças da versão 5.1.0](docs/5.1.0_changes.md) · [Versão 5.0.6](docs/5.0.6_changes.md) · [Versão 5.0.5](docs/5.0.5_changes.md) · [Versão 5.0.4](docs/5.0.4_changes.md) · [Versão 5.0.3](docs/5.0.3_changes.md) · [Versão 5.0.2](docs/5.0.2_changes.md) · [Versão 5.0.1](docs/5.0.1_changes.md) · [Versão 5.0.0](docs/5.0.0_changes.md)
 - [Matriz de funcionalidades legadas](docs/legacy_functionality_matrix.md)
 - [Modelo de segurança e limites](docs/security_model.md)
 - [Relatório de testes e limitações](docs/test_report.md)

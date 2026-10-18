@@ -38,3 +38,10 @@ A execução no GitHub Actions Windows reportou `OK (skipped=2)` mas o step reto
 ## Acompanhamento 5.0.6
 
 A execução 5.0.5 também parou antes de imprimir o resumo da suíte quando a saída do Python foi redirecionada com `2>&1`. A alteração seguinte muda os comandos Python nativos no Windows para `shell: cmd`, enquanto o workflow de matriz usa Bash no Ubuntu. O teste de regressão verifica essa separação. É necessária uma nova execução remota para confirmar a correção; nenhum sucesso do Windows Actions é declarado antecipadamente.
+
+
+## Acompanhamento 5.1.0
+
+A suíte de regressão agora cobre o caso em que um launcher portátil 5.0.1 é aberto após a instalação 5.1.0, compara versões semanticamente no bootstrap e verifica o sincronismo atômico da entrada EXE portátil com SHA-256. Os testes de descoberta também verificam a prioridade das Releases versionadas sobre o alias histórico `stable`.
+
+O aplicativo foi aberto sob Xvfb no ambiente Linux e navegou pelas sete páginas sem exceção. Os testes de download continuam mockados: não foi declarado um teste de download real de URLs externas.

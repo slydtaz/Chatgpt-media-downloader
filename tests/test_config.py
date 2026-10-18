@@ -30,5 +30,29 @@ class ConfigTests(unittest.TestCase):
                 self.assertEqual(loaded["audio_bitrate"], 192)
 
 
+    def test_theme_accent_and_density_are_validated_and_persisted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            with patch.object(config, "APP_DATA", base), \
+                 patch.object(config, "TOOLS_DIR", base / "tools"), \
+                 patch.object(config, "TEMP_DIR", base / "temp"), \
+                 patch.object(config, "LOG_DIR", base / "logs"), \
+                 patch.object(config, "CONFIG_PATH", base / "config" / "config.json"):
+                chosen = dict(config.DEFAULT_CONFIG)
+                chosen.update({"theme": "oled", "accent_color": "#12aBcD", "ui_density": "compact"})
+                config.save_config(chosen)
+                loaded = config.load_config()
+                self.assertEqual(loaded["theme"], "oled")
+                self.assertEqual(loaded["accent_color"], "#12ABCD")
+                self.assertEqual(loaded["ui_density"], "compact")
+
+                chosen.update({"theme": "ultraviolet", "accent_color": "purple", "ui_density": "ultra"})
+                config.save_config(chosen)
+                loaded = config.load_config()
+                self.assertEqual(loaded["theme"], "dark")
+                self.assertEqual(loaded["accent_color"], "#8B5CF6")
+                self.assertEqual(loaded["ui_density"], "comfortable")
+
+
 if __name__ == "__main__":
     unittest.main()

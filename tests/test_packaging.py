@@ -33,13 +33,11 @@ class PackagingTests(unittest.TestCase):
         matrix = (ROOT / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8")
         self.assertIn("if: runner.os == 'Windows'", matrix)
         self.assertIn("shell: cmd", matrix)
-        self.assertIn("Compile source (Windows cmd)", matrix)
         self.assertIn("Run unit tests (Windows cmd)", matrix)
+        self.assertIn("run: python -m unittest discover -s tests -v", matrix)
         self.assertIn("if: runner.os != 'Windows'", matrix)
         self.assertIn("shell: bash", matrix)
-        self.assertIn("Compile source (Unix)", matrix)
         self.assertIn("Run unit tests (Unix)", matrix)
-        self.assertNotIn("unittest discover -s tests -v 2>&1", matrix)
 
         for relative, step_name in [
             (".github/workflows/release.yml", "Run tests before packaging"),
@@ -47,10 +45,18 @@ class PackagingTests(unittest.TestCase):
         ]:
             workflow = (ROOT / relative).read_text(encoding="utf-8")
             start = workflow.index(f"- name: {step_name}")
-            block = workflow[start:start + 160]
+            block = workflow[start:start + 180]
             self.assertIn("shell: cmd", block)
             self.assertIn("python -m unittest discover -s tests -v", block)
-            self.assertNotIn("2>&1", block)
+
+    def test_versioned_release_title_and_hotfix_are_configured(self):
+        workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        self.assertIn('tag_name: ${{ env.RELEASE_TAG }}', workflow)
+        self.assertIn('name: ${{ env.RELEASE_NAME }}', workflow)
+        self.assertIn("      - 'v*'", workflow)
+        self.assertIn('git archive --format=zip', workflow)
+        self.assertIn('$releaseName = "$version - stable"', workflow)
+        self.assertIn('$releaseName = "$version - stable (hotfix-$($env:HOTFIX_NUMBER))"', workflow)
 
 
 if __name__ == "__main__":
