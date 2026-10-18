@@ -16,7 +16,7 @@ Extraia o ZIP, abra o terminal na pasta `chatgpt-media-downloader` e execute:
 ```bash
 git init -b main
 git add .
-git commit -m "chore: import ChatGPT Media Downloader 4.9.0"
+git commit -m "chore: import ChatGPT Media Downloader 5.0.0"
 git remote add origin https://github.com/slydtaz/chatgpt-media-downloader.git
 git push -u origin main
 ```
@@ -32,8 +32,8 @@ No GitHub, abra **Settings → Pages**, selecione **GitHub Actions** como origem
 Quando o código estiver no repositório, crie e envie uma tag de versão:
 
 ```bash
-git tag v4.9.0
-git push origin v4.9.0
+git tag v5.0.0
+git push origin v5.0.0
 ```
 
 O workflow de release executa os testes, tenta criar `ChatGPTMediaDownloader.exe` num runner Windows, calcula o SHA-256 e publica ambos os arquivos como assets da GitHub Release. Se a compilação falhar, nenhum asset válido deve ser anunciado como pronto para download; verifique **Actions** e corrija a causa antes de tentar novamente.

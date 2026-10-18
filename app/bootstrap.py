@@ -735,6 +735,48 @@ def run_installed() -> None:
     app_main()
 
 
+def _offer_startup_repair(original_error: BaseException) -> bool:
+    """Offer a clean GitHub restore when startup fails before the main GUI can open."""
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        from .app_update import check_repair_candidate, prepare_update, schedule_apply_update
+        from .config import IS_FROZEN
+
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            should_repair = messagebox.askyesno(
+                "Falha crítica — reparar instalação",
+                "O aplicativo falhou durante a inicialização.\n\n"
+                "Deseja baixar novamente os arquivos oficiais do GitHub e tentar restaurar a instalação?\n\n"
+                "As preferências e mídias guardadas nas pastas de dados do usuário não serão apagadas.",
+                parent=root,
+            )
+        finally:
+            root.destroy()
+        if not should_repair:
+            return False
+        candidate = check_repair_candidate(VERSION, frozen=IS_FROZEN)
+        prepared = prepare_update(candidate, target_root=current_project_root())
+        schedule_apply_update(prepared, launch_after=True)
+        show_startup_notice(
+            "Os arquivos oficiais foram baixados e validados. O aplicativo será fechado para concluir o reparo e abrir novamente."
+        )
+        return True
+    except Exception as repair_error:
+        try:
+            from .locking import show_startup_notice as notify
+            notify(
+                "O reparo automático não pôde ser preparado.\n\n"
+                f"Erro de inicialização: {original_error}\n\nFalha no reparo: {repair_error}\n\n"
+                "Confira sua conexão e a existência de uma Release oficial no GitHub."
+            )
+        except Exception:
+            pass
+        return False
+
+
 def main() -> None:
     guard = None
     try:
@@ -791,12 +833,14 @@ def main() -> None:
             logger.exception("Falha de inicialização/atualização do aplicativo")
         except Exception:
             pass
-        show_startup_notice(
-            "O ChatGPT Media Downloader não conseguiu concluir a inicialização ou atualização.\n\n"
-            f"Detalhes: {exc}\n\n"
-            "A versão anterior foi preservada quando a falha ocorreu durante a troca de arquivos. "
-            "Consulte os logs na pasta de dados do aplicativo."
-        )
+        repaired = _offer_startup_repair(exc)
+        if not repaired:
+            show_startup_notice(
+                "O ChatGPT Media Downloader não conseguiu concluir a inicialização ou atualização.\n\n"
+                f"Detalhes: {exc}\n\n"
+                "A versão anterior foi preservada quando a falha ocorreu durante a troca de arquivos. "
+                "Consulte os logs na pasta de dados do aplicativo."
+            )
     finally:
         if guard is not None:
             guard.release()

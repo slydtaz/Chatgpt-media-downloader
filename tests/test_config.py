@@ -8,6 +8,10 @@ from app import config
 
 
 class ConfigTests(unittest.TestCase):
+    def test_update_preferences_are_enabled_by_default(self):
+        self.assertIs(config.DEFAULT_CONFIG["update_open_after"], True)
+        self.assertIs(config.DEFAULT_CONFIG["update_check_on_startup"], True)
+
     def test_defaults_and_install_id(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)

@@ -9,7 +9,7 @@
 [Sugerir uma melhoria](https://github.com/slydtaz/chatgpt-media-downloader/issues/new?template=feature_request.yml)
 
 ![Sistema: Windows](https://img.shields.io/badge/SO-Windows-0078D6)
-![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%204.9.0-blue)
+![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.0.0-blue)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green)
 
 </div>
@@ -26,7 +26,7 @@
 4. Faça uma verificação com o Microsoft Defender ou seu antivírus antes de executar.
 5. Abra o EXE. Na primeira execução, o aplicativo prepara suas dependências de mídia (yt-dlp/FFmpeg) a partir de fontes configuradas no projeto.
 
-**Não há release publicada neste pacote-fonte ainda.** A seção de Releases será preenchida automaticamente quando o mantenedor enviar uma tag de versão, como `v4.9.0`, e a automação Windows terminar com sucesso. Enquanto isso, use as instruções para executar a partir do código-fonte abaixo.
+**A atualização automática do executável depende de uma Release estável com `ChatGPTMediaDownloader.exe` e `SHA256SUMS.txt`.** A versão de código-fonte também pode identificar uma versão mais nova na branch `main`. Para compilar/publicar o executável, envie a tag `v5.0.0` e aguarde o workflow de Windows concluir com sucesso. Enquanto isso, use as instruções para executar a partir do código-fonte abaixo.
 
 ## ✨ O que o programa faz
 
@@ -35,7 +35,10 @@
 - Analisa playlists antes do download, exibe os itens detectados e permite escolher individualmente quais baixar.
 - Permite definir modo e qualidade por item de playlist; pode processar itens em sequência ou paralelamente (limite configurável de até seis workers).
 - Incorpora metadados e capas quando as ferramentas de origem e o formato suportam.
-- Oferece telas para configurações, dependências, ajuda, atualização e diagnóstico.
+- Oferece telas para configurações, dependências, atualizações, ajuda e diagnóstico.
+- Verifica novas versões no GitHub; antes de baixar, pede confirmação e oferece a opção de abrir o aplicativo após a troca (ativada por padrão).
+- Atualiza o executável inteiro com validação SHA-256, ou substitui o pacote-fonte completo; preserva preferências, ferramentas e mídias baixadas.
+- Inclui reparo da instalação a partir do pacote oficial do GitHub, também disponível quando a inicialização falha de forma crítica.
 - Mantém logs, configuração e ferramentas baixadas em diretórios de dados do usuário, separados dos arquivos de mídia.
 
 Disponibilidade de qualidade, metadados e capas depende do site, do conteúdo, do formato e das dependências externas.
@@ -101,7 +104,7 @@ Contribuições são bem-vindas. Leia [`CONTRIBUTING.md`](CONTRIBUTING.md), abra
 
 ## 📚 Documentação
 
-- [Histórico de mudanças da versão 4.9.0](docs/4.9.0_changes.md)
+- [Histórico de mudanças da versão 5.0.0](docs/5.0.0_changes.md)
 - [Matriz de funcionalidades legadas](docs/legacy_functionality_matrix.md)
 - [Modelo de segurança e limites](docs/security_model.md)
 - [Relatório de testes e limitações](docs/test_report.md)

@@ -13,7 +13,7 @@ from typing import Callable
 
 from .config import (
     APP_DATA, BASELINE_CONFIG_PATH, CONFIG_PATH, INSTALL_ID_PATH, INSTALL_ROOT, LOG_DIR,
-    PRODUCT_ID, TEMP_DIR, TOOLS_DIR, VENDOR, VERSION, DEFAULT_CONFIG,
+    PRODUCT_ID, TEMP_DIR, TOOLS_DIR, VENDOR, VERSION, DEFAULT_CONFIG, IS_FROZEN,
     ensure_install_id, load_config, load_installation_baseline, save_config,
 )
 from .dependencies import inspect_tool
@@ -22,6 +22,10 @@ from .platform import detect_system, detect_system_theme, is_supported
 from .security import safe_filename_part, validate_url
 from .playlist import PlaylistInfo, format_duration, inspect_playlist
 from .updater import UpdateError, check_latest, install_tool_from_release
+from .app_update import (
+    AppUpdate, AppUpdateError, check_for_update, check_repair_candidate,
+    prepare_update, schedule_apply_update,
+)
 from .uninstall import launch_uninstaller
 
 
@@ -186,6 +190,13 @@ class MediaDownloaderApp:
         self.active_downloaders_lock = threading.Lock()
         self.cancel_requested = threading.Event()
         self._playlist_title = "Playlist"
+        self._app_update_info: AppUpdate | None = None
+        self._app_update_checking = False
+        self._app_update_busy = False
+        self._app_update_prompt_open = False
+        self._app_update_show_current = False
+        self.update_open_after_var = tk.BooleanVar(value=bool(self.config.get("update_open_after", True)))
+        self.update_check_on_startup_var = tk.BooleanVar(value=bool(self.config.get("update_check_on_startup", True)))
 
         self.url_var = tk.StringVar()
         self.mode_var = tk.StringVar(value="Automático — vídeo")
@@ -212,11 +223,14 @@ class MediaDownloaderApp:
         self._build_playlist_page()
         self._build_settings()
         self._build_dependencies()
+        self._build_updates()
         self._build_help()
         self._build_developer()
         self.show_page("home")
         self._refresh_dependencies()
+        self.root.report_callback_exception = self._report_callback_exception
         self._poll_queue()
+        self.root.after(2200, self._maybe_start_update_check)
 
     # ---------- Theme ----------
     def _resolve_theme(self, requested: str) -> str:
@@ -280,6 +294,7 @@ class MediaDownloaderApp:
             ("playlist", "▤  Gerenciar playlist", "Analise uma playlist, veja a quantidade de itens, escolha o formato por item e exclua entradas específicas."),
             ("settings", "⚙  Configurações", "Edite pastas, qualidade, bitrate, desempenho, caminhos das ferramentas e tema."),
             ("dependencies", "◉  Dependências", "Mostra o estado do yt-dlp, FFmpeg e FFprobe e permite instalar/configurar."),
+            ("updates", "⟳  Atualizações", "Verifique novas versões, leia as notas e repare os arquivos do aplicativo."),
             ("help", "?  Ajuda", "Explica os modos de download, qualidade, bitrate, erros e funcionamento."),
             ("developer", "⌘  Desenvolvedor", "Exibe dados técnicos da instalação e do sistema."),
         ]:
@@ -743,6 +758,295 @@ class MediaDownloaderApp:
         self.ui_queue.put(("dep_done", None))
 
     # ---------- Help / Developer ----------
+    # ---------- Application updates / repair ----------
+    def _build_updates(self):
+        frame = ttk.Frame(self.pages_area)
+        self.page_frames["updates"] = frame
+        scroll = ScrollableFrame(frame)
+        scroll.pack(fill="both", expand=True)
+        body = scroll.body
+
+        current = self._card(body, 16)
+        current.pack(fill="x", pady=(0, 12))
+        ttk.Label(current, text="Atualizações do aplicativo", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            current,
+            text="O aplicativo consulta o repositório oficial do GitHub. Ele só baixa uma atualização depois que você confirmar.",
+            style="Card.TLabel", wraplength=740, justify="left",
+        ).pack(anchor="w", pady=(5, 10))
+        self.app_update_status_var = tk.StringVar(value=f"Versão instalada: {VERSION}")
+        self.app_update_latest_var = tk.StringVar(value="Ainda não verificado")
+        self.app_update_notes_var = tk.StringVar(value="As notas da versão aparecem aqui quando o GitHub disponibilizar uma atualização.")
+        ttk.Label(current, textvariable=self.app_update_status_var, style="CardTitle.TLabel", wraplength=740).pack(anchor="w", pady=(2, 6))
+        ttk.Label(current, textvariable=self.app_update_latest_var, style="Muted.TLabel", wraplength=740).pack(anchor="w", pady=(0, 9))
+        ttk.Label(current, text="Notas da versão", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(current, textvariable=self.app_update_notes_var, style="Card.TLabel", wraplength=740, justify="left").pack(anchor="w", pady=(4, 8))
+
+        options = self._card(body, 14)
+        options.pack(fill="x", pady=(0, 12))
+        ttk.Label(options, text="Preferências", style="CardTitle.TLabel").pack(anchor="w", pady=(0, 7))
+        ttk.Checkbutton(
+            options, text="Abrir o aplicativo automaticamente depois de atualizar (recomendado)",
+            variable=self.update_open_after_var, command=self._save_update_preferences,
+        ).pack(anchor="w", pady=3)
+        ttk.Checkbutton(
+            options, text="Verificar novas versões automaticamente ao abrir o aplicativo",
+            variable=self.update_check_on_startup_var, command=self._save_update_preferences,
+        ).pack(anchor="w", pady=3)
+
+        actions = self._card(body, 14)
+        actions.pack(fill="x", pady=(0, 12))
+        buttons = ttk.Frame(actions, style="Card.TFrame")
+        buttons.pack(fill="x")
+        self.app_update_check_button = ttk.Button(
+            buttons, text="Verificar atualizações", style="Accent.TButton",
+            command=lambda: self._start_app_update_check(user_initiated=True),
+        )
+        self.app_update_check_button.pack(side="left")
+        self.app_update_install_button = ttk.Button(
+            buttons, text="Baixar e instalar", style="Secondary.TButton",
+            state="disabled", command=self._show_cached_update_prompt,
+        )
+        self.app_update_install_button.pack(side="left", padx=(8, 0))
+        self.app_update_repair_button = ttk.Button(
+            buttons, text="Reparar todos os arquivos", style="Secondary.TButton",
+            command=self._start_app_repair,
+        )
+        self.app_update_repair_button.pack(side="right")
+        self.app_update_progress = ttk.Progressbar(actions, mode="determinate", maximum=100)
+        self.app_update_progress.pack(fill="x", pady=(12, 0))
+        self.app_update_progress_label_var = tk.StringVar(value="Nenhuma atualização em andamento.")
+        ttk.Label(actions, textvariable=self.app_update_progress_label_var, style="Muted.TLabel", wraplength=740).pack(anchor="w", pady=(6, 0))
+
+        safety = self._card(body, 14)
+        safety.pack(fill="x", pady=(0, 20))
+        ttk.Label(safety, text="Como funciona a reparação", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            safety,
+            text=("No modo código-fonte, o aplicativo baixa novamente o pacote completo da branch/release oficial e substitui os arquivos da instalação de forma transacional. "
+                  "No modo executável, baixa o EXE inteiro e exige verificação SHA-256. Preferências, pastas de destino, logs e mídias já baixadas ficam fora da pasta substituída. "
+                  "Se a conexão falhar ou a validação não passar, a instalação atual permanece intacta."),
+            style="Card.TLabel", wraplength=740, justify="left",
+        ).pack(anchor="w", pady=(4, 0))
+
+    def _save_update_preferences(self):
+        try:
+            updated = dict(self.config)
+            updated["update_open_after"] = bool(self.update_open_after_var.get())
+            updated["update_check_on_startup"] = bool(self.update_check_on_startup_var.get())
+            save_config(updated)
+            self.config = updated
+        except Exception as exc:
+            self._append_log(f"Não foi possível salvar as preferências de atualização: {exc}")
+
+    def _maybe_start_update_check(self):
+        if bool(self.update_check_on_startup_var.get()):
+            self._start_app_update_check(user_initiated=False)
+
+    def _start_app_update_check(self, *, user_initiated: bool):
+        if self._app_update_checking or self._app_update_busy:
+            if user_initiated:
+                messagebox.showinfo("Atualizações", "Já existe uma verificação ou atualização em andamento.", parent=self.root)
+            return
+        self._app_update_checking = True
+        self._app_update_show_current = user_initiated
+        if hasattr(self, "app_update_check_button"):
+            self.app_update_check_button.configure(state="disabled")
+        self.app_update_status_var.set("Consultando o GitHub…")
+        self.app_update_progress_label_var.set("Verificando a versão do aplicativo.")
+
+        def worker():
+            try:
+                update = check_for_update(VERSION, frozen=IS_FROZEN)
+                self.ui_queue.put(("app_update_check_done", (update, None, user_initiated)))
+            except Exception as exc:
+                self.ui_queue.put(("app_update_check_done", (None, exc, user_initiated)))
+
+        threading.Thread(target=worker, name="CGMD-AppUpdateCheck", daemon=True).start()
+
+    def _handle_app_update_check(self, data):
+        update, error, user_initiated = data
+        self._app_update_checking = False
+        if hasattr(self, "app_update_check_button"):
+            self.app_update_check_button.configure(state="normal")
+        if error:
+            self.app_update_status_var.set("Não foi possível consultar as atualizações.")
+            self.app_update_latest_var.set(str(error))
+            self.app_update_progress_label_var.set("Confira a conexão e tente novamente mais tarde.")
+            self._append_log(f"Verificação de atualização falhou: {error}")
+            if user_initiated:
+                messagebox.showwarning("Atualizações", str(error), parent=self.root)
+            return
+        if update is None:
+            self._app_update_info = None
+            self.app_update_install_button.configure(state="disabled")
+            self.app_update_status_var.set(f"Você está usando a versão {VERSION}.")
+            self.app_update_latest_var.set("Não foi encontrada uma versão mais recente disponível para este tipo de instalação.")
+            self.app_update_notes_var.set("Consulte as Releases do GitHub para ver o histórico publicado. Antes da primeira Release estável, builds executáveis não podem ser atualizados automaticamente.")
+            self.app_update_progress_label_var.set("Nenhum download foi iniciado.")
+            if user_initiated:
+                messagebox.showinfo("Atualizações", "Nenhuma versão mais recente foi encontrada.\n\nSe ainda não houver uma Release estável publicada, o atualizador do executável ficará aguardando a primeira Release.", parent=self.root)
+            return
+        self._app_update_info = update
+        self.app_update_status_var.set(f"Nova versão disponível: {update.version}")
+        channel = "Release oficial" if update.kind == "executable" or update.tag_name not in {"", "main"} else "Código-fonte da branch main"
+        self.app_update_latest_var.set(f"Versão instalada: {VERSION}  •  Disponível: {update.version}  •  Origem: {channel}")
+        notes = update.notes.strip() or "Sem notas de versão publicadas."
+        self.app_update_notes_var.set(notes[:1800])
+        self.app_update_progress_label_var.set("Aguardando sua confirmação antes de baixar os arquivos.")
+        self.app_update_install_button.configure(state="normal")
+        if not self._app_update_prompt_open:
+            self._show_update_prompt(update)
+
+    def _show_cached_update_prompt(self):
+        if self._app_update_info:
+            self._show_update_prompt(self._app_update_info)
+        else:
+            self._start_app_update_check(user_initiated=True)
+
+    def _show_update_prompt(self, update: AppUpdate):
+        if self._app_update_prompt_open or self._app_update_busy:
+            return
+        self._app_update_prompt_open = True
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Atualização disponível")
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+        dialog.configure(bg=self.colors["bg"])
+        box = self._card(dialog, 18)
+        box.pack(fill="both", expand=True, padx=14, pady=14)
+        ttk.Label(box, text=f"Nova versão {update.version} disponível", style="CardTitle.TLabel", font=("Segoe UI", 14, "bold")).pack(anchor="w")
+        ttk.Label(box, text=f"Versão instalada: {VERSION}\nOrigem: {'Release oficial' if update.kind == 'executable' or update.tag_name not in {'', 'main'} else 'repositório main'}", style="Card.TLabel", justify="left").pack(anchor="w", pady=(8, 10))
+        notes = update.notes.strip() or "Esta versão contém mudanças no repositório oficial."
+        ttk.Label(box, text=notes[:1000], style="Card.TLabel", wraplength=470, justify="left").pack(anchor="w", pady=(0, 10))
+        ttk.Checkbutton(
+            box, text="Abrir o aplicativo automaticamente depois de atualizar",
+            variable=self.update_open_after_var, command=self._save_update_preferences,
+        ).pack(anchor="w", pady=(2, 12))
+        actions = ttk.Frame(box, style="Card.TFrame")
+        actions.pack(fill="x")
+
+        def later():
+            self._save_update_preferences()
+            self._app_update_prompt_open = False
+            try:
+                dialog.grab_release()
+                dialog.destroy()
+            except tk.TclError:
+                pass
+
+        def start_update():
+            self._save_update_preferences()
+            self._app_update_prompt_open = False
+            try:
+                dialog.grab_release()
+                dialog.destroy()
+            except tk.TclError:
+                pass
+            self._start_app_update(update, repair=False)
+
+        ttk.Button(actions, text="Atualizar agora", style="Accent.TButton", command=start_update).pack(side="left")
+        ttk.Button(actions, text="Continuar nesta versão", style="Secondary.TButton", command=later).pack(side="right")
+        dialog.protocol("WM_DELETE_WINDOW", later)
+        dialog.update_idletasks()
+        x = self.root.winfo_rootx() + max(0, (self.root.winfo_width() - dialog.winfo_width()) // 2)
+        y = self.root.winfo_rooty() + max(0, (self.root.winfo_height() - dialog.winfo_height()) // 2)
+        dialog.geometry(f"+{x}+{y}")
+        dialog.grab_set()
+        dialog.focus_force()
+
+    def _start_app_repair(self, *, confirmed: bool = False):
+        if self._app_update_busy or self._app_update_checking:
+            messagebox.showwarning("Reparar arquivos", "Aguarde a operação de atualização terminar.", parent=self.root)
+            return
+        if not confirmed and not messagebox.askyesno(
+            "Reparar todos os arquivos",
+            "O aplicativo vai baixar novamente o pacote completo da fonte oficial do GitHub e substituir os arquivos do programa.\n\n"
+            "Suas preferências, ferramentas e mídias baixadas serão preservadas quando estiverem nas pastas de dados separadas. Continuar?",
+            parent=self.root,
+        ):
+            return
+        self._start_app_update(None, repair=True)
+
+    def _start_app_update(self, update: AppUpdate | None, *, repair: bool):
+        if self._app_update_busy:
+            return
+        if ((self.download_thread and self.download_thread.is_alive()) or
+                (self.playlist_analysis_thread and self.playlist_analysis_thread.is_alive()) or
+                (self.install_thread and self.install_thread.is_alive())):
+            messagebox.showwarning("Atualização", "Termine ou cancele downloads e instalações antes de atualizar o aplicativo.", parent=self.root)
+            return
+        self._app_update_busy = True
+        for name in ("app_update_check_button", "app_update_install_button", "app_update_repair_button"):
+            if hasattr(self, name):
+                getattr(self, name).configure(state="disabled")
+        self.app_update_progress.configure(mode="indeterminate")
+        self.app_update_progress.start(12)
+        self.app_update_progress_label_var.set("Preparando download seguro…")
+        self.app_update_status_var.set("Baixando e validando arquivos. A versão atual não foi alterada.")
+        launch_after = bool(self.update_open_after_var.get())
+
+        def worker():
+            try:
+                candidate = check_repair_candidate(VERSION, frozen=IS_FROZEN) if repair else update
+                if candidate is None:
+                    raise AppUpdateError("Nenhuma atualização válida foi selecionada.")
+                prepared = prepare_update(
+                    candidate,
+                    progress=lambda label, done, total: self.ui_queue.put(("app_update_progress", (label, done, total))),
+                )
+                self.ui_queue.put(("app_update_prepared", (candidate, prepared, launch_after, repair, None)))
+            except Exception as exc:
+                self.ui_queue.put(("app_update_prepared", (update, None, launch_after, repair, exc)))
+
+        threading.Thread(target=worker, name="CGMD-AppUpdateDownload", daemon=True).start()
+
+    def _handle_app_update_prepared(self, data):
+        update, prepared, launch_after, repair, error = data
+        self.app_update_progress.stop()
+        self.app_update_progress.configure(mode="determinate", value=0)
+        self._app_update_busy = False
+        for name in ("app_update_check_button", "app_update_repair_button"):
+            if hasattr(self, name):
+                getattr(self, name).configure(state="normal")
+        if error or prepared is None:
+            self.app_update_install_button.configure(state="normal" if self._app_update_info else "disabled")
+            self.app_update_status_var.set("Não foi possível preparar a atualização/reparação.")
+            self.app_update_progress_label_var.set(str(error))
+            self._append_log(f"Atualização/reparação não aplicada: {error}")
+            messagebox.showerror("Atualização", str(error), parent=self.root)
+            return
+        try:
+            schedule_apply_update(prepared, launch_after=launch_after)
+        except Exception as exc:
+            self.app_update_status_var.set("Não foi possível aplicar os arquivos preparados.")
+            self.app_update_progress_label_var.set(str(exc))
+            self._append_log(f"Não foi possível iniciar a troca segura dos arquivos: {exc}")
+            messagebox.showerror("Atualização", str(exc), parent=self.root)
+            return
+        self.app_update_status_var.set(f"Versão {prepared.version} preparada; concluindo a troca de arquivos…")
+        self.app_update_progress_label_var.set("O aplicativo vai fechar para substituir os arquivos. Não desligue o PC durante alguns segundos.")
+        self._append_log(f"Troca de arquivos programada: versão {prepared.version}; abrir depois={launch_after}.")
+        self.root.after(500, self.root.destroy)
+
+    def _report_callback_exception(self, exc_type, exc_value, exc_traceback):
+        """Log Tk callback failures and offer full repair for serious runtime exceptions."""
+        try:
+            self.logger.error("Erro não tratado na interface", exc_info=(exc_type, exc_value, exc_traceback))
+        except Exception:
+            pass
+        critical = issubclass(exc_type, (ImportError, ModuleNotFoundError, SystemError, MemoryError))
+        message = "Uma ação da interface falhou. Consulte o painel de mensagens e os logs."
+        if critical:
+            message += "\n\nO erro parece crítico. Deseja baixar novamente todos os arquivos do aplicativo e tentar reparar a instalação?"
+            try:
+                if messagebox.askyesno("Erro crítico — reparo", message, parent=self.root):
+                    self._start_app_repair(confirmed=True)
+                    return
+            except Exception:
+                pass
+        messagebox.showerror("Erro do aplicativo", f"{message}\n\nDetalhes: {exc_value}\n\nSe os erros continuarem, abra Atualizações → Reparar todos os arquivos.", parent=self.root)
+
     def _build_help(self):
         frame = ttk.Frame(self.pages_area)
         self.page_frames["help"] = frame
@@ -837,7 +1141,7 @@ class MediaDownloaderApp:
             frame.pack_forget()
         self.page_frames[name].pack(fill="both", expand=True)
         self.current_page = name
-        title = {"home": "Início", "playlist": "Gerenciar playlist", "settings": "Configurações", "dependencies": "Dependências", "help": "Ajuda", "developer": "Desenvolvedor"}[name]
+        title = {"home": "Início", "playlist": "Gerenciar playlist", "settings": "Configurações", "dependencies": "Dependências", "updates": "Atualizações", "help": "Ajuda", "developer": "Desenvolvedor"}[name]
         self.page_title_var.set(title)
         for key, button in self.nav_buttons.items():
             button.configure(style="Selected.Nav.TButton" if key == name else "Nav.TButton")
@@ -962,6 +1266,19 @@ class MediaDownloaderApp:
                 elif kind == "dep_progress":
                     tool, stage, done, total = data
                     self.status_var.set(f"Instalando {tool}: {stage}")
+                elif kind == "app_update_check_done":
+                    self._handle_app_update_check(data)
+                elif kind == "app_update_progress":
+                    label, done, total = data
+                    self.app_update_progress_label_var.set(str(label))
+                    if total and total > 0:
+                        self.app_update_progress.stop()
+                        self.app_update_progress.configure(mode="determinate", maximum=total, value=done)
+                    else:
+                        self.app_update_progress.configure(mode="indeterminate")
+                        self.app_update_progress.start(12)
+                elif kind == "app_update_prepared":
+                    self._handle_app_update_prepared(data)
         except queue.Empty:
             pass
         self.root.after(50, self._poll_queue)

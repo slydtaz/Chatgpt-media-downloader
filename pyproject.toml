@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chatgpt-media-downloader"
-version = "4.9.0"
+version = "5.0.0"
 description = "Desktop GUI for downloading authorized video, audio, and playlist media"
 requires-python = ">=3.10"
 dependencies = []

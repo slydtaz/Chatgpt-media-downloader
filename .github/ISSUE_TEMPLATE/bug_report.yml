@@ -13,8 +13,8 @@ body:
     id: version
     attributes:
       label: Versão do aplicativo
-      description: Ex. 4.9.0 ou hash/versão do build.
-      placeholder: 4.9.0
+      description: Ex. 5.0.0 ou hash/versão do build.
+      placeholder: 5.0.0
     validations:
       required: true
   - type: dropdown

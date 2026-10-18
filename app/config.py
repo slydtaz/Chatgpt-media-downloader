@@ -12,7 +12,7 @@ from typing import Any
 APP_NAME = "ChatGPT Media Downloader"
 PRODUCT_ID = "com.chatgpt.mediadownloader"
 VENDOR = "ChatGPT"
-VERSION = "4.9.0"
+VERSION = "5.0.0"
 
 
 def _windows_local_appdata() -> Path:
@@ -102,6 +102,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "retries": 5,
     "video_container": "mp4",
     "subtitle_mode": "off",
+    "update_open_after": True,
+    "update_check_on_startup": True,
 }
 
 
@@ -169,6 +171,14 @@ def load_config() -> dict[str, Any]:
         data["video_container"] = "mp4"
     if data.get("subtitle_mode") not in {"off", "manual", "all"}:
         data["subtitle_mode"] = "off"
+    for option in ("update_open_after", "update_check_on_startup"):
+        value = data.get(option, True)
+        if isinstance(value, bool):
+            data[option] = value
+        elif isinstance(value, (int, float)):
+            data[option] = bool(value)
+        else:
+            data[option] = str(value).strip().lower() in {"1", "true", "yes", "sim", "on"}
     return data
 
 

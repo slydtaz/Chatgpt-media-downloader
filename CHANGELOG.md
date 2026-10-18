@@ -1,5 +1,16 @@
 # Histórico de versões
 
+## 5.0.0
+
+- Atualizador do aplicativo integrado ao GitHub Releases e à versão da branch `main` para instalações em código-fonte.
+- Confirmação antes de baixar, notas de versão e caixa "Abrir o aplicativo automaticamente depois de atualizar", ativada por padrão.
+- Download para pasta de preparação, validação de checksum SHA-256 para builds EXE, extração ZIP segura e troca transacional com rollback.
+- Reparo completo dos arquivos a partir de uma fonte oficial, incluindo oferta de recuperação após falha crítica na inicialização.
+- Preferências e mídias baixadas permanecem fora da pasta do aplicativo e são preservadas durante a atualização.
+- Novos testes automatizados de comparação de versões, descoberta de atualizações e validação de arquivos ZIP.
+
+Consulte [`docs/5.0.0_changes.md`](docs/5.0.0_changes.md).
+
 ## 4.9.0
 
 - Gerenciador de playlists com busca, seleção individual e configurações por item.

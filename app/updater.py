@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
-from .config import APP_DATA, TOOLS_DIR
+from .config import APP_DATA, TOOLS_DIR, VERSION
 from .locking import CrossProcessFileLock
 from .dependencies import detect_binary_arch
 from .platform import SystemInfo
@@ -40,7 +40,7 @@ class UpdateError(RuntimeError):
 def _request_json(url: str) -> dict:
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "ChatGPT-Media-Downloader/4.9.0", "Accept": "application/vnd.github+json"},
+        headers={"User-Agent": f"ChatGPT-Media-Downloader/{VERSION}", "Accept": "application/vnd.github+json"},
     )
     with urllib.request.urlopen(request, timeout=20) as response:
         return json.loads(response.read().decode("utf-8"))
@@ -51,7 +51,7 @@ def _download(url: str, destination: Path, progress: Optional[Callable[[int, int
         raise UpdateError("Fonte de download não autorizada.")
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "ChatGPT-Media-Downloader/4.9.0"},
+        headers={"User-Agent": "ChatGPT-Media-Downloader/{VERSION}"},
     )
     with urllib.request.urlopen(request, timeout=60) as response, destination.open("wb") as out:
         total = int(response.headers.get("Content-Length", "0") or 0)
@@ -71,7 +71,7 @@ def _trusted_github_url(url: str) -> bool:
         host = (urlsplit(url).hostname or "").lower()
     except ValueError:
         return False
-    return host in {"github.com", "objects.githubusercontent.com", "raw.githubusercontent.com"}
+    return host in {"github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com", "raw.githubusercontent.com", "codeload.github.com"}
 
 
 def _asset(release: dict, name: str) -> Optional[ReleaseAsset]:

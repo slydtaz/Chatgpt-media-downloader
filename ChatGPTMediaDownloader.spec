@@ -26,6 +26,7 @@ a = Analysis(
         "app.security",
         "app.uninstall",
         "app.updater",
+        "app.app_update",
         "tkinter",
         "tkinter.ttk",
         "tkinter.filedialog",
