@@ -59,7 +59,6 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('name: ${{ env.RELEASE_NAME }}', workflow)
         self.assertIn('$releaseName = "$version - stable"', workflow)
         self.assertIn('hotfix-$($env:HOTFIX_NUMBER)', workflow)
-        self.assertIn('name: "ChatGPT Media Downloader', workflow) if False else None
 
 
 if __name__ == "__main__":
