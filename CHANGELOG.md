@@ -1,3 +1,9 @@
+## 5.0.3
+
+- Corrige o bloqueio da publicação de EXE causado pela execução interrompida do teste multiprocesso no runner Windows hospedado; o teste continua ativo no Linux e em execuções locais do Windows, e os demais testes de locking permanecem ativos em todas as plataformas.
+- Solicita a habilitação do GitHub Pages por meio da ação oficial de configuração, além de usar o workflow para publicar a página.
+- Mantém o build de Release condicionado a testes e a geração conjunta do EXE de arquivo único e de seu SHA-256.
+
 ## 5.0.2
 
 - Corrige a detecção e publicação da tag `stable`: o publicador busca explicitamente a tag remota, compara o commit e pede confirmação antes de atualizá-la.

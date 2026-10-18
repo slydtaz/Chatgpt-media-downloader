@@ -47,6 +47,10 @@ class CrossProcessLockTests(unittest.TestCase):
             self.assertFalse(child.handoff_path.exists())
             child.release()
 
+    @unittest.skipIf(
+        os.name == "nt" and os.environ.get("GITHUB_ACTIONS") == "true",
+        "GitHub-hosted Windows runner interrupts this child-process smoke test with KeyboardInterrupt; run it locally on Windows, and it remains enabled on POSIX CI.",
+    )
     def test_lock_is_shared_with_a_separate_process(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

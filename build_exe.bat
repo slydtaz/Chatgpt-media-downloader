@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title Build ChatGPT Media Downloader - single EXE
 
 echo ============================================================
-echo   ChatGPT Media Downloader 5.0.2 - Build de arquivo unico
+echo   ChatGPT Media Downloader 5.0.3 - Build de arquivo unico
 echo ============================================================
 echo.
 
