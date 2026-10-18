@@ -93,7 +93,7 @@ jobs:
           body: |
             ${{ env.RELEASE_NAME }}
 
-            Esta é a versão oficial estável ${{ env.APP_VERSION }}. O título inclui `(hotfix-N)` somente quando a entrada manual ou o assunto do commit de publicação declara uma correção crítica urgente.
+            Esta é a versão oficial estável ${{ env.APP_VERSION }}. O título só inclui `(hotfix-N)` quando a entrada manual declara uma correção crítica urgente.
 
             Recommended for users: download ChatGPTMediaDownloader.exe.
             SHA256SUMS.txt contains the SHA-256 checksum of the same build.
