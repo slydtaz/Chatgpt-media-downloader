@@ -27,16 +27,9 @@ Se você criou o repositório com outro nome ou usuário, troque a URL do `origi
 
 No GitHub, abra **Settings → Pages**, selecione **GitHub Actions** como origem e salve. O workflow `.github/workflows/pages.yml` publica `site/index.html` quando `site/` muda e o commit é enviado para `main` ou `master`.
 
-## 4. Criar a primeira release para Windows
+## 4. Publicar a Release stable
 
-Quando o código estiver no repositório, crie e envie uma tag de versão:
-
-```bash
-git tag v5.0.0
-git push origin v5.0.0
-```
-
-O workflow de release executa os testes, tenta criar `ChatGPTMediaDownloader.exe` num runner Windows, calcula o SHA-256 e publica ambos os arquivos como assets da GitHub Release. Se a compilação falhar, nenhum asset válido deve ser anunciado como pronto para download; verifique **Actions** e corrija a causa antes de tentar novamente.
+Para esta configuração do projeto, a Release oficial pode usar a tag de alias `stable`, com o número real da versão no título. Exemplo: `ChatGPT Media Downloader 5.0.1 — Stable`. Consulte `PUBLISH_STABLE_RELEASE.md` para os passos completos. Anexe `ChatGPTMediaDownloader.exe` e `SHA256SUMS.txt` do mesmo build testado. O ZIP de fonte é para desenvolvedores; usuários finais devem baixar o EXE.
 
 ## Observação
 

@@ -1,3 +1,9 @@
+## 5.0.1
+
+- Atualiza `build_exe.bat` para calcular `SHA256SUMS.txt` depois da compilação, compatível com a validação do atualizador.
+- Permite usar a tag-alias `stable` em Releases do GitHub quando o título informa a versão semântica.
+- Atualiza a documentação para diferenciar o EXE recomendado para usuários do ZIP de código-fonte para desenvolvedores.
+
 # Histórico de versões
 
 ## 5.0.0

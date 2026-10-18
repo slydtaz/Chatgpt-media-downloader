@@ -4,7 +4,7 @@ cd /d "%~dp0"
 title Build ChatGPT Media Downloader - single EXE
 
 echo ============================================================
-echo   ChatGPT Media Downloader 5.0.0 - Build de arquivo unico
+echo   ChatGPT Media Downloader 5.0.1 - Build de arquivo unico
 echo ============================================================
 echo.
 
@@ -46,6 +46,15 @@ if not exist "dist\ChatGPTMediaDownloader.exe" (
   echo ERRO: o executavel nao foi encontrado em dist\.
   pause
   exit /b 1
+)
+
+echo.
+echo [3/3] Calculando SHA-256 para acompanhar o executavel...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$h=(Get-FileHash -LiteralPath 'dist\ChatGPTMediaDownloader.exe' -Algorithm SHA256).Hash.ToLowerInvariant(); ($h + '  ChatGPTMediaDownloader.exe') | Set-Content -LiteralPath 'dist\SHA256SUMS.txt' -Encoding ascii"
+if errorlevel 1 (
+  echo AVISO: nao foi possivel criar dist\SHA256SUMS.txt.
+) else (
+  echo Hash criado: %CD%\dist\SHA256SUMS.txt
 )
 
 echo.

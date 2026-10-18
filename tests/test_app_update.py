@@ -61,6 +61,25 @@ class AppUpdateDiscoveryTests(unittest.TestCase):
         self.assertIsNone(update)
         source_version.assert_not_called()
 
+    def test_stable_release_uses_semantic_version_from_title(self):
+        release = {
+            "tag_name": "stable",
+            "name": "ChatGPT Media Downloader 5.0.1 — Stable",
+            "html_url": "https://github.com/slydtaz/Chatgpt-media-downloader/releases/tag/stable",
+            "assets": [
+                {"name": "ChatGPTMediaDownloader.exe", "browser_download_url": "https://github.com/slydtaz/Chatgpt-media-downloader/releases/download/stable/ChatGPTMediaDownloader.exe", "size": 2048, "state": "uploaded"},
+                {"name": "SHA256SUMS.txt", "browser_download_url": "https://github.com/slydtaz/Chatgpt-media-downloader/releases/download/stable/SHA256SUMS.txt", "size": 90, "state": "uploaded"},
+            ],
+        }
+        update = _release_candidate("5.0.0", release, frozen=True)
+        self.assertIsNotNone(update)
+        self.assertEqual(update.version, "5.0.1")
+        self.assertEqual(update.tag_name, "stable")
+
+    def test_stable_tag_without_semver_in_title_is_not_an_update(self):
+        release = {"tag_name": "stable", "name": "Stable release", "assets": []}
+        self.assertIsNone(_release_candidate("5.0.0", release, frozen=False))
+
     def test_release_executable_requires_exe_and_checksum_assets(self):
         release = {
             "tag_name": "v5.1.0",

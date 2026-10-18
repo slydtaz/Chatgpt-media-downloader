@@ -18,13 +18,18 @@
 
 > **Aviso de nome:** “ChatGPT” no nome é apenas parte do identificador do projeto. Este software é independente e **não é afiliado, patrocinado, certificado ou distribuído pela OpenAI**.
 
-## 📥 Download para quem só quer usar
+## 📥 Download oficial para usuários
 
-1. Abra **[Releases — baixar](https://github.com/slydtaz/chatgpt-media-downloader/releases/latest)**.
-2. Baixe `ChatGPTMediaDownloader.exe` na release mais recente.
-3. (Recomendado) Compare o SHA-256 do arquivo com `SHA256SUMS.txt` da mesma release.
-4. Faça uma verificação com o Microsoft Defender ou seu antivírus antes de executar.
-5. Abra o EXE. Na primeira execução, o aplicativo prepara suas dependências de mídia (yt-dlp/FFmpeg) a partir de fontes configuradas no projeto.
+**Recomendado:** abra **[Releases estáveis — baixar](https://github.com/slydtaz/chatgpt-media-downloader/releases/tag/stable)** e baixe `ChatGPTMediaDownloader.exe`. Esse é o pacote de um único arquivo para quem só quer instalar e usar o programa; confira também `SHA256SUMS.txt` da mesma Release.
+
+1. Baixe `ChatGPTMediaDownloader.exe` da Release estável.
+2. (Recomendado) Compare o SHA-256 do arquivo com `SHA256SUMS.txt` da mesma Release.
+3. Faça uma verificação com o Microsoft Defender ou seu antivírus antes de executar.
+4. Abra o EXE. Na primeira execução, o aplicativo prepara suas dependências de mídia (yt-dlp/FFmpeg) a partir de fontes configuradas no projeto.
+
+## 🧑‍💻 Código-fonte para desenvolvedores
+
+O ZIP de código-fonte da Release e o botão **Code → Download ZIP** são destinados a desenvolvedores, auditoria, testes e compilação. Usuários comuns não precisam baixar nem extrair o fonte: basta o EXE oficial. O GitHub também pode mostrar seus ZIP/TAR automáticos de código-fonte em cada Release.
 
 **A atualização automática do executável depende de uma Release estável com `ChatGPTMediaDownloader.exe` e `SHA256SUMS.txt`.** A versão de código-fonte também pode identificar uma versão mais nova na branch `main`. Para compilar/publicar o executável, envie a tag `v5.0.0` e aguarde o workflow de Windows concluir com sucesso. Enquanto isso, use as instruções para executar a partir do código-fonte abaixo.
 
@@ -52,13 +57,7 @@ Disponibilidade de qualidade, metadados e capas depende do site, do conteúdo, d
 3. Extraia o projeto numa pasta de trabalho.
 4. Execute `launcher.vbs` para iniciar sem janela de console auxiliar. Para depuração, execute `launcher.bat`.
 
-Para gerar um executável Windows localmente, abra um terminal na raiz do projeto e execute:
-
-```bat
-build_exe.bat
-```
-
-O arquivo esperado será `dist\ChatGPTMediaDownloader.exe`. A compilação deve ser feita em Windows; PyInstaller não produz de forma suportada um EXE Windows a partir de Linux.
+Para compilar no Windows, execute `build_exe.bat` na raiz do projeto, ao lado de `launcher.vbs`. Ele gera o arquivo único `dist\ChatGPTMediaDownloader.exe` e o arquivo `dist\SHA256SUMS.txt`, que deve acompanhar o EXE na Release. A compilação deve ser feita em Windows; PyInstaller não produz de forma suportada um EXE Windows a partir de Linux.
 
 ### Linux / macOS
 
@@ -104,7 +103,7 @@ Contribuições são bem-vindas. Leia [`CONTRIBUTING.md`](CONTRIBUTING.md), abra
 
 ## 📚 Documentação
 
-- [Histórico de mudanças da versão 5.0.0](docs/5.0.0_changes.md)
+- [Histórico de mudanças da versão 5.0.1](docs/5.0.1_changes.md) · [Versão 5.0.0](docs/5.0.0_changes.md)
 - [Matriz de funcionalidades legadas](docs/legacy_functionality_matrix.md)
 - [Modelo de segurança e limites](docs/security_model.md)
 - [Relatório de testes e limitações](docs/test_report.md)

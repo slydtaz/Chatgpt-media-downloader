@@ -170,10 +170,27 @@ def _source_notes(version: str, release_body: str = "") -> str:
     return "Esta versão contém atualizações do aplicativo disponíveis no repositório oficial."
 
 
+def _release_version(release: dict) -> str:
+    """Return a semantic version from a version tag or a stable-alias release title.
+
+    GitHub releases can use the mutable `stable` tag as a convenience alias, while
+    the actual application version remains in the release title (for example,
+    "ChatGPT Media Downloader 5.0.1 — Stable"). Never treat the literal word
+    'stable' as a version number.
+    """
+    tag = str(release.get("tag_name") or "").strip()
+    match = re.fullmatch(r"v?(\d+(?:\.\d+){1,5})", tag, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    title = str(release.get("name") or "").strip()
+    match = re.search(r"(?<!\d)v?(\d+\.\d+(?:\.\d+){0,4})(?!\d)", title, re.IGNORECASE)
+    return match.group(1) if match else ""
+
+
 def _release_candidate(current: str, release: dict, *, frozen: bool) -> Optional[AppUpdate]:
     tag = str(release.get("tag_name") or "").strip()
-    candidate_version = tag.lstrip("vV")
-    if not candidate_version or not is_newer_version(candidate_version, current):
+    candidate_version = _release_version(release)
+    if not tag or not candidate_version or not is_newer_version(candidate_version, current):
         return None
     html_url = str(release.get("html_url") or f"https://github.com/{OWNER}/{REPOSITORY}/releases")
     body = str(release.get("body") or "").strip()
@@ -244,13 +261,14 @@ def check_repair_candidate(current_version: str = VERSION, *, frozen: Optional[b
         if candidate:
             return candidate
         tag = str(release.get("tag_name") or "").strip()
+        release_version = _release_version(release)
         exe = _asset(release, "ChatGPTMediaDownloader.exe")
         sums = _asset(release, "SHA256SUMS.txt")
-        if not tag or not exe or not sums:
-            raise AppUpdateError("A Release mais recente não contém o executável e o hash SHA-256 exigidos para reparo.")
+        if not tag or not release_version or not exe or not sums:
+            raise AppUpdateError("A Release mais recente não contém uma versão válida, o executável e o hash SHA-256 exigidos para reparo.")
         digest = str(exe.get("digest") or "")
         digest = digest.split(":", 1)[1].lower() if digest.lower().startswith("sha256:") else ""
-        return AppUpdate(current_version, tag.lstrip("vV"), "executable", exe["browser_download_url"],
+        return AppUpdate(current_version, release_version, "executable", exe["browser_download_url"],
                          str(release.get("html_url") or ""), str(release.get("body") or ""), tag,
                          sums["browser_download_url"], digest, int(exe.get("size") or 0),
                          str(release.get("published_at") or ""), tag)
@@ -258,8 +276,8 @@ def check_repair_candidate(current_version: str = VERSION, *, frozen: Optional[b
     source_version = _source_version()
     if release and not release.get("draft") and not release.get("prerelease"):
         tag = str(release.get("tag_name") or "").strip()
-        release_version = tag.lstrip("vV")
-        if tag and version_key(release_version) >= version_key(source_version):
+        release_version = _release_version(release)
+        if tag and release_version and version_key(release_version) >= version_key(source_version):
             return AppUpdate(
                 current_version, release_version, "source",
                 f"https://github.com/{OWNER}/{REPOSITORY}/archive/refs/tags/{tag}.zip",

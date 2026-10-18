@@ -18,6 +18,12 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("--clean ChatGPTMediaDownloader.spec", script)
         self.assertIn("dist\\ChatGPTMediaDownloader.exe", script)
 
+    def test_build_script_generates_single_exe_and_checksum(self):
+        script = (ROOT / "build_exe.bat").read_text(encoding="utf-8")
+        self.assertIn("ChatGPTMediaDownloader.spec", script)
+        self.assertIn("dist\\ChatGPTMediaDownloader.exe", script)
+        self.assertIn("SHA256SUMS.txt", script)
+
     def test_github_workflow_targets_windows(self):
         workflow = (ROOT / ".github" / "workflows" / "build-windows.yml").read_text(encoding="utf-8")
         self.assertIn("runs-on: windows-latest", workflow)
