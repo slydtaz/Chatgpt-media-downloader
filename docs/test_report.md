@@ -33,3 +33,10 @@ No workflow da release 5.0.3, a compilação sintática passou, mas `test_parall
 ## Acompanhamento 5.0.5
 
 A execução no GitHub Actions Windows reportou `OK (skipped=2)` mas o step retornou código 1. Para reduzir a interação do stderr com o shell PowerShell, os workflows agora mesclam a saída do `unittest` no stdout com `2>&1`. O código de saída do processo Python segue sendo usado; é necessário observar a próxima execução remota para confirmar a correção.
+
+
+## Acompanhamento 5.0.6
+
+Os logs do runner Windows mostraram que redirecionar o stderr com `2>&1` não resolvia o encerramento prematuro do passo de testes. A correção passou a usar `shell: cmd` em todos os comandos Python nativos nos workflows Windows; na matriz, o Ubuntu continua em Bash.
+
+Confirmação remota: a PR de correção passou nos quatro jobs do workflow de testes (Windows 3.10, Windows 3.12, Ubuntu 3.10 e Ubuntu 3.12). Uma execução separada do workflow de build também passou pelos testes, criou `ChatGPTMediaDownloader.exe`, verificou o SHA-256 e carregou o artefato. Uma compilação limpa da versão 5.0.6 deve ser concluída antes de atualizar a Release `stable`.

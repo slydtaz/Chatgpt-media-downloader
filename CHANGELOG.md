@@ -1,3 +1,9 @@
+## 5.0.6
+
+- Corrige o tratamento dos comandos Python no GitHub Actions Windows usando `shell: cmd` para testes, compilação sintática e PyInstaller; o Ubuntu continua usando Bash na matriz.
+- Adiciona teste de regressão para garantir os shells corretos. A matriz remota Windows/Ubuntu e uma compilação real do EXE num runner Windows passaram.
+- O pacote do mantenedor oferece publicação manual com verificação de SHA-256 e criação da Release `stable` quando ela não existe.
+
 ## 5.0.5
 
 - Corrige os workflows do GitHub Actions para mesclar a saída de diagnóstico (stderr) do `unittest` no fluxo de saída normal; a suite que conclui com `OK` não deve ser marcada como falha só pela forma como o PowerShell trata a saída nativa.
