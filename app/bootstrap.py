@@ -413,26 +413,51 @@ def _transactional_install_executable(source_exe: Path, destination: Path, insta
             shutil.rmtree(stage, ignore_errors=True)
 
 
+def _directory_is_writable(path: Path) -> bool:
+    """Check whether the current user can replace files in an existing install folder."""
+    if not path.is_dir():
+        return False
+    probe = path / f".cgm-write-check-{uuid.uuid4().hex}"
+    try:
+        with probe.open("xb") as handle:
+            handle.write(b"ok")
+        return True
+    except OSError:
+        return False
+    finally:
+        try:
+            probe.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def ensure_frozen_installation(source_exe: Path, install_id: str, system) -> tuple[Path, bool]:
     """Self-install a PyInstaller one-file executable without a source project tree."""
     preferred = preferred_install_root(install_id, system)
     user = per_user_install_root(install_id, system)
     resolved_exe = source_exe.resolve()
 
-    for candidate in (preferred, user):
+    # Prefer a per-user installation on Windows. It can be repaired and updated
+    # without requiring admin rights to replace an EXE under Program Files.
+    candidates = (user, preferred) if system.os_name == "Windows" else (preferred, user)
+    for candidate in candidates:
         try:
             if resolved_exe.parent == candidate.resolve() and _is_ours(candidate, install_id):
-                return candidate, False
+                if candidate == user or _directory_is_writable(candidate):
+                    return candidate, False
+                # A non-elevated process cannot safely update this system install.
+                # Reinstall into the user profile and use that copy going forward.
+                break
         except OSError:
             continue
 
-    # Do not allow a stale portable EXE to overwrite a newer owned installation.
+    # A stale portable EXE must never downgrade a newer owned installation.
     newer_install = _newest_install_not_older([preferred, user], install_id, VERSION)
     if newer_install is not None:
         return newer_install, True
 
     errors: list[str] = []
-    for candidate in (preferred, user):
+    for candidate in candidates:
         try:
             candidate.parent.mkdir(parents=True, exist_ok=True)
             if candidate.exists() and not _is_product_install(candidate):
