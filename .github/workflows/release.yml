@@ -2,6 +2,8 @@ name: Build and publish Windows release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
       - stable
@@ -17,6 +19,7 @@ permissions:
 
 jobs:
   release:
+    if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag' || (github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release: publish ChatGPT Media Downloader'))
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -30,61 +33,20 @@ jobs:
       - name: Read application version
         shell: pwsh
         env:
-          HOTFIX_NUMBER: ${{ inputs.hotfix_number }}
+          HOTFIX_NUMBER: \${{ inputs.hotfix_number }}
         run: |
           $match = Select-String -Path 'app/config.py' -Pattern '^VERSION\s*=\s*"([^"]+)"'
           if (!$match) { throw 'Could not read VERSION from app/config.py' }
           $version = $match.Matches[0].Groups[1].Value
           $refName = $env:GITHUB_REF_NAME
-          if ([string]::IsNullOrWhiteSpace($refName) -or $refName -eq 'stable' -or $refName -eq 'main' -or $refName -eq 'master') {
-            $releaseTag = "v$version"
-          } elseif ($refName -match '^v\\d+\\.\\d+\\.\\d+') {
+          $releaseTag = "v$version"
+          if (-not [string]::IsNullOrWhiteSpace($refName) -and $refName -match '^v\d+\.\d+\.\d+$') {
             $releaseTag = $refName
-          } else {
-            $releaseTag = "v$version"
           }
           if ([string]::IsNullOrWhiteSpace($env:HOTFIX_NUMBER)) {
             $releaseName = "$version - stable"
           } else {
-            if ($env:HOTFIX_NUMBER -notmatch '^\\d+
-      - name: Install build tool
-        shell: cmd
-        run: python -m pip install --upgrade pyinstaller
-      - name: Compile source
-        shell: cmd
-        run: python -c "from pathlib import Path; import py_compile; files = list(Path('app').glob('*.py')) + [Path('packaged_entry.py')]; [py_compile.compile(str(p), doraise=True) for p in files]"
-      - name: Run tests before packaging
-        shell: cmd
-        run: python -m unittest discover -s tests -v
-      - name: Build EXE
-        shell: cmd
-        run: python -m PyInstaller --noconfirm --clean ChatGPTMediaDownloader.spec
-      - name: Validate output and create checksum
-        shell: pwsh
-        run: |
-          if (!(Test-Path 'dist/ChatGPTMediaDownloader.exe')) { throw 'EXE was not created' }
-          $hash = (Get-FileHash 'dist/ChatGPTMediaDownloader.exe' -Algorithm SHA256).Hash.ToLower()
-          "$hash  ChatGPTMediaDownloader.exe" | Out-File -Encoding ascii 'dist/SHA256SUMS.txt'
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          target_commitish: ${{ github.sha }}
-          name: ${{ env.RELEASE_NAME }}
-          body: |
-            ${{ env.RELEASE_NAME }}
-
-            Esta é a versão oficial estável ${{ env.APP_VERSION }}. O título só inclui `hotfix-N` quando a entrada manual declara uma correção crítica urgente.
-
-            **Recommended for users:** download `ChatGPTMediaDownloader.exe`.
-            `SHA256SUMS.txt` contains the SHA-256 checksum of the same build.
-            Source archives are intended for developers, auditing and compilation.
-          make_latest: true
-          overwrite_files: true
-          files: |
-            dist/ChatGPTMediaDownloader.exe
-            dist/SHA256SUMS.txt
-) { throw 'hotfix_number deve ser um número inteiro positivo.' }
+            if ($env:HOTFIX_NUMBER -notmatch '^\d+$') { throw 'hotfix_number deve ser um número inteiro positivo.' }
             $releaseName = "$version - stable hotfix-$($env:HOTFIX_NUMBER)"
           }
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
@@ -111,12 +73,16 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: ChatGPT Media Downloader ${{ env.APP_VERSION }} — Stable
+          tag_name: \${{ env.RELEASE_TAG }}
+          target_commitish: \${{ github.sha }}
+          name: \${{ env.RELEASE_NAME }}
           body: |
-            Stable release ${{ env.APP_VERSION }}
+            \${{ env.RELEASE_NAME }}
 
-            **Recommended for users:** download `ChatGPTMediaDownloader.exe`.
-            `SHA256SUMS.txt` contains the SHA-256 checksum of the same build.
+            Esta é a versão oficial estável \${{ env.APP_VERSION }}. O título só inclui hotfix-N quando a entrada manual declara uma correção crítica urgente.
+
+            Recommended for users: download ChatGPTMediaDownloader.exe.
+            SHA256SUMS.txt contains the SHA-256 checksum of the same build.
             Source archives are intended for developers, auditing and compilation.
           make_latest: true
           overwrite_files: true
