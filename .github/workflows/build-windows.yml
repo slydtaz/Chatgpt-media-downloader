@@ -48,15 +48,7 @@ jobs:
           git fetch origin main
           $target = (git rev-parse origin/main).Trim()
           $mainConfig = (git show "$($target):app/config.py") -join "`n"
-          if ($mainConfig -notmatch '(?m)^VERSION = "5\.0\.6"
-        uses: actions/upload-artifact@v4
-        with:
-          name: ChatGPTMediaDownloader-Windows-x64
-          path: |
-            dist/ChatGPTMediaDownloader.exe
-            dist/SHA256SUMS.txt
-          if-no-files-found: error
-) {
+          if ($mainConfig -notmatch '(?m)^VERSION = "5\.0\.6"$') {
             throw "main nao esta na versao esperada 5.0.6; tag stable nao sera alterada."
           }
           Write-Host "Atualizando refs/tags/stable para main validada: $target"
