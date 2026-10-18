@@ -1,0 +1,72 @@
+name: Reportar um erro
+description: Relate uma falha reproduzível no aplicativo
+title: "[BUG] "
+labels:
+  - bug
+  - triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado pelo relato! Não inclua cookies, tokens, senhas, URLs privadas ou dados pessoais.
+  - type: input
+    id: version
+    attributes:
+      label: Versão do aplicativo
+      description: Ex. 4.9.0 ou hash/versão do build.
+      placeholder: 4.9.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Sistema operacional
+      options:
+        - Windows 11
+        - Windows 10
+        - Linux
+        - macOS
+        - Outro
+    validations:
+      required: true
+  - type: textarea
+    id: bug
+    attributes:
+      label: O que aconteceu?
+      description: Explique o comportamento observado.
+      placeholder: Descrição do problema
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Como reproduzir
+      description: Passos mínimos para reproduzir sem compartilhar informações privadas.
+      placeholder: |
+        1. Abrir ...
+        2. Selecionar ...
+        3. O erro aparece ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamento esperado
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log redigido ou captura
+      description: Remova tokens, cookies, URLs privadas e nomes pessoais antes de anexar.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmações
+      options:
+        - label: Pesquisei issues existentes e não encontrei duplicata.
+          required: true
+        - label: Removi dados secretos/pessoais do relato.
+          required: true

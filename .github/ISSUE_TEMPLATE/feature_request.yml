@@ -1,0 +1,38 @@
+name: Sugerir uma melhoria
+description: Sugira uma funcionalidade ou melhoria de usabilidade
+title: "[IDEIA] "
+labels:
+  - enhancement
+  - triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Explique a necessidade ou problema que a ideia resolveria.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Qual problema você quer resolver?
+      placeholder: Descreva o caso de uso.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Qual solução você imagina?
+      placeholder: Descreva o comportamento proposto.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmações
+      options:
+        - label: Verifiquei que não há uma sugestão equivalente aberta.
+          required: true

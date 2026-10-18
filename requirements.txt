@@ -1,0 +1,2 @@
+# No third-party Python packages are required for the core GUI.
+# Optional future drag-and-drop integration may use tkinterdnd2.
