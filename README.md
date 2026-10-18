@@ -9,7 +9,7 @@
 [Sugerir uma melhoria](https://github.com/slydtaz/chatgpt-media-downloader/issues/new?template=feature_request.yml)
 
 ![Sistema: Windows](https://img.shields.io/badge/SO-Windows-0078D6)
-![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.1.1-blue)
+![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.1.2-blue)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green)
 
 </div>
@@ -31,7 +31,7 @@ A interface usa navegação lateral e painéis de trabalho inspirados no design 
 3. Faça uma verificação com o Microsoft Defender ou seu antivírus antes de executar.
 4. Abra o EXE. Na primeira execução, o aplicativo prepara suas dependências de mídia (yt-dlp/FFmpeg) a partir de fontes configuradas no projeto.
 
-**Atenção para quem está na 5.0.1:** se o reparo automático fechar o programa sem reabri-lo e o aviso crítico voltar a aparecer, instale a nova versão manualmente uma vez a partir da [última release oficial](https://github.com/slydtaz/Chatgpt-media-downloader/releases/latest). O atualizador antigo não consegue garantir que o próprio auxiliar de troca terminou a operação; não repita o reparo indefinidamente.
+**Se o reparo continuar falhando:** baixe uma vez o EXE da [última Release oficial](https://github.com/slydtaz/Chatgpt-media-downloader/releases/latest) e execute-o. A partir desta versão, a instalação no Windows prioriza uma pasta por usuário para evitar bloqueios de escrita em Program Files, e a recuperação após erro crítico oferece reparar, desinstalar ou cancelar. Consulte [a documentação de identificação e assinatura do Windows](docs/windows-trust.md).
 
 ## 🧑‍💻 Código-fonte para desenvolvedores
 
@@ -49,7 +49,7 @@ O ZIP de código-fonte da Release e o botão **Code → Download ZIP** são dest
 - Oferece telas para configurações, dependências, atualizações, ajuda e diagnóstico.
 - Verifica novas versões no GitHub; antes de baixar, pede confirmação e oferece a opção de abrir o aplicativo após a troca (ativada por padrão).
 - Atualiza o executável inteiro com validação SHA-256, ou substitui o pacote-fonte completo; preserva preferências, ferramentas e mídias baixadas.
-- Inclui reparo da instalação a partir do pacote oficial do GitHub, também disponível quando a inicialização falha de forma crítica.
+- Inclui reparo da instalação a partir do pacote oficial do GitHub, também disponível quando a inicialização falha de forma crítica, com opção de desinstalar ou cancelar; inclui um desinstalador que valida a propriedade das pastas antes de removê-las.
 - Mantém logs, configuração e ferramentas baixadas em diretórios de dados do usuário, separados dos arquivos de mídia.
 
 Disponibilidade de qualidade, metadados e capas depende do site, do conteúdo, do formato e das dependências externas.
@@ -109,7 +109,7 @@ Contribuições são bem-vindas. Leia [`CONTRIBUTING.md`](CONTRIBUTING.md), abra
 
 ## 📚 Documentação
 
-- [Hotfix 5.1.1 — ciclo de reparo e reinicialização](docs/5.1.1_changes.md) · [Versão 5.1.0](docs/5.1.0_changes.md) · [Versão 5.0.6](docs/5.0.6_changes.md) · [Versão 5.0.5](docs/5.0.5_changes.md) · [Versão 5.0.4](docs/5.0.4_changes.md) · [Versão 5.0.3](docs/5.0.3_changes.md) · [Versão 5.0.2](docs/5.0.2_changes.md) · [Versão 5.0.1](docs/5.0.1_changes.md) · [Versão 5.0.0](docs/5.0.0_changes.md)
+- [Hotfix 5.1.2 — recuperação, desinstalação e identificação Windows](docs/5.1.2_changes.md) · [Identificação, SmartScreen e assinatura digital](docs/windows-trust.md) · [Hotfix 5.1.1 — ciclo de reparo e reinicialização](docs/5.1.1_changes.md) · [Versão 5.1.0](docs/5.1.0_changes.md) · [Versão 5.0.6](docs/5.0.6_changes.md) · [Versão 5.0.5](docs/5.0.5_changes.md) · [Versão 5.0.4](docs/5.0.4_changes.md) · [Versão 5.0.3](docs/5.0.3_changes.md) · [Versão 5.0.2](docs/5.0.2_changes.md) · [Versão 5.0.1](docs/5.0.1_changes.md) · [Versão 5.0.0](docs/5.0.0_changes.md)
 - [Matriz de funcionalidades legadas](docs/legacy_functionality_matrix.md)
 - [Modelo de segurança e limites](docs/security_model.md)
 - [Relatório de testes e limitações](docs/test_report.md)
