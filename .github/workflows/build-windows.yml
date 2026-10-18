@@ -1,6 +1,9 @@
 name: Build Windows EXE (manual)
 
 on:
+  push:
+    branches:
+      - test/windows-exe-build
   workflow_dispatch:
 
 permissions:
