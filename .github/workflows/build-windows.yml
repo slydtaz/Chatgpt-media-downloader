@@ -1,10 +1,13 @@
 name: Build Windows EXE (manual)
 
 on:
+  push:
+    branches:
+      - test/windows-exe-build-v506
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-windows:
@@ -31,6 +34,35 @@ jobs:
           if (!(Test-Path 'dist/ChatGPTMediaDownloader.exe')) { throw 'EXE was not created' }
           $hash = (Get-FileHash 'dist/ChatGPTMediaDownloader.exe' -Algorithm SHA256).Hash.ToLower()
           "$hash  ChatGPTMediaDownloader.exe" | Out-File -Encoding ascii 'dist/SHA256SUMS.txt'
+
+      - name: Promote stable tag after the fix is merged to main
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $pr = Invoke-RestMethod -Uri 'https://api.github.com/repos/slydtaz/Chatgpt-media-downloader/pulls/1' -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
+          if (-not $pr.merged_at) {
+            Write-Host 'PR #1 ainda nao foi integrada; tag stable continua intacta.'
+            exit 0
+          }
+          git fetch origin main
+          $target = (git rev-parse origin/main).Trim()
+          $mainConfig = (git show "$($target):app/config.py") -join "`n"
+          if ($mainConfig -notmatch '(?m)^VERSION = "5\.0\.6"
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChatGPTMediaDownloader-Windows-x64
+          path: |
+            dist/ChatGPTMediaDownloader.exe
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+) {
+            throw "main nao esta na versao esperada 5.0.6; tag stable nao sera alterada."
+          }
+          Write-Host "Atualizando refs/tags/stable para main validada: $target"
+          git tag -f stable $target
+          git push origin refs/tags/stable --force
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
