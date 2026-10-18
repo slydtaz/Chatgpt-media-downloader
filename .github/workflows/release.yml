@@ -45,7 +45,7 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:HOTFIX_NUMBER)) {
             $releaseName = "$version - stable"
           } else {
-            if ($env:HOTFIX_NUMBER -notmatch '^[1-9]\d* { throw 'hotfix_number deve ser um número inteiro positivo.' }
+            if ($env:HOTFIX_NUMBER -notmatch '^[1-9]\d*$') { throw 'hotfix_number deve ser um número inteiro positivo.' }
             $releaseName = "$version - stable (hotfix-$($env:HOTFIX_NUMBER))"
           }
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
