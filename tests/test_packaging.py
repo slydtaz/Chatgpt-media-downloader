@@ -63,7 +63,9 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("      - 'v*'", workflow)
         self.assertIn('git archive --format=zip', workflow)
         self.assertIn('$releaseName = "$version - stable"', workflow)
-        self.assertIn('$releaseName = "$version - stable (hotfix-$($env:HOTFIX_NUMBER))"', workflow)
+        self.assertIn("$commitSubject = git log -1 --format=%s", workflow)
+        self.assertIn("$commitSubject -match", workflow)
+        self.assertIn('$releaseName = "$version - stable (hotfix-$hotfixNumber)"', workflow)
 
 
 if __name__ == "__main__":
