@@ -6,10 +6,14 @@ import time
 import unittest
 from pathlib import Path
 
-from app.locking import CrossProcessFileLock, InstanceGuard
+from app.locking import CrossProcessFileLock, InstanceGuard, _pid_alive
 
 
 class CrossProcessLockTests(unittest.TestCase):
+    def test_pid_alive_reports_current_process(self):
+        self.assertTrue(_pid_alive(os.getpid()))
+        self.assertFalse(_pid_alive(-1))
+
     def test_second_lock_cannot_enter_until_first_releases(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "shared.lock"
@@ -43,7 +47,7 @@ class CrossProcessLockTests(unittest.TestCase):
             self.assertIn("atualização", normal.reason)
             parent.release()
             child = InstanceGuard(root)
-            self.assertTrue(child.acquire(handoff_token=token))
+            self.assertTrue(child.acquire(handoff_token=token), child.reason)
             self.assertFalse(child.handoff_path.exists())
             child.release()
 
