@@ -31,7 +31,9 @@ A interface usa navegação lateral e painéis de trabalho inspirados no design 
 3. Faça uma verificação com o Microsoft Defender ou seu antivírus antes de executar.
 4. Abra o EXE. Na primeira execução, o aplicativo prepara suas dependências de mídia (yt-dlp/FFmpeg) a partir de fontes configuradas no projeto.
 
-**Atenção para quem está na 5.0.1:** se o reparo automático fechar o programa sem reabri-lo e o aviso crítico voltar a aparecer, instale a nova versão manualmente uma vez a partir da [última release oficial](https://github.com/slydtaz/Chatgpt-media-downloader/releases/latest). O atualizador antigo não consegue garantir que o próprio auxiliar de troca terminou a operação; não repita o reparo indefinidamente.\n\n## 🧑‍💻 Código-fonte para desenvolvedores
+**Atenção para quem está na 5.0.1:** se o reparo automático fechar o programa sem reabri-lo e o aviso crítico voltar a aparecer, instale a nova versão manualmente uma vez a partir da [última release oficial](https://github.com/slydtaz/Chatgpt-media-downloader/releases/latest). O atualizador antigo não consegue garantir que o próprio auxiliar de troca terminou a operação; não repita o reparo indefinidamente.
+
+## 🧑‍💻 Código-fonte para desenvolvedores
 
 O ZIP de código-fonte da Release e o botão **Code → Download ZIP** são destinados a desenvolvedores, auditoria, testes e compilação. Usuários comuns não precisam baixar nem extrair o fonte: basta o EXE oficial. O GitHub também pode mostrar seus ZIP/TAR automáticos de código-fonte em cada Release.
 
