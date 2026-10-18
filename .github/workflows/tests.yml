@@ -32,13 +32,12 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: python -c "from pathlib import Path; import py_compile; files = list(Path('app').glob('*.py')) + [Path('packaged_entry.py')]; [py_compile.compile(str(p), doraise=True) for p in files]"
-      # unittest writes its progress report to stderr. The hosted Windows
-      # PowerShell runner treats that native stderr as a terminating error;
-      # use cmd.exe on Windows so the Python exit code determines step status.
-      - name: Run unit tests (Windows cmd)
+      # Capture Python stdout/stderr to files and return the actual unittest exit
+      # code. This avoids shell-wrapper handling of native stderr.
+      - name: Run unit tests (Windows)
         if: runner.os == 'Windows'
-        shell: cmd
-        run: python -m unittest discover -s tests -v
+        shell: pwsh
+        run: ./tests/run_unittest_ci.ps1
       - name: Run unit tests (Unix)
         if: runner.os != 'Windows'
         shell: bash

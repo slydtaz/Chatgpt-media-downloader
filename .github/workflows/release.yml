@@ -58,8 +58,8 @@ jobs:
         shell: cmd
         run: python -c "from pathlib import Path; import py_compile; files = list(Path('app').glob('*.py')) + [Path('packaged_entry.py')]; [py_compile.compile(str(p), doraise=True) for p in files]"
       - name: Run tests before packaging
-        shell: cmd
-        run: python -m unittest discover -s tests -v
+        shell: pwsh
+        run: ./tests/run_unittest_ci.ps1
       - name: Build EXE
         shell: cmd
         run: python -m PyInstaller --noconfirm --clean ChatGPTMediaDownloader.spec

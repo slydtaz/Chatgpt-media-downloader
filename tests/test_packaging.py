@@ -29,12 +29,13 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("runs-on: windows-latest", workflow)
         self.assertIn("dist/ChatGPTMediaDownloader.exe", workflow)
 
-    def test_windows_unittest_steps_use_cmd_and_unix_keeps_bash(self):
+    def test_windows_unittest_steps_capture_native_stderr_and_unix_keeps_bash(self):
         matrix = (ROOT / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8")
         self.assertIn("if: runner.os == 'Windows'", matrix)
         self.assertIn("shell: cmd", matrix)
         self.assertIn("Compile source (Windows cmd)", matrix)
-        self.assertIn("Run unit tests (Windows cmd)", matrix)
+        self.assertIn("Run unit tests (Windows)", matrix)
+        self.assertIn("run: ./tests/run_unittest_ci.ps1", matrix)
         self.assertIn("if: runner.os != 'Windows'", matrix)
         self.assertIn("shell: bash", matrix)
         self.assertIn("Compile source (Unix)", matrix)
@@ -48,9 +49,15 @@ class PackagingTests(unittest.TestCase):
             workflow = (ROOT / relative).read_text(encoding="utf-8")
             start = workflow.index(f"- name: {step_name}")
             block = workflow[start:start + 160]
-            self.assertIn("shell: cmd", block)
-            self.assertIn("python -m unittest discover -s tests -v", block)
+            self.assertIn("shell: pwsh", block)
+            self.assertIn("./tests/run_unittest_ci.ps1", block)
             self.assertNotIn("2>&1", block)
+
+        runner = (ROOT / "tests" / "run_unittest_ci.ps1").read_text(encoding="utf-8")
+        self.assertIn("Start-Process", runner)
+        self.assertIn("-RedirectStandardOutput", runner)
+        self.assertIn("-RedirectStandardError", runner)
+        self.assertIn("$process.ExitCode", runner)
 
 
     def test_versioned_release_title_and_hotfix_are_configured(self):
