@@ -93,6 +93,34 @@ def _pid_alive(pid: object) -> bool:
         value = int(pid)
         if value <= 0:
             return False
+        if os.name == "nt":
+            # os.kill(pid, 0) has inconsistent behavior across Windows Python
+            # versions. Query the process handle instead, especially for the
+            # short installer handoff window where a false negative can delete
+            # the one-time token before the new instance consumes it.
+            import ctypes
+            from ctypes import wintypes
+
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+            kernel32.OpenProcess.restype = wintypes.HANDLE
+            kernel32.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+            kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+            kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+            kernel32.CloseHandle.restype = wintypes.BOOL
+
+            handle = kernel32.OpenProcess(0x1000, False, value)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                # Access denied means the process exists but is not queryable.
+                return ctypes.get_last_error() == 5
+            try:
+                exit_code = wintypes.DWORD()
+                if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                    return False
+                return exit_code.value == 259  # STILL_ACTIVE
+            finally:
+                kernel32.CloseHandle(handle)
+
         os.kill(value, 0)
         return True
     except PermissionError:
