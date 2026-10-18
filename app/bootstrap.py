@@ -912,6 +912,15 @@ def _startup_recovery_choice(original_error: BaseException, *, repair_pending: b
     return result["choice"]
 
 
+def _startup_repair_target_root() -> Path:
+    """Choose a repair target the current user can replace without admin rights."""
+    from .config import IS_FROZEN
+    if IS_FROZEN and os.name == "nt":
+        install_id = ensure_install_id()
+        return per_user_install_root(install_id, detect_system())
+    return current_project_root()
+
+
 def _offer_startup_repair(original_error: BaseException) -> bool:
     """Offer repair, uninstall, or cancel when the application cannot start."""
     from .config import (
@@ -973,7 +982,7 @@ def _offer_startup_repair(original_error: BaseException) -> bool:
         from .app_update import check_repair_candidate, prepare_update, schedule_apply_update
 
         candidate = check_repair_candidate(VERSION, frozen=IS_FROZEN)
-        prepared = prepare_update(candidate, target_root=current_project_root())
+        prepared = prepare_update(candidate, target_root=_startup_repair_target_root())
         mark_startup_repair_pending(candidate.version)
         pending_written = True
         try:
