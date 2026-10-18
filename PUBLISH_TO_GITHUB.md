@@ -16,7 +16,7 @@ Extraia o ZIP, abra o terminal na pasta `chatgpt-media-downloader` e execute:
 ```bash
 git init -b main
 git add .
-git commit -m "chore: publish ChatGPT Media Downloader 5.0.4"
+git commit -m "chore: publish ChatGPT Media Downloader 5.0.5"
 git remote add origin https://github.com/slydtaz/chatgpt-media-downloader.git
 git push -u origin main
 ```
@@ -29,7 +29,7 @@ No GitHub, abra **Settings → Pages**, selecione **GitHub Actions** como origem
 
 ## 4. Publicar a Release stable
 
-Para esta configuração do projeto, a Release oficial pode usar a tag de alias `stable`, com o número real da versão no título. Exemplo: `ChatGPT Media Downloader 5.0.4 — Stable`. Consulte `PUBLISH_STABLE_RELEASE.md` para os passos completos. Anexe `ChatGPTMediaDownloader.exe` e `SHA256SUMS.txt` do mesmo build testado. O ZIP de fonte é para desenvolvedores; usuários finais devem baixar o EXE.
+Para esta configuração do projeto, a Release oficial pode usar a tag de alias `stable`, com o número real da versão no título. Exemplo: `ChatGPT Media Downloader 5.0.5 — Stable`. Consulte `PUBLISH_STABLE_RELEASE.md` para os passos completos. Anexe `ChatGPTMediaDownloader.exe` e `SHA256SUMS.txt` do mesmo build testado. O ZIP de fonte é para desenvolvedores; usuários finais devem baixar o EXE.
 
 ## Observação
 

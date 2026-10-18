@@ -1,6 +1,6 @@
 # Publicar a Release estável
 
-A Release oficial usa a tag `stable` e o título inclui a versão real, por exemplo `ChatGPT Media Downloader 5.0.4 — Stable`.
+A Release oficial usa a tag `stable` e o título inclui a versão real, por exemplo `ChatGPT Media Downloader 5.0.5 — Stable`.
 
 ## Publicação automatizada
 

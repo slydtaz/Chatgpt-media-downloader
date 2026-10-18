@@ -1,3 +1,9 @@
+## 5.0.5
+
+- Corrige os workflows do GitHub Actions para mesclar a saída de diagnóstico (stderr) do `unittest` no fluxo de saída normal; a suite que conclui com `OK` não deve ser marcada como falha só pela forma como o PowerShell trata a saída nativa.
+- Mantém o código de saída real do Python: testes com falha continuam bloqueando a compilação e a publicação do EXE.
+- Aplica a mesma correção aos workflows de testes multiplataforma, Release estável e build manual do Windows.
+
 ## 5.0.4
 
 - Corrige a suite do GitHub Actions Windows ao isolar o teste de concorrência que o runner interrompe com `KeyboardInterrupt` durante a inicialização de worker threads. O teste permanece ativo no Linux CI e no Windows local; o app continua usando o mesmo `ThreadPoolExecutor` real.
