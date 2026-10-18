@@ -221,6 +221,20 @@ class BootstrapTests(unittest.TestCase):
             choice.assert_called_once_with(error, repair_pending=True)
             self.assertTrue(marker.exists())
 
+    def test_startup_repair_uses_per_user_location_for_frozen_windows(self):
+        system = SystemInfo("Windows", "Windows x64", "x64", "Windows x64", "AMD64", 64)
+        target = Path("user-install-root")
+        with patch.object(bootstrap, "ensure_install_id", return_value="ABCDEF12-3456-7890-ABCD-1234567890AB"), \
+             patch.object(bootstrap, "detect_system", return_value=system), \
+             patch.object(bootstrap, "per_user_install_root", return_value=target) as per_user:
+            self.assertEqual(bootstrap._startup_repair_target_root(frozen=True, windows=True), target)
+            per_user.assert_called_once_with("ABCDEF12-3456-7890-ABCD-1234567890AB", system)
+
+    def test_source_startup_repair_stays_in_source_tree(self):
+        source_root = Path("source-checkout")
+        with patch.object(bootstrap, "current_project_root", return_value=source_root):
+            self.assertEqual(bootstrap._startup_repair_target_root(frozen=False, windows=True), source_root)
+
     def test_frozen_windows_install_prefers_writable_per_user_folder(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
