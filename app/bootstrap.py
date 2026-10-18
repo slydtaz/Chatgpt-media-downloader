@@ -178,7 +178,7 @@ def sync_portable_entrypoint(install_root: Path, install_id: str, running_execut
         marker["portable_entrypoint_sha256"] = _sha256_file(current)
         temp_marker = marker_path.with_name(f".{marker_path.name}.{uuid.uuid4().hex[:8]}.tmp")
         try:
-            temp_marker.write_text(json.dumps(marker, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+            temp_marker.write_text(json.dumps(marker, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             os.replace(temp_marker, marker_path)
         finally:
             temp_marker.unlink(missing_ok=True)
