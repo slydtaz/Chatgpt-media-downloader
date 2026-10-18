@@ -6,6 +6,7 @@ on:
       - main
     tags:
       - stable
+      - 'v*'
   workflow_dispatch:
     inputs:
       hotfix_number:
@@ -46,7 +47,7 @@ jobs:
             $releaseName = "$version - stable"
           } else {
             if ($env:HOTFIX_NUMBER -notmatch '^\d+$') { throw 'hotfix_number deve ser um número inteiro positivo.' }
-            $releaseName = "$version - stable hotfix-$($env:HOTFIX_NUMBER)"
+            $releaseName = "$version - stable (hotfix-$($env:HOTFIX_NUMBER))"
           }
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "RELEASE_TAG=$releaseTag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
@@ -58,11 +59,17 @@ jobs:
         shell: cmd
         run: python -c "from pathlib import Path; import py_compile; files = list(Path('app').glob('*.py')) + [Path('packaged_entry.py')]; [py_compile.compile(str(p), doraise=True) for p in files]"
       - name: Run tests before packaging
-        shell: pwsh
-        run: ./tests/run_unittest_ci.ps1
+        shell: cmd
+        run: python -m unittest discover -s tests -v
       - name: Build EXE
         shell: cmd
         run: python -m PyInstaller --noconfirm --clean ChatGPTMediaDownloader.spec
+      - name: Package versioned source ZIP
+        shell: pwsh
+        run: |
+          $sourceZip = "dist/ChatGPTMediaDownloader-$env:APP_VERSION-source.zip"
+          git archive --format=zip --output=$sourceZip $env:RELEASE_TAG
+          if (!(Test-Path $sourceZip)) { throw 'Source ZIP was not created' }
       - name: Validate output and create checksum
         shell: pwsh
         run: |
@@ -82,9 +89,10 @@ jobs:
 
             Recommended for users: download ChatGPTMediaDownloader.exe.
             SHA256SUMS.txt contains the SHA-256 checksum of the same build.
-            Source archives are intended for developers, auditing and compilation.
+            The attached source ZIP is intended for developers, auditing and compilation.
           make_latest: true
           overwrite_files: true
           files: |
             dist/ChatGPTMediaDownloader.exe
             dist/SHA256SUMS.txt
+            dist/*-source.zip
