@@ -58,18 +58,12 @@ class ConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
             marker = base / "temp" / "startup-repair-pending.json"
-            with patch.object(config, "APP_DATA", base), \\
-                 patch.object(config, "TOOLS_DIR", base / "tools"), \\
-                 patch.object(config, "TEMP_DIR", base / "temp"), \\
-                 patch.object(config, "LOG_DIR", base / "logs"), \\
-                 patch.object(config, "CONFIG_PATH", base / "config" / "config.json"), \\
-                 patch.object(config, "STARTUP_REPAIR_PENDING_PATH", marker):
+            with patch.object(config, "APP_DATA", base), patch.object(config, "TOOLS_DIR", base / "tools"), patch.object(config, "TEMP_DIR", base / "temp"), patch.object(config, "LOG_DIR", base / "logs"), patch.object(config, "CONFIG_PATH", base / "config" / "config.json"), patch.object(config, "STARTUP_REPAIR_PENDING_PATH", marker):
                 config.mark_startup_repair_pending("5.1.1")
                 self.assertTrue(config.startup_repair_is_pending())
                 self.assertEqual(json.loads(marker.read_text(encoding="utf-8"))["version"], "5.1.1")
                 self.assertTrue(config.clear_startup_repair_pending())
                 self.assertFalse(config.startup_repair_is_pending())
-
 
 if __name__ == "__main__":
     unittest.main()
