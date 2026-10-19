@@ -1578,6 +1578,246 @@ class SpaceUIPrototype:
     def _mock_action(self, label):
         self.toast(label + " — demonstração visual; nenhuma operação real foi iniciada.")
 
+    def _draw_thumbnail_placeholder(self, canvas, title="Prévia da mídia", seed=0):
+        """Draw a polished offline thumbnail placeholder until real artwork arrives."""
+        canvas.delete("thumbnail-art")
+        canvas.delete("thumbnail-image")
+        try:
+            width = max(self.scale_px(100), canvas.winfo_width(), int(canvas.cget("width")))
+            height = max(self.scale_px(56), canvas.winfo_height(), int(canvas.cget("height")))
+        except (tk.TclError, ValueError):
+            width, height = self.scale_px(220), self.scale_px(124)
+        palettes = (
+            ("#17112C", "#7542C8", "#56E6D6"),
+            ("#101D32", "#3379B9", "#A77AFF"),
+            ("#24132B", "#C04D9A", "#65D8E6"),
+            ("#11162A", "#4E58BA", "#70E8C0"),
+            ("#17142D", "#904DC6", "#FF93C8"),
+        )
+        base, bright, highlight = palettes[int(seed) % len(palettes)]
+        for index in range(28):
+            x0 = width * index / 28
+            x1 = width * (index + 1) / 28 + 1
+            color = blend_hex(base, bright, .07 + .38 * index / 27)
+            canvas.create_rectangle(x0, 0, x1, height, fill=color, outline="", tags="thumbnail-art")
+        canvas.create_oval(width*.58, -height*.45, width*1.08, height*.78,
+                           fill=blend_hex(base, highlight, .23), outline="", tags="thumbnail-art")
+        canvas.create_oval(width*.66, -height*.34, width*.99, height*.44,
+                           fill=blend_hex(base, highlight, .45), outline="", tags="thumbnail-art")
+        canvas.create_polygon(
+            0, height*.88, width*.22, height*.42, width*.39, height*.7,
+            width*.62, height*.31, width*.85, height*.76, width, height*.58,
+            width, height, 0, height,
+            fill=blend_hex(base, "#0B0D1C", .62), outline="", smooth=True,
+            splinesteps=20, tags="thumbnail-art",
+        )
+        canvas.create_line(width*.05,height*.86,width*.24,height*.49,width*.40,height*.70,
+                           fill=blend_hex(highlight,"#FFFFFF",.08),width=max(1,self.ui_scale),
+                           smooth=True,splinesteps=12,tags="thumbnail-art")
+        canvas.create_oval(width*.5-self.scale_px(17),height*.42-self.scale_px(17),
+                           width*.5+self.scale_px(17),height*.42+self.scale_px(17),
+                           fill=blend_hex(base, "#090B18", .15),outline=highlight,
+                           width=max(1,self.ui_scale),tags="thumbnail-art")
+        canvas.create_polygon(
+            width*.5-self.scale_px(4),height*.42-self.scale_px(8),
+            width*.5-self.scale_px(4),height*.42+self.scale_px(8),
+            width*.5+self.scale_px(9),height*.42,
+            fill="#F7F5FF",outline="",smooth=True,splinesteps=12,tags="thumbnail-art",
+        )
+        canvas.create_rectangle(0,height-self.scale_px(23),width,height,fill="#080A14",outline="",tags="thumbnail-art")
+        short_title = (str(title or "PRÉVIA DA MÍDIA").strip() or "PRÉVIA DA MÍDIA")
+        if len(short_title) > 34:
+            short_title = short_title[:31] + "…"
+        canvas.create_text(self.scale_px(9),height-self.scale_px(11),text=short_title,anchor="w",
+                           fill="#EAE7FF",font=("Segoe UI",max(7,self.scale_px(8)),"bold"),
+                           tags="thumbnail-art")
+        canvas.create_rectangle(1,1,width-1,height-1,outline=self.colors["border"],
+                                width=max(1,1.2*self.ui_scale),tags="thumbnail-art")
+
+    def _install_thumbnail(self, canvas, image_bytes):
+        """Show a fetched poster; Pillow is optional and Tk native formats are tried first."""
+        if not image_bytes:
+            return False
+        width = max(self.scale_px(80), canvas.winfo_width())
+        height = max(self.scale_px(45), canvas.winfo_height())
+        try:
+            try:
+                from PIL import Image, ImageOps, ImageTk
+            except ImportError:
+                photo = tk.PhotoImage(master=self.root, data=base64.b64encode(image_bytes).decode("ascii"))
+                factor = max(1, math.ceil(photo.width()/width), math.ceil(photo.height()/height))
+                if factor > 1:
+                    photo = photo.subsample(factor, factor)
+            else:
+                with Image.open(io.BytesIO(image_bytes)) as source:
+                    resampling = getattr(Image, "Resampling", Image)
+                    lanczos = getattr(resampling, "LANCZOS", 1)
+                    image = ImageOps.fit(source.convert("RGB"), (width, height), method=lanczos)
+                photo = ImageTk.PhotoImage(image, master=self.root)
+            canvas.delete("thumbnail-art")
+            canvas.delete("thumbnail-image")
+            canvas.create_image(width/2, height/2, image=photo, anchor="center", tags="thumbnail-image")
+            canvas._thumbnail_photo = photo
+            return True
+        except Exception:
+            return False
+
+    def _schedule_ui(self, callback):
+        try:
+            self.root.after(0, callback)
+        except tk.TclError:
+            pass
+
+    def preview_media_async(self):
+        """Resolve the current URL's title/thumbnail in a worker; no media files are downloaded."""
+        if self._preview_busy:
+            self.toast("Já existe uma prévia de mídia em andamento.")
+            return
+        url_widget = getattr(self, "media_url_entry", None)
+        url = url_widget.get().strip() if url_widget is not None else ""
+        if not url:
+            self.toast("Cole um link de vídeo ou áudio antes de pedir a prévia.")
+            return
+        self._preview_busy = True
+        self.media_preview_status.configure(text="Consultando informações e miniatura…")
+        self.media_preview_title.configure(text="Buscando mídia…")
+        self.media_preview_channel.configure(text="Apenas metadados; nenhum arquivo será baixado.")
+        self._draw_thumbnail_placeholder(self.media_preview_canvas, "BUSCANDO PRÉVIA", 0)
+
+        def worker():
+            try:
+                metadata = fetch_preview_metadata(url, playlist=False)
+                image_data = fetch_thumbnail_bytes(metadata.get("thumbnail_url"))
+                error = None
+            except Exception as exc:
+                metadata, image_data, error = None, None, str(exc)
+            self._schedule_ui(lambda: self._finish_media_preview(metadata, image_data, error))
+
+        threading.Thread(target=worker, name="ui-debug-media-preview", daemon=True).start()
+
+    def _finish_media_preview(self, metadata, image_data, error=None):
+        self._preview_busy = False
+        if error or not metadata:
+            self.current_media_metadata = None
+            self.media_preview_title.configure(text="Não foi possível gerar a prévia")
+            self.media_preview_channel.configure(text=(error or "A fonte não retornou metadados."))
+            self.media_preview_status.configure(text="Ajuste o link e tente novamente.")
+            self._draw_thumbnail_placeholder(self.media_preview_canvas, "PRÉVIA INDISPONÍVEL", 3)
+            self.toast("A prévia não foi gerada. Veja a mensagem no cartão de mídia.")
+            return
+        self.current_media_metadata = metadata
+        title = str(metadata.get("title") or "Mídia sem título")
+        channel = str(metadata.get("channel") or "Canal não informado")
+        duration = str(metadata.get("duration_text") or "Duração desconhecida")
+        self.media_preview_title.configure(text=title)
+        self.media_preview_channel.configure(text=f"{channel}  •  {duration}")
+        if image_data and self._install_thumbnail(self.media_preview_canvas, image_data):
+            self.media_preview_status.configure(text="Miniatura real carregada • não iniciou download.")
+        else:
+            self._draw_thumbnail_placeholder(self.media_preview_canvas, title, 1)
+            if image_data:
+                self.media_preview_status.configure(text="Metadados prontos. Instale Pillow para exibir miniaturas JPG/WebP.")
+            else:
+                self.media_preview_status.configure(text="Metadados prontos; a fonte não forneceu miniatura.")
+        self.toast("Prévia carregada. Nenhum arquivo de mídia foi baixado.")
+
+    def preview_playlist_async(self):
+        """Load playlist entries and thumbnail posters without downloading media."""
+        if self._playlist_preview_busy:
+            self.toast("Já existe uma análise de lista em andamento.")
+            return
+        url_widget = getattr(self, "media_url_entry", None)
+        url = url_widget.get().strip() if url_widget is not None else ""
+        if not url:
+            self.toast("Cole o link da playlist no campo da página Início primeiro.")
+            return
+        self._playlist_preview_busy = True
+        if self.playlist_count_label is not None:
+            self.playlist_count_label.configure(text="Analisando lista…")
+        self.toast("Lendo título, duração e miniaturas dos primeiros itens…")
+
+        def worker():
+            try:
+                metadata = fetch_preview_metadata(url, playlist=True, max_items=20)
+                items = metadata.get("items") or [metadata]
+                items = [dict(item) for item in items[:20]]
+                with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+                    futures = {
+                        pool.submit(fetch_thumbnail_bytes, item.get("thumbnail_url")): index
+                        for index, item in enumerate(items) if item.get("thumbnail_url")
+                    }
+                    for future, index in futures.items():
+                        try:
+                            items[index]["thumbnail_bytes"] = future.result(timeout=11)
+                        except Exception:
+                            items[index]["thumbnail_bytes"] = None
+                error = None
+            except Exception as exc:
+                metadata, items, error = None, [], str(exc)
+            self._schedule_ui(lambda: self._finish_playlist_preview(metadata, items, error))
+
+        threading.Thread(target=worker, name="ui-debug-playlist-preview", daemon=True).start()
+
+    def _finish_playlist_preview(self, metadata, items, error=None):
+        self._playlist_preview_busy = False
+        if error:
+            if self.playlist_count_label is not None:
+                self.playlist_count_label.configure(text="Não foi possível analisar")
+            self.toast(error)
+            return
+        self._render_playlist_rows(items)
+        selected = sum(1 for index, item in enumerate(items) if item.get("selected", index < 2))
+        if self.playlist_count_label is not None:
+            self.playlist_count_label.configure(text=f"{len(items)} itens detectados  •  {selected} selecionados")
+        if self.playlist_selection_label is not None:
+            self.playlist_selection_label.configure(text=f"{selected} itens selecionados")
+        self.toast(f"Prévia da lista pronta: {len(items)} itens. Nenhum arquivo foi baixado.")
+
+    def _render_playlist_rows(self, items):
+        if not hasattr(self, "playlist_rows_container"):
+            return
+        self._playlist_photo_refs.clear()
+        for child in self.playlist_rows_container.winfo_children():
+            child.destroy()
+        for index, source in enumerate(items):
+            item = dict(source)
+            title = str(item.get("title") or "Mídia sem título")
+            channel = str(item.get("channel") or "Canal não informado")
+            duration = str(item.get("duration_text") or "Duração desconhecida")
+            selected = bool(item.get("selected", index < 2))
+            row = self.frame(self.playlist_rows_container, "panel2",
+                             padx=self.scale_px(10), pady=self.scale_px(8))
+            row.pack(fill="x", pady=(0,self.scale_px(7)))
+            thumb = tk.Canvas(row, width=self.scale_px(124), height=self.scale_px(70),
+                              bg=self.colors["surface"], bd=0, highlightthickness=0, cursor="hand2")
+            thumb.pack(side="left", padx=(0,self.scale_px(12)))
+            self._draw_thumbnail_placeholder(thumb, title, index)
+            if item.get("thumbnail_bytes"):
+                self._install_thumbnail(thumb, item.get("thumbnail_bytes"))
+                if hasattr(thumb, "_thumbnail_photo"):
+                    self._playlist_photo_refs.append(thumb._thumbnail_photo)
+            info = self.frame(row, "panel2")
+            info.pack(side="left", fill="both", expand=True)
+            check = "☑" if selected else "□"
+            self.label(info, check + "  " + title, "accent2" if selected else "fg", "panel2", 10, "bold",
+                       wraplength=700).pack(anchor="w")
+            self.label(info, f"{channel}  •  {duration}", "muted", "panel2", 8).pack(anchor="w", pady=(self.scale_px(4),0))
+            status = str(item.get("status") or ("Disponível" if selected else "Ignorado"))
+            self.label(row,status,"accent2" if selected else "muted","panel2",8,"bold").pack(side="right",padx=(self.scale_px(10),0))
+            if item.get("url"):
+                thumb.bind("<Button-1>", lambda _event, media=item: self._select_playlist_item(media))
+                info.bind("<Button-1>", lambda _event, media=item: self._select_playlist_item(media))
+                row.configure(cursor="hand2")
+
+    def _select_playlist_item(self, item):
+        url = str(item.get("url") or "")
+        if url and hasattr(self, "media_url_entry"):
+            self.media_url_entry.delete(0, "end")
+            self.media_url_entry.insert(0, url)
+        image_data = item.get("thumbnail_bytes")
+        self.show_page("home")
+        self._finish_media_preview(dict(item), image_data, None)
+
     def _build_home(self, body):
         self._title_block(body, "Painel principal", "Seu espaço de mídia, em órbita.", "Uma interface de demonstração para revisar cartões, hierarquia, cantos, cores e navegação antes de mexer no aplicativo real.")
         hero = self.card(body, background_key="panel2", padding=22)
