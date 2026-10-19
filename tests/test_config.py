@@ -28,6 +28,8 @@ class ConfigTests(unittest.TestCase):
                 loaded = config.load_config()
                 self.assertEqual(loaded["auto_video_quality"], 1080)
                 self.assertEqual(loaded["audio_bitrate"], 192)
+                self.assertEqual(loaded["accent_color"], "#2563EB")
+                self.assertFalse(loaded["animations_enabled"])
 
 
     def test_theme_accent_and_density_are_validated_and_persisted(self):
@@ -50,8 +52,34 @@ class ConfigTests(unittest.TestCase):
                 config.save_config(chosen)
                 loaded = config.load_config()
                 self.assertEqual(loaded["theme"], "dark")
-                self.assertEqual(loaded["accent_color"], "#8B5CF6")
+                self.assertEqual(loaded["accent_color"], "#2563EB")
                 self.assertEqual(loaded["ui_density"], "comfortable")
+
+
+    def test_legacy_default_accent_is_migrated_but_custom_accent_is_preserved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            with patch.object(config, "APP_DATA", base), \
+                 patch.object(config, "TOOLS_DIR", base / "tools"), \
+                 patch.object(config, "TEMP_DIR", base / "temp"), \
+                 patch.object(config, "LOG_DIR", base / "logs"), \
+                 patch.object(config, "CONFIG_PATH", base / "config" / "config.json"):
+                config.CONFIG_PATH.parent.mkdir(parents=True)
+                config.CONFIG_PATH.write_text(json.dumps({
+                    "theme": "dark", "accent_color": "#8B5CF6",
+                    "animations_enabled": True
+                }), encoding="utf-8")
+                migrated = config.load_config()
+                self.assertEqual(migrated["accent_color"], "#2563EB")
+                self.assertEqual(migrated["settings_schema_version"], 2)
+                self.assertTrue(migrated["animations_enabled"])
+
+                config.CONFIG_PATH.write_text(json.dumps({
+                    "theme": "dark", "accent_color": "#12ABCD",
+                    "settings_schema_version": 1
+                }), encoding="utf-8")
+                custom = config.load_config()
+                self.assertEqual(custom["accent_color"], "#12ABCD")
 
 
     def test_startup_repair_marker_persists_until_gui_confirms_success(self):
