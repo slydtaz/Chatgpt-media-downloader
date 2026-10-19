@@ -509,7 +509,7 @@ class RoundedButton(tk.Canvas):
         self.current_scale = scale
         inner_w, inner_h = self.base_width*scale, self.base_height*scale
         left, top = (self.widget_width-inner_w)/2, (self.widget_height-inner_h)/2
-        radius = inner_h/2
+        radius = min(12.0, inner_h*0.34)
         for index,item in enumerate(self._gradient_ids):
             y = top + (index+0.5)*inner_h/self._gradient_rows
             local_y = round((index+0.5)*inner_h/self._gradient_rows)
