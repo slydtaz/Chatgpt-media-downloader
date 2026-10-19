@@ -301,5 +301,53 @@ class SafeArchiveTests(unittest.TestCase):
             self.assertFalse((root / "outside.txt").exists())
 
 
+
+class AssetDigestValidationTests(unittest.TestCase):
+    def make_release(self, digest, tag="v5.1.0"):
+        assets = [
+            {
+                "name": "ChatGPTMediaDownloader.exe",
+                "browser_download_url": f"https://github.com/slydtaz/Chatgpt-media-downloader/releases/download/{tag}/ChatGPTMediaDownloader.exe",
+                "size": 2048,
+                "state": "uploaded",
+                "digest": digest,
+            },
+            {
+                "name": "SHA256SUMS.txt",
+                "browser_download_url": f"https://github.com/slydtaz/Chatgpt-media-downloader/releases/download/{tag}/SHA256SUMS.txt",
+                "size": 90,
+                "state": "uploaded",
+            },
+        ]
+        return {
+            "tag_name": tag,
+            "name": f"ChatGPT Media Downloader {tag.lstrip('v')}",
+            "html_url": f"https://github.com/slydtaz/Chatgpt-media-downloader/releases/tag/{tag}",
+            "assets": assets,
+        }
+
+    def test_valid_sha256_asset_digest_is_preserved_for_update_verification(self):
+        digest = "a" * 64
+        update = _release_candidate("5.0.0", self.make_release("sha256:" + digest), frozen=True)
+        self.assertIsNotNone(update)
+        self.assertEqual(update.asset_sha256, digest)
+
+    def test_unsupported_digest_algorithm_blocks_update_instead_of_falling_back(self):
+        release = self.make_release("sha1:" + "b" * 40)
+        with self.assertRaises(AppUpdateError):
+            _release_candidate("5.0.0", release, frozen=True)
+
+    def test_malformed_sha256_digest_blocks_update_instead_of_falling_back(self):
+        release = self.make_release("sha256:not-a-valid-digest")
+        with self.assertRaises(AppUpdateError):
+            _release_candidate("5.0.0", release, frozen=True)
+
+    def test_repair_path_also_rejects_unsupported_digest_when_version_is_current(self):
+        release = self.make_release("sha1:" + "c" * 40)
+        with patch("app.app_update._request_json", return_value=release):
+            with self.assertRaises(AppUpdateError):
+                check_repair_candidate("5.1.0", frozen=True)
+
+
 if __name__ == "__main__":
     unittest.main()

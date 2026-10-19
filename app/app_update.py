@@ -156,6 +156,23 @@ def _asset(release: dict, name: str) -> Optional[dict]:
     return None
 
 
+def _asset_sha256_digest(asset: dict) -> str:
+    """Validate the GitHub asset digest; only genuinely absent digests may use the manifest fallback."""
+    raw_digest = asset.get("digest")
+    if raw_digest is None or raw_digest == "":
+        return ""
+    if not isinstance(raw_digest, str):
+        raise AppUpdateError(
+            "O GitHub retornou metadados de integridade inválidos; a atualização foi cancelada por segurança."
+        )
+    match = re.fullmatch(r"(?i)sha256:([0-9a-f]{64})", raw_digest.strip())
+    if not match:
+        raise AppUpdateError(
+            "O GitHub retornou um digest de asset malformado ou não suportado; a atualização foi cancelada por segurança."
+        )
+    return match.group(1).lower()
+
+
 def _source_version() -> str:
     text = _request_text(f"{RAW_ROOT}/app/config.py")
     match = re.search(r'^VERSION\s*=\s*[\"\']([^\"\']+)[\"\']', text, re.MULTILINE)
@@ -214,11 +231,7 @@ def _release_candidate(current: str, release: dict, *, frozen: bool) -> Optional
                 f"A Release {tag} não contém ChatGPTMediaDownloader.exe e SHA256SUMS.txt. "
                 "A atualização automática foi cancelada por segurança."
             )
-        digest = str(exe.get("digest") or "")
-        if digest.lower().startswith("sha256:"):
-            digest = digest.split(":", 1)[1].lower()
-        else:
-            digest = ""
+        digest = _asset_sha256_digest(exe)
         return AppUpdate(
             current, candidate_version, "executable", str(exe["browser_download_url"]), html_url,
             body or _source_notes(candidate_version), tag, str(sums["browser_download_url"]), digest,
@@ -289,8 +302,7 @@ def check_repair_candidate(current_version: str = VERSION, *, frozen: Optional[b
         sums = _asset(release, "SHA256SUMS.txt")
         if not tag or not release_version or not exe or not sums:
             raise AppUpdateError("A Release mais recente não contém uma versão válida, o executável e o hash SHA-256 exigidos para reparo.")
-        digest = str(exe.get("digest") or "")
-        digest = digest.split(":", 1)[1].lower() if digest.lower().startswith("sha256:") else ""
+        digest = _asset_sha256_digest(exe)
         return AppUpdate(current_version, release_version, "executable", exe["browser_download_url"],
                          str(release.get("html_url") or ""), str(release.get("body") or ""), tag,
                          sums["browser_download_url"], digest, int(exe.get("size") or 0),
