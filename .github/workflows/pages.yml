@@ -18,7 +18,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # GitHub Pages must first be enabled in repository Settings. Opt in only after that setup.
   deploy:
+    if: ${{ vars.PUBLISH_GITHUB_PAGES == 'true' }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
