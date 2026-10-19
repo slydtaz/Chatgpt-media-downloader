@@ -108,25 +108,30 @@ def main() -> int:
         root.geometry("%sx%s+4+4" % (width, height))
         root.update_idletasks()
 
-        # Capture the same full-screen orbital loader used at startup, then
-        # close it and capture the actual application pages underneath.
+        # Capture the exact fullscreen loader with the app's root hidden below it.
+        root.withdraw()
         splash = ui_debug.CosmicSplash(root, mode="startup", looping=False)
         app = ui_debug.SpaceUIPrototype(root, show_splash=False)
-        root.geometry("%sx%s+4+4" % (width, height))
-        root.deiconify()
-        root.lift()
-        try:
-            root.focus_force()
-        except tk.TclError:
-            pass
+        root.update_idletasks()
         root.update()
         time.sleep(0.25)
+        root.update()
+        splash.window.lift()
+        splash.window.attributes("-topmost", True)
+        splash.window.update_idletasks()
         root.update()
         loading = capture_window(splash.window)
         loading.save(output / "00-carregamento.png", format="PNG", optimize=True)
         captures.append(("Carregamento em tela cheia", loading))
         print("CAPTURED 00-carregamento.png %sx%s" % (loading.width, loading.height), flush=True)
         splash.close()
+        root.deiconify()
+        root.geometry("%sx%s+4+4" % (width, height))
+        root.lift()
+        try:
+            root.focus_force()
+        except tk.TclError:
+            pass
         root.update_idletasks()
         root.update()
         time.sleep(0.12)
