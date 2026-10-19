@@ -13,7 +13,7 @@ from typing import Any
 APP_NAME = "ChatGPT Media Downloader"
 PRODUCT_ID = "com.chatgpt.mediadownloader"
 VENDOR = "ChatGPT"
-VERSION = "5.1.5"
+VERSION = "5.2.0"
 
 
 def _windows_local_appdata() -> Path:
@@ -124,6 +124,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "theme": "dark",
     "accent_color": "#8B5CF6",
     "ui_density": "comfortable",
+    "developer_mode": False,
+    "animations_enabled": True,
     "playlist_strategy": "sequential",
     "playlist_parallelism": 3,
     "concurrent_fragments": 4,

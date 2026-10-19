@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import tkinter as tk
 from pathlib import Path
 from tkinter import colorchooser, filedialog, messagebox, ttk
+from tkinter import font as tkfont
 from typing import Callable
 
 from .config import (
@@ -29,12 +30,13 @@ from .app_update import (
     prepare_update, schedule_apply_update,
 )
 from .uninstall import launch_uninstaller
+from .brand_assets import load_brand_images
 
 
 PALETTES = {
-    "dark": {"bg":"#0A0F1B","panel":"#131B2C","panel2":"#1A2540","field":"#0D1525","fg":"#F3F6FC","muted":"#97A5BD","border":"#2B3852","accent":"#8B5CF6","accent2":"#A78BFA","accent_fg":"#FFFFFF","good":"#34D399","warn":"#FBBF24","bad":"#FB7185","button":"#202B43","button_hover":"#2D3A56","input_fg":"#F8FAFF"},
-    "light": {"bg":"#F3F5FA","panel":"#FFFFFF","panel2":"#E8EDF6","field":"#F8FAFD","fg":"#12182A","muted":"#63718A","border":"#D7DFEB","accent":"#6D5DFB","accent2":"#5848E8","accent_fg":"#FFFFFF","good":"#047857","warn":"#B45309","bad":"#BE123C","button":"#E8EDF6","button_hover":"#D7DFEB","input_fg":"#12182A"},
-    "oled": {"bg":"#000000","panel":"#08090D","panel2":"#111318","field":"#050608","fg":"#F5F7FA","muted":"#9AA1AD","border":"#24262D","accent":"#8B5CF6","accent2":"#A78BFA","accent_fg":"#FFFFFF","good":"#34D399","warn":"#FBBF24","bad":"#FB7185","button":"#191B21","button_hover":"#252831","input_fg":"#FFFFFF"},
+    "dark": {"bg":"#090B18","panel":"#121629","panel2":"#191F38","field":"#0C1122","fg":"#F4F5FF","muted":"#A0A9C3","border":"#2B3150","accent":"#8B5CF6","accent2":"#D946EF","accent_fg":"#FFFFFF","good":"#34D399","warn":"#FBBF24","bad":"#FB7185","button":"#202744","button_hover":"#30385D","input_fg":"#F8FAFF","space":"#60A5FA","pink":"#F472B6"},
+    "light": {"bg":"#F3F5FA","panel":"#FFFFFF","panel2":"#E8EDF6","field":"#F8FAFD","fg":"#12182A","muted":"#63718A","border":"#D7DFEB","accent":"#6D5DFB","accent2":"#EC4899","accent_fg":"#FFFFFF","good":"#047857","warn":"#B45309","bad":"#BE123C","button":"#E8EDF6","button_hover":"#D7DFEB","input_fg":"#12182A","space":"#3B82F6","pink":"#DB2777"},
+    "oled": {"bg":"#000000","panel":"#08090D","panel2":"#111318","field":"#050608","fg":"#F5F7FA","muted":"#9AA1AD","border":"#24262D","accent":"#8B5CF6","accent2":"#D946EF","accent_fg":"#FFFFFF","good":"#34D399","warn":"#FBBF24","bad":"#FB7185","button":"#191B21","button_hover":"#252831","input_fg":"#FFFFFF","space":"#60A5FA","pink":"#F472B6"},
 }
 
 
@@ -63,7 +65,7 @@ def _contrast_text(value: str) -> str:
 class Tooltip:
     _instances = weakref.WeakSet()
 
-    def __init__(self, widget: tk.Widget, text: str, delay_ms: int = 2000):
+    def __init__(self, widget: tk.Widget, text: str, delay_ms: int = 2000, click_to_pin: bool = True):
         self.widget = widget
         self._instances.add(self)
         self.text = text
@@ -73,7 +75,8 @@ class Tooltip:
         self._pinned = False
         widget.bind("<Enter>", self._enter, add="+")
         widget.bind("<Leave>", self._leave, add="+")
-        widget.bind("<Button-1>", self._toggle, add="+")
+        if click_to_pin:
+            widget.bind("<Button-1>", self._toggle, add="+")
 
     @classmethod
     def dismiss_all(cls):
@@ -159,9 +162,445 @@ class ScrollableFrame(ttk.Frame):
             pass
 
 
+def _rounded_polygon(x1: float, y1: float, x2: float, y2: float, radius: float) -> list[float]:
+    """Return points sampled along real quarter-circles for a crisp rounded rectangle."""
+    r = max(2.0, min(radius, (x2 - x1) / 2.0, (y2 - y1) / 2.0))
+    points: list[tuple[float, float]] = [(x1 + r, y1), (x2 - r, y1)]
+
+    def arc(cx: float, cy: float, start: float, end: float, increment: float = 6.0):
+        steps = max(1, math.ceil((end - start) / increment))
+        for step in range(1, steps + 1):
+            angle = math.radians(start + (end - start) * step / steps)
+            points.append((cx + r * math.cos(angle), cy + r * math.sin(angle)))
+
+    arc(x2 - r, y1 + r, -90, 0)
+    points.append((x2, y2 - r))
+    arc(x2 - r, y2 - r, 0, 90)
+    points.append((x1 + r, y2))
+    arc(x1 + r, y2 - r, 90, 180)
+    points.append((x1, y1 + r))
+    arc(x1 + r, y1 + r, 180, 270)
+    return [coordinate for point in points for coordinate in point]
+
+
+class RoundedCard(ttk.Frame):
+    """Rounded panel painted on a Canvas, keeping native ttk widgets for content."""
+
+    def __init__(self, parent, app, padding=16, surface="panel", backdrop="bg"):
+        super().__init__(parent, style="RoundedCard.TFrame", padding=padding)
+        self.app = app
+        self.surface_key = surface
+        self.backdrop_key = backdrop
+        self._canvas = tk.Canvas(self, highlightthickness=0, bd=0)
+        self._canvas._rounded_card_background = True
+        self._canvas.place(x=0, y=0, relwidth=1, relheight=1)
+        self.bind("<Configure>", lambda _event: self.redraw(), add="+")
+        self.app.rounded_cards.append(self)
+        self.redraw()
+
+    def redraw(self):
+        try:
+            width = max(2, self.winfo_width())
+            height = max(2, self.winfo_height())
+            colors = self.app.colors
+            backdrop = colors.get(self.backdrop_key, colors["bg"])
+            surface = colors.get(self.surface_key, colors["panel"])
+            self._canvas.configure(background=backdrop)
+            self._canvas.delete("surface")
+            if width > 8 and height > 8:
+                self._canvas.create_polygon(
+                    _rounded_polygon(1, 1, width - 2, height - 2, 30),
+                    smooth=False, splinesteps=14, fill=surface,
+                    outline=colors.get("border", surface), width=1, tags="surface",
+                )
+            self._canvas.lower()
+        except tk.TclError:
+            pass
+
+
+class IconNavButton(tk.Canvas):
+    """Compact launcher-style icon button with a soft active pill and hover scale."""
+
+    def __init__(self, parent, app, key: str, glyph: str, command: Callable[[], None]):
+        super().__init__(
+            parent, width=48, height=44, bd=0, highlightthickness=0,
+            background=app.colors["panel2"], cursor="hand2",
+        )
+        self.app = app
+        self.page_key = key
+        self.glyph = glyph
+        self.command = command
+        self.active = False
+        self.hovered = False
+        self._scale = 1.0
+        self._target_scale = 1.0
+        self._scale_job = None
+        self.bind("<Configure>", lambda _event: self._draw(), add="+")
+        self.bind("<Enter>", self._on_enter, add="+")
+        self.bind("<Leave>", self._on_leave, add="+")
+        self.bind("<Button-1>", self._on_click, add="+")
+        self._draw()
+
+    def set_active(self, active: bool):
+        self.active = bool(active)
+        self._target_scale = 1.06 if self.active else (1.03 if self.hovered else 1.0)
+        self._draw()
+        self._animate_scale()
+
+    def refresh_theme(self):
+        self.configure(background=self.app.colors["panel2"])
+        self._draw()
+
+    def _on_enter(self, _event=None):
+        self.hovered = True
+        self._target_scale = 1.10 if not self.active else 1.08
+        self._animate_scale()
+        self._draw()
+
+    def _on_leave(self, _event=None):
+        self.hovered = False
+        self._target_scale = 1.06 if self.active else 1.0
+        self._animate_scale()
+        self._draw()
+
+    def _on_click(self, _event=None):
+        self.command()
+
+    def _animate_scale(self):
+        if self._scale_job is not None:
+            try:
+                self.after_cancel(self._scale_job)
+            except tk.TclError:
+                pass
+        if not self.app.config.get("animations_enabled", True):
+            self._scale = self._target_scale
+            self._scale_job = None
+            self._draw()
+            return
+        delta = self._target_scale - self._scale
+        if abs(delta) < 0.012:
+            self._scale = self._target_scale
+            self._scale_job = None
+            self._draw()
+            return
+        self._scale += delta * 0.34
+        self._draw()
+        self._scale_job = self.after(16, self._animate_scale)
+
+    def _draw(self):
+        try:
+            self.delete("all")
+            width = max(48, self.winfo_width())
+            height = max(42, self.winfo_height())
+            colors = self.app.colors
+            panel = colors.get("panel2", "#191F38")
+            accent = colors.get("accent", "#8B5CF6")
+            if self.active or self.hovered:
+                fill = _blend_hex(accent, panel, 0.68 if self.active else 0.84)
+                self.create_polygon(
+                    _rounded_polygon(5, 2, width - 5, height - 2, 13),
+                    smooth=False, splinesteps=12, fill=fill, outline="",
+                )
+            if self.active:
+                self.create_polygon(
+                    _rounded_polygon(1, height / 2 - 8, 4, height / 2 + 8, 2),
+                    fill=colors.get("pink", accent), outline="", smooth=False,
+                )
+            icon_color = accent if self.active else (colors["fg"] if self.hovered else colors["muted"])
+            size = max(15, int(18 * self._scale))
+            self.create_text(
+                width / 2, height / 2, text=self.glyph,
+                fill=icon_color, font=("Segoe UI Symbol", size, "bold"),
+            )
+        except tk.TclError:
+            pass
+
+
+class RoundedGlowButton(tk.Canvas):
+    """A real clickable Canvas button with rounded pink-violet styling and native keyboard support."""
+
+    def __init__(self, parent, **kwargs):
+        self.app = getattr(parent.winfo_toplevel(), "_media_downloader_app", None)
+        if self.app is None:
+            raise RuntimeError("RoundedGlowButton requires a registered application window.")
+        self.text = str(kwargs.pop("text", ""))
+        self.command = kwargs.pop("command", None)
+        self.style_name = str(kwargs.pop("style", "Secondary.TButton"))
+        self._state = str(kwargs.pop("state", "normal"))
+        width_units = kwargs.pop("width", None)
+        kwargs.pop("padding", None)
+        kwargs.pop("default", None)
+        kwargs.pop("underline", None)
+        self._pressed = False
+        self._hovered = False
+        self._focused = False
+        self._textvariable = kwargs.pop("textvariable", None)
+        self._font = tkfont.Font(
+            root=self.app.root, family="Segoe UI",
+            size=9 if self.style_name == "Help.TButton" else 10,
+            weight="bold" if self.style_name == "Accent.TButton" else "normal",
+        )
+        self._height = 28 if self.style_name == "Help.TButton" else (40 if self.style_name == "Accent.TButton" else 36)
+        measured = self._font.measure(self.text)
+        if self._textvariable is not None:
+            try:
+                self.text = str(self._textvariable.get())
+                measured = self._font.measure(self.text)
+                self._textvariable.trace_add("write", self._text_changed)
+            except Exception:
+                self._textvariable = None
+        if width_units is not None and self.style_name == "Help.TButton":
+            self._natural_width = 38
+        else:
+            self._natural_width = max(48, min(420, measured + (28 if self.style_name != "Help.TButton" else 18)))
+        bg = self._parent_background(parent)
+        super().__init__(
+            parent, width=self._natural_width, height=self._height,
+            bd=0, borderwidth=0, highlightthickness=0, takefocus=1,
+            cursor="hand2" if self._state != "disabled" else "arrow",
+            background=bg,
+        )
+        self.bind("<Configure>", lambda _event: self._draw(), add="+")
+        self.bind("<Enter>", self._on_enter, add="+")
+        self.bind("<Leave>", self._on_leave, add="+")
+        self.bind("<ButtonPress-1>", self._on_press, add="+")
+        self.bind("<ButtonRelease-1>", self._on_release, add="+")
+        self.bind("<FocusIn>", self._on_focus_in, add="+")
+        self.bind("<FocusOut>", self._on_focus_out, add="+")
+        self.bind("<Return>", self._on_keyboard_activate, add="+")
+        self.bind("<space>", self._on_keyboard_activate, add="+")
+        self._draw()
+
+    def _text_changed(self, *_args):
+        try:
+            self.text = str(self._textvariable.get())
+        except Exception:
+            pass
+        self._recalculate_size()
+        self._draw()
+
+    def _parent_background(self, parent):
+        colors = self.app.colors
+        if isinstance(parent, RoundedCard):
+            return colors.get(parent.backdrop_key, colors["bg"])
+        try:
+            style_name = str(parent.cget("style") or "TFrame")
+        except (tk.TclError, TypeError):
+            style_name = "TFrame"
+        key = {
+            "Card.TFrame": "panel",
+            "Hero.TFrame": "panel2",
+            "Sidebar.TFrame": "panel2",
+            "Topbar.TFrame": "bg",
+            "RoundedCard.TFrame": "panel",
+        }.get(style_name, "bg")
+        return colors.get(key, colors["bg"])
+
+    def _recalculate_size(self):
+        measured = self._font.measure(self.text)
+        self._natural_width = max(48, min(420, measured + (28 if self.style_name != "Help.TButton" else 18)))
+        try:
+            tk.Canvas.configure(self, width=self._natural_width, height=self._height)
+        except tk.TclError:
+            pass
+
+    @staticmethod
+    def _span(y, top, bottom, left, right, radius):
+        center_y = (top + bottom) / 2.0
+        half_height = (bottom - top) / 2.0
+        depth = abs(y - center_y) - (half_height - radius)
+        inset = radius - math.sqrt(max(0.0, radius * radius - depth * depth)) if depth > 0 else 0.0
+        return math.ceil(left + inset), math.floor(right - inset)
+
+    def _palette(self):
+        c = self.app.colors
+        if self.style_name == "Accent.TButton":
+            edge = _blend_hex(c.get("pink", "#F472B6"), "#FFFFFF", 0.16)
+            top = _blend_hex(c.get("pink", "#F472B6"), c["accent"], 0.26)
+            bottom = _blend_hex(c["accent"], c.get("accent2", "#D946EF"), 0.32)
+            text_color = "#FFFFFF"
+        elif self.style_name == "Danger.TButton":
+            edge = _blend_hex(c["bad"], "#FFFFFF", 0.20)
+            top = _blend_hex(c["bad"], "#F43F5E", 0.35)
+            bottom = _blend_hex(c["bad"], c["accent"], 0.24)
+            text_color = "#FFFFFF"
+        elif self.style_name == "Help.TButton":
+            edge = c.get("accent2", c["accent"])
+            top = _blend_hex(c["accent"], c["panel2"], 0.18)
+            bottom = _blend_hex(c["accent"], c["panel"], 0.40)
+            text_color = "#FFFFFF"
+        else:
+            edge = _blend_hex(c.get("pink", "#F472B6"), c["accent"], 0.20)
+            top = _blend_hex(c["pink"] if "pink" in c else "#F472B6", c["accent"], 0.54)
+            bottom = _blend_hex(c["accent"], c["panel2"], 0.20)
+            text_color = "#FFFFFF"
+        if self._state == "disabled":
+            edge = _blend_hex(edge, c["muted"], 0.56)
+            top = _blend_hex(top, c["panel2"], 0.60)
+            bottom = _blend_hex(bottom, c["panel2"], 0.64)
+            text_color = _blend_hex(c["fg"], c["panel2"], 0.42)
+        elif self._pressed:
+            top = _blend_hex(top, "#000000", 0.16)
+            bottom = _blend_hex(bottom, "#000000", 0.20)
+        elif self._hovered or self._focused:
+            edge = _blend_hex(edge, "#FFFFFF", 0.28)
+            top = _blend_hex(top, "#FFFFFF", 0.12)
+            bottom = _blend_hex(bottom, "#D8B4FE", 0.12)
+        return edge, top, bottom, text_color
+
+    def _draw(self):
+        try:
+            width = max(self._natural_width, self.winfo_width(), 38)
+            height = max(self._height, self.winfo_height(), 26)
+            c = self.app.colors
+            bg = self._parent_background(self.master)
+            tk.Canvas.configure(
+                self, background=bg,
+                cursor="arrow" if self._state == "disabled" else "hand2",
+            )
+            self.delete("all")
+            edge, top, bottom, text_color = self._palette()
+            outer_radius = max(9, height / 2 - 1)
+            inner_radius = max(7, height / 2 - 3)
+            self.create_polygon(
+                _rounded_polygon(1.2, 1.2, width - 1.2, height - 1.2, outer_radius),
+                fill=_blend_hex(edge, bg, 0.24), outline=edge, width=1.4,
+            )
+            x0, y0, x1, y1 = 3, 3, width - 3, height - 3
+            self.create_polygon(
+                _rounded_polygon(x0, y0, x1, y1, inner_radius),
+                fill=bottom, outline="",
+            )
+            for y in range(y0 + 1, y1):
+                left, right = self._span(y, y0 + 1, y1 - 1, x0 + 1, x1 - 1, inner_radius - 1)
+                if left <= right:
+                    t = (y - y0) / max(1, y1 - y0)
+                    color = _blend_hex(top, bottom, max(0.0, min(1.0, t)))
+                    self.create_line(left, y, right, y, fill=color, width=1)
+            self.create_polygon(
+                _rounded_polygon(1.2, 1.2, width - 1.2, height - 1.2, outer_radius),
+                fill="", outline=edge, width=1.1,
+            )
+            self.create_line(
+                min(width / 2 - 10, 26), 4,
+                max(width / 2 + 10, width - 26), 4,
+                fill=_blend_hex(edge, "#FFFFFF", 0.34 if self._hovered else 0.16),
+                width=1,
+            )
+            self.create_text(
+                width / 2, height / 2 + (0.5 if self._pressed else 0),
+                text=self.text, fill=text_color, font=self._font,
+                anchor="center", width=max(10, width - 20),
+            )
+        except tk.TclError:
+            pass
+
+    def _on_enter(self, _event=None):
+        self._hovered = True
+        self._draw()
+
+    def _on_leave(self, _event=None):
+        self._hovered = False
+        self._pressed = False
+        self._draw()
+
+    def _on_press(self, _event=None):
+        if self._state == "disabled":
+            return "break"
+        self._pressed = True
+        self.focus_set()
+        self._draw()
+        return None
+
+    def _on_release(self, event=None):
+        should_invoke = self._pressed and self._state != "disabled"
+        if event is not None:
+            should_invoke = should_invoke and 0 <= event.x <= self.winfo_width() and 0 <= event.y <= self.winfo_height()
+        self._pressed = False
+        self._draw()
+        if should_invoke:
+            self.invoke()
+        return None
+
+    def _on_keyboard_activate(self, _event=None):
+        if self._state != "disabled":
+            self._pressed = True
+            self._draw()
+            self.after(75, self._release_keyboard)
+            self.invoke()
+        return "break"
+
+    def _release_keyboard(self):
+        self._pressed = False
+        self._draw()
+
+    def _on_focus_in(self, _event=None):
+        self._focused = True
+        self._draw()
+
+    def _on_focus_out(self, _event=None):
+        self._focused = False
+        self._draw()
+
+    def refresh_theme(self):
+        self._draw()
+
+    def invoke(self):
+        if self._state == "disabled" or not callable(self.command):
+            return None
+        return self.command()
+
+    def configure(self, cnf=None, **kwargs):
+        if isinstance(cnf, dict):
+            kwargs = {**cnf, **kwargs}
+        if not kwargs:
+            return tk.Canvas.configure(self)
+        if "text" in kwargs:
+            self.text = str(kwargs.pop("text"))
+            self._recalculate_size()
+        if "command" in kwargs:
+            self.command = kwargs.pop("command")
+        if "style" in kwargs:
+            self.style_name = str(kwargs.pop("style"))
+            self._font.configure(
+                size=9 if self.style_name == "Help.TButton" else 10,
+                weight="bold" if self.style_name == "Accent.TButton" else "normal",
+            )
+            self._height = 28 if self.style_name == "Help.TButton" else (40 if self.style_name == "Accent.TButton" else 36)
+            self._recalculate_size()
+        if "state" in kwargs:
+            self._state = str(kwargs.pop("state"))
+            self._pressed = False
+        if "width" in kwargs:
+            value = kwargs.pop("width")
+            if isinstance(value, (int, float)) and self.style_name == "Help.TButton":
+                self._natural_width = max(34, int(value) * 10 + 18)
+                tk.Canvas.configure(self, width=self._natural_width)
+        if "padding" in kwargs:
+            kwargs.pop("padding")
+        allowed = {k: v for k, v in kwargs.items() if k in {"background", "bg", "cursor", "takefocus", "height", "highlightthickness", "highlightbackground", "highlightcolor"}}
+        if allowed:
+            tk.Canvas.configure(self, **allowed)
+        self._draw()
+
+    config = configure
+
+    def cget(self, key):
+        if key == "text":
+            return self.text
+        if key == "state":
+            return self._state
+        if key == "style":
+            return self.style_name
+        if key == "command":
+            return self.command
+        return tk.Canvas.cget(self, key)
+
+
 class MediaDownloaderApp:
     def __init__(self, root: tk.Tk):
         self.root = root
+        self.root._media_downloader_app = self
         self.system = detect_system()
         self.config = load_config()
         self.install_id = ensure_install_id()
@@ -178,6 +617,7 @@ class MediaDownloaderApp:
             self.style.theme_use("clam")
         except tk.TclError:
             pass
+        self.brand_images = load_brand_images(root)
         self.palette_name = "light"
         self.colors: dict[str, str] = {}
         self._apply_theme(self.config.get("theme", "system"))
@@ -193,7 +633,13 @@ class MediaDownloaderApp:
         self._hero_visual_phase = 0.0
         self.page_frames: dict[str, ttk.Frame] = {}
         self.settings_vars: dict[str, tk.StringVar] = {}
-        self.nav_buttons: dict[str, ttk.Button] = {}
+        self.nav_buttons: dict[str, tk.Widget] = {}
+        self.rounded_cards: list[RoundedCard] = []
+        self.log_history: list[tuple[str, bool]] = []
+        self._developer_mode_active = bool(self.config.get("developer_mode", False))
+        self.developer_mode_var = tk.BooleanVar(value=self._developer_mode_active)
+        self.animations_enabled_var = tk.BooleanVar(value=bool(self.config.get("animations_enabled", True)))
+        self.log_mode_var = tk.StringVar(value="CONSOLE TÉCNICO" if self._developer_mode_active else "RESUMO DE ATIVIDADE")
         self.dep_infos = {}
         self._dependencies_checked = False
         self._dependency_refresh_thread: threading.Thread | None = None
@@ -251,7 +697,7 @@ class MediaDownloaderApp:
         self.root.report_callback_exception = self._report_callback_exception
         self._poll_queue()
         # Small GPU-free Canvas animation inspired by SKlauncher 4.0's cosmic theme.
-        self.root.after(180, self._animate_hero_visual)
+        self._hero_animation_job = self.root.after(180, self._animate_hero_visual)
         self.root.after(2200, self._maybe_start_update_check)
 
     # ---------- Theme ----------
@@ -277,11 +723,12 @@ class MediaDownloaderApp:
         self.root.configure(bg=c["bg"])
         self.style.configure(".",font=("Segoe UI",9 if compact else 10),background=c["bg"],foreground=c["fg"])
         self.style.configure("TFrame",background=c["bg"])
-        self.style.configure("Card.TFrame",background=c["panel"],bordercolor=c["border"],relief="solid",borderwidth=1)
-        self.style.configure("Hero.TFrame",background=c["panel2"],bordercolor=c["border"],relief="solid",borderwidth=1)
-        self.style.configure("Sidebar.TFrame",background=c["panel2"])
+        self.style.configure("Card.TFrame",background=c["panel"],bordercolor=c["panel"],relief="flat",borderwidth=0)
+        self.style.configure("Hero.TFrame",background=c["panel2"],bordercolor=c["panel2"],relief="flat",borderwidth=0)
+        self.style.configure("Sidebar.TFrame",background=c["panel2"],bordercolor=c["border"],relief="flat",borderwidth=0)
+        self.style.configure("RoundedCard.TFrame",background=c["bg"],borderwidth=0,relief="flat")
         self.style.configure("Topbar.TFrame",background=c["bg"])
-        self.style.configure("MiniCard.TFrame",background=c["panel2"],bordercolor=c["border"],relief="solid",borderwidth=1)
+        self.style.configure("MiniCard.TFrame",background=c["panel2"],bordercolor=c["panel2"],relief="flat",borderwidth=0)
         self.style.configure("TLabel",background=c["bg"],foreground=c["fg"])
         self.style.configure("Muted.TLabel",background=c["bg"],foreground=c["muted"])
         self.style.configure("Card.TLabel",background=c["panel"],foreground=c["fg"])
@@ -331,9 +778,16 @@ class MediaDownloaderApp:
             self.hero_accent_bar.configure(bg=c["accent"])
         def tint(widget):
             for child in widget.winfo_children():
-                if isinstance(child,tk.Canvas):
+                if isinstance(child, tk.Canvas):
                     try:
-                        child.configure(background=c["bg"],highlightbackground=c["bg"],highlightcolor=c["bg"])
+                        if getattr(child, "_rounded_card_background", False):
+                            child.master.redraw()
+                        elif hasattr(child, "refresh_theme"):
+                            child.refresh_theme()
+                        elif child is getattr(self, "hero_visual", None):
+                            child.configure(background=c["panel2"], highlightbackground=c["panel2"], highlightcolor=c["panel2"])
+                        else:
+                            child.configure(background=c["bg"], highlightbackground=c["bg"], highlightcolor=c["bg"])
                     except tk.TclError:
                         pass
                 tint(child)
@@ -344,42 +798,38 @@ class MediaDownloaderApp:
 
     # ---------- Shell ----------
     def _build_shell(self):
-        outer=ttk.Frame(self.root,padding=14)
+        outer=ttk.Frame(self.root,padding=13)
         outer.pack(fill="both",expand=True)
         self.shell=outer
-        sidebar=ttk.Frame(outer,style="Sidebar.TFrame",padding=(15,17,15,14),width=238)
-        sidebar.pack(side="left",fill="y",padx=(0,14))
+        sidebar=ttk.Frame(outer,style="Sidebar.TFrame",padding=(8,13,8,12),width=76)
+        sidebar.pack(side="left",fill="y",padx=(0,12))
         sidebar.pack_propagate(False)
         self.sidebar=sidebar
         brand=ttk.Frame(sidebar,style="Sidebar.TFrame")
-        brand.pack(fill="x",pady=(0,24))
-        mark=tk.Label(brand,text="↧",bg=self.colors["accent"],fg=self.colors["accent_fg"],font=("Segoe UI",21,"bold"),width=2,height=1,padx=5,pady=3)
-        mark.pack(side="left",padx=(0,10))
-        titles=ttk.Frame(brand,style="Sidebar.TFrame")
-        titles.pack(side="left",fill="x",expand=True)
-        ttk.Label(titles,text="MEDIA STUDIO",style="SidebarTitle.TLabel").pack(anchor="w")
-        ttk.Label(titles,text="CHATGPT DOWNLOADER",style="SidebarMuted.TLabel").pack(anchor="w",pady=(1,0))
-        ttk.Label(sidebar,text="ESPAÇO DE TRABALHO",style="Eyebrow.TLabel").pack(anchor="w",padx=(7,0),pady=(0,7))
-        for key,text,tip in [
-            ("home","⌂   Início","Baixe vídeo ou áudio, acompanhe o progresso e consulte as mensagens."),
-            ("playlist","▤   Playlists","Analise uma playlist, escolha itens e personalize formato e qualidade por mídia."),
-            ("settings","⚙   Aparência e ajustes","Personalize cores, tema, densidade, pastas, qualidade e desempenho."),
-            ("dependencies","◈   Dependências","Confira e configure yt-dlp, FFmpeg e FFprobe."),
-            ("updates","⟳   Atualizações","Confira versões, atualize o aplicativo ou restaure os arquivos oficiais."),
-            ("help","?   Central de ajuda","Guias rápidos, opções de qualidade, playlists e segurança."),
-            ("developer","⌘   Diagnóstico","Versão, caminhos, dados técnicos e desinstalação."),
+        brand.pack(fill="x",pady=(0,20))
+        mark=tk.Label(brand,image=self.brand_images["logo"],bg=self.colors["panel2"],bd=0,highlightthickness=0,padx=0,pady=0)
+        mark.pack(anchor="center")
+        ttk.Separator(sidebar).pack(fill="x",pady=(0,12))
+        for key,glyph,label,tip in [
+            ("home","⌂","Início","Baixe vídeo ou áudio, acompanhe o progresso e consulte o resumo da atividade."),
+            ("playlist","▤","Playlists","Analise uma playlist, escolha itens e personalize formato e qualidade por mídia."),
+            ("settings","⚙","Aparência","Personalize as cores espaciais, o tema, as pastas e o desempenho."),
+            ("dependencies","◈","Dependências","Confira e configure yt-dlp, FFmpeg e FFprobe."),
+            ("updates","⟳","Atualizações","Confira versões, atualize o aplicativo ou restaure arquivos oficiais."),
+            ("help","?","Ajuda","Guias rápidos, opções de qualidade, playlists e segurança."),
+            ("developer","⌘","Diagnóstico","Versão, caminhos, dados técnicos e desinstalação."),
         ]:
-            button=ttk.Button(sidebar,text=text,style="Nav.TButton",command=lambda k=key:self.show_page(k))
-            button.pack(fill="x",pady=3)
+            button=IconNavButton(sidebar,self,key,glyph,lambda k=key:self.show_page(k))
+            button.pack(anchor="center",pady=3)
             self.nav_buttons[key]=button
-            Tooltip(button,tip)
+            Tooltip(button,f"{label}\n{tip}",delay_ms=450,click_to_pin=False)
         spacer=ttk.Frame(sidebar,style="Sidebar.TFrame")
         spacer.pack(fill="both",expand=True)
-        ttk.Separator(sidebar).pack(fill="x",pady=(14,12))
-        self.dep_badge=tk.Label(sidebar,text="●  verificando dependências",bg=self.colors["panel2"],fg=self.colors["muted"],anchor="w",font=("Segoe UI",9,"bold"),padx=7,pady=7)
-        self.dep_badge.pack(fill="x",pady=(0,8))
-        ttk.Label(sidebar,text=self.system.architecture_label,style="SidebarMuted.TLabel",wraplength=198).pack(anchor="w",padx=7)
-        ttk.Label(sidebar,text=f"Versão {VERSION}",style="SidebarMuted.TLabel").pack(anchor="w",padx=7,pady=(3,0))
+        ttk.Separator(sidebar).pack(fill="x",pady=(12,9))
+        self.dep_badge=tk.Label(sidebar,text="●",bg=self.colors["panel2"],fg=self.colors["muted"],anchor="center",font=("Segoe UI",10,"bold"),padx=7,pady=7)
+        self.dep_badge.pack(fill="x",pady=(0,5))
+        Tooltip(self.dep_badge,"Veja a aba Dependências para conferir o estado atual.",delay_ms=450,click_to_pin=False)
+        ttk.Label(sidebar,text=f"v{VERSION}",style="SidebarMuted.TLabel",anchor="center",font=("Segoe UI",7)).pack(fill="x")
         content_wrap=ttk.Frame(outer)
         content_wrap.pack(side="left",fill="both",expand=True)
         self.content_wrap=content_wrap
@@ -395,17 +845,17 @@ class MediaDownloaderApp:
         header_actions=ttk.Frame(header,style="Topbar.TFrame")
         header_actions.pack(side="right",anchor="n",padx=(10,0),pady=(9,0))
         ttk.Label(header_actions,text=f"v{VERSION}",style="SectionBadge.TLabel").pack(side="left",padx=(0,8))
-        self.header_update_btn=ttk.Button(header_actions,text="Atualizações  ↗",style="Secondary.TButton",command=lambda:self.show_page("updates"))
+        self.header_update_btn=RoundedGlowButton(header_actions,text="Atualizações  ↗",style="Secondary.TButton",command=lambda:self.show_page("updates"))
         self.header_update_btn.pack(side="left")
         self.pages_area=ttk.Frame(content_wrap)
         self.pages_area.pack(fill="both",expand=True)
     def _card(self, parent, padding=16):
-        return ttk.Frame(parent, style="Card.TFrame", padding=padding)
+        return RoundedCard(parent, self, padding=padding)
 
     def _build_home(self):
         frame=ttk.Frame(self.pages_area)
         self.page_frames["home"]=frame
-        hero=ttk.Frame(frame,style="Hero.TFrame",padding=(22,20))
+        hero=RoundedCard(frame,self,padding=(22,20),surface="panel2")
         hero.pack(fill="x",pady=(0,13))
         self.hero_accent_bar=tk.Frame(hero,bg=self.colors["accent"],width=4,bd=0,highlightthickness=0)
         self.hero_accent_bar.pack(side="left",fill="y",padx=(0,18))
@@ -446,9 +896,9 @@ class MediaDownloaderApp:
         self._sync_quality()
         buttons=ttk.Frame(controls,style="Hero.TFrame")
         buttons.pack(side="right",anchor="s",padx=(12,0))
-        self.download_btn=ttk.Button(buttons,text="↓  BAIXAR AGORA",style="Accent.TButton",command=self.start_download)
+        self.download_btn=RoundedGlowButton(buttons,text="↓  BAIXAR AGORA",style="Accent.TButton",command=self.start_download)
         self.download_btn.pack(side="right")
-        self.analyze_playlist_btn=ttk.Button(buttons,text="Analisar playlist",style="Secondary.TButton",command=self._start_playlist_analysis)
+        self.analyze_playlist_btn=RoundedGlowButton(buttons,text="Analisar playlist",style="Secondary.TButton",command=self._start_playlist_analysis)
         self.analyze_playlist_btn.pack(side="right",padx=(0,8))
         progress_card=self._card(frame,16)
         progress_card.pack(fill="x",pady=(0,13))
@@ -462,7 +912,7 @@ class MediaDownloaderApp:
         metrics=ttk.Frame(progress_card,style="Card.TFrame")
         metrics.pack(fill="x")
         for label,var in (("STATUS",self.status_var),("VELOCIDADE",self.speed_var),("TAMANHO",self.size_var),("TEMPO RESTANTE",self.eta_var),("ETAPA",self.stage_var)):
-            box=ttk.Frame(metrics,style="MiniCard.TFrame",padding=(10,9))
+            box=RoundedCard(metrics,self,padding=(10,9),surface="panel2",backdrop="panel")
             box.pack(side="left",fill="both",expand=True,padx=(0,7))
             ttk.Label(box,text=label,style="MiniLabel.TLabel").pack(anchor="w")
             ttk.Label(box,textvariable=var,style="MiniValue.TLabel",wraplength=140).pack(anchor="w",pady=(4,0))
@@ -470,9 +920,9 @@ class MediaDownloaderApp:
         log_card.pack(fill="both",expand=True)
         top_log=ttk.Frame(log_card,style="Card.TFrame")
         top_log.pack(fill="x")
-        ttk.Label(top_log,text="Atividade recente",style="CardTitle.TLabel").pack(side="left")
-        ttk.Label(top_log,text="LOG LOCAL",style="Muted.TLabel",font=("Segoe UI",8,"bold")).pack(side="left",padx=(9,0),pady=(2,0))
-        ttk.Button(top_log,text="Limpar",style="Secondary.TButton",command=self._clear_log).pack(side="right")
+        ttk.Label(top_log,text="Console de atividade",style="CardTitle.TLabel").pack(side="left")
+        ttk.Label(top_log,textvariable=self.log_mode_var,style="Muted.TLabel",font=("Segoe UI",8,"bold")).pack(side="left",padx=(9,0),pady=(2,0))
+        RoundedGlowButton(top_log,text="Limpar",style="Secondary.TButton",command=self._clear_log).pack(side="right")
         log_frame=ttk.Frame(log_card,style="Card.TFrame")
         log_frame.pack(fill="both",expand=True,pady=(9,0))
         self.log_text=tk.Text(log_frame,bg=self.colors["field"],fg=self.colors["fg"],insertbackground=self.colors["fg"],selectbackground=self.colors["accent"],selectforeground=self.colors["accent_fg"],relief="flat",wrap="word",font=("Cascadia Code",9),padx=12,pady=10,borderwidth=0)
@@ -483,7 +933,7 @@ class MediaDownloaderApp:
         footer=ttk.Frame(frame)
         footer.pack(fill="x",pady=(9,0))
         ttk.Label(footer,text="Dica: use o gerenciador de playlists para escolher itens individualmente.",style="Muted.TLabel").pack(side="left")
-        self.cancel_btn=ttk.Button(footer,text="Cancelar download",style="Secondary.TButton",command=self.cancel_download,state="disabled")
+        self.cancel_btn=RoundedGlowButton(footer,text="Cancelar download",style="Secondary.TButton",command=self.cancel_download,state="disabled")
         self.cancel_btn.pack(side="right")
     @staticmethod
     def _strategy_label(value: str) -> str:
@@ -520,10 +970,10 @@ class MediaDownloaderApp:
         search = ttk.Entry(toolbar, textvariable=self.playlist_search_var, width=24)
         search.pack(side="left", padx=(7, 10))
         self.playlist_search_var.trace_add("write", lambda *_: self._render_playlist_rows())
-        ttk.Button(toolbar, text="Marcar visíveis", style="Secondary.TButton", command=lambda: self._set_visible_playlist_included(True)).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Desmarcar visíveis", style="Secondary.TButton", command=lambda: self._set_visible_playlist_included(False)).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Inverter", style="Secondary.TButton", command=self._invert_visible_playlist_items).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Analisar novamente", style="Secondary.TButton", command=self._reanalyze_playlist).pack(side="right")
+        RoundedGlowButton(toolbar, text="Marcar visíveis", style="Secondary.TButton", command=lambda: self._set_visible_playlist_included(True)).pack(side="left", padx=2)
+        RoundedGlowButton(toolbar, text="Desmarcar visíveis", style="Secondary.TButton", command=lambda: self._set_visible_playlist_included(False)).pack(side="left", padx=2)
+        RoundedGlowButton(toolbar, text="Inverter", style="Secondary.TButton", command=self._invert_visible_playlist_items).pack(side="left", padx=2)
+        RoundedGlowButton(toolbar, text="Analisar novamente", style="Secondary.TButton", command=self._reanalyze_playlist).pack(side="right")
 
         table_card = self._card(frame, 8)
         table_card.pack(fill="both", expand=True, pady=(0, 10))
@@ -561,7 +1011,7 @@ class MediaDownloaderApp:
         self.playlist_editor_quality = ttk.Combobox(controls, textvariable=self.playlist_editor_quality_var, state="readonly", width=15)
         self.playlist_editor_quality.pack(side="left", padx=(5, 12))
         self._sync_playlist_editor_quality()
-        ttk.Button(controls, text="Aplicar aos selecionados", style="Secondary.TButton", command=self._apply_playlist_item_settings).pack(side="right")
+        RoundedGlowButton(controls, text="Aplicar aos selecionados", style="Secondary.TButton", command=self._apply_playlist_item_settings).pack(side="right")
 
         bottom = ttk.Frame(frame)
         bottom.pack(fill="x")
@@ -573,7 +1023,7 @@ class MediaDownloaderApp:
         ttk.Label(strategy, text="Simultâneos", style="Muted.TLabel").pack(side="left")
         self.playlist_parallelism_combo = ttk.Combobox(strategy, textvariable=self.playlist_parallelism_var, values=["2", "3", "4", "6"], state="readonly", width=4)
         self.playlist_parallelism_combo.pack(side="left", padx=6)
-        ttk.Button(bottom, text="BAIXAR ITENS MARCADOS", style="Accent.TButton", command=self._start_selected_playlist_download).pack(side="right")
+        RoundedGlowButton(bottom, text="BAIXAR ITENS MARCADOS", style="Accent.TButton", command=self._start_selected_playlist_download).pack(side="right")
         self._render_playlist_rows()
 
     # ---------- Settings ----------
@@ -583,7 +1033,7 @@ class MediaDownloaderApp:
         head = ttk.Frame(card, style="Card.TFrame")
         head.pack(fill="x")
         ttk.Label(head, text=label, style="CardTitle.TLabel").pack(side="left")
-        q = ttk.Button(head, text="?", style="Help.TButton")
+        q = RoundedGlowButton(head, text="?", style="Help.TButton")
         q.pack(side="left", padx=(7, 0))
         Tooltip(q, description)
         self.settings_vars[key] = tk.StringVar(value=str(self.config.get(key, "")))
@@ -602,9 +1052,9 @@ class MediaDownloaderApp:
                     value = filedialog.askopenfilename(parent=self.root, filetypes=[("Executáveis", "*.exe" if os.name == "nt" else "*"), ("Todos os arquivos", "*.*")])
                 if value:
                     self.settings_vars[key].set(value)
-            ttk.Button(actions, text="Selecionar pasta" if browse == "dir" else "Selecionar arquivo", style="Secondary.TButton", command=choose).pack(side="left")
-        ttk.Button(actions, text="↺ Padrão", style="Secondary.TButton", command=lambda k=key: self.reset_setting(k, "default")).pack(side="right", padx=(7, 0))
-        ttk.Button(actions, text="⏮ Inicial", style="Secondary.TButton", command=lambda k=key: self.reset_setting(k, "baseline")).pack(side="right")
+            RoundedGlowButton(actions, text="Selecionar pasta" if browse == "dir" else "Selecionar arquivo", style="Secondary.TButton", command=choose).pack(side="left")
+        RoundedGlowButton(actions, text="↺ Padrão", style="Secondary.TButton", command=lambda k=key: self.reset_setting(k, "default")).pack(side="right", padx=(7, 0))
+        RoundedGlowButton(actions, text="⏮ Inicial", style="Secondary.TButton", command=lambda k=key: self.reset_setting(k, "baseline")).pack(side="right")
 
     def _build_settings(self):
         frame=ttk.Frame(self.pages_area)
@@ -636,13 +1086,32 @@ class MediaDownloaderApp:
         accent_entry_wrap.pack(side="left",fill="x",expand=True)
         ttk.Label(accent_entry_wrap,text="COR DE DESTAQUE · HEX",style="Muted.TLabel",font=("Segoe UI",8,"bold")).pack(anchor="w",pady=(0,4))
         ttk.Entry(accent_entry_wrap,textvariable=self.settings_vars["accent_color"]).pack(fill="x")
-        ttk.Button(accent_row,text="Escolher cor…",style="Secondary.TButton",command=self._choose_accent_color).pack(side="left",padx=(10,0),anchor="s")
-        ttk.Button(accent_row,text="↺ Padrão",style="Secondary.TButton",command=lambda:self.reset_setting("accent_color","default")).pack(side="left",padx=(7,0),anchor="s")
+        RoundedGlowButton(accent_row,text="Escolher cor…",style="Secondary.TButton",command=self._choose_accent_color).pack(side="left",padx=(10,0),anchor="s")
+        RoundedGlowButton(accent_row,text="↺ Padrão",style="Secondary.TButton",command=lambda:self.reset_setting("accent_color","default")).pack(side="left",padx=(7,0),anchor="s")
         presets=ttk.Frame(appearance,style="Card.TFrame")
         presets.pack(fill="x",pady=(10,0))
         ttk.Label(presets,text="PALETAS RÁPIDAS",style="Muted.TLabel",font=("Segoe UI",8,"bold")).pack(side="left",padx=(0,10))
         for name,color in (("Violeta","#8B5CF6"),("Azul","#3B82F6"),("Ciano","#06B6D4"),("Verde","#10B981"),("Rosa","#EC4899"),("Âmbar","#F59E0B")):
-            ttk.Button(presets,text=name,style="Secondary.TButton",command=lambda c=color:self.settings_vars["accent_color"].set(c)).pack(side="left",padx=(0,5))
+            RoundedGlowButton(presets,text=name,style="Secondary.TButton",command=lambda c=color:self.settings_vars["accent_color"].set(c)).pack(side="left",padx=(0,5))
+        dev_mode_row=ttk.Frame(appearance,style="Card.TFrame")
+        dev_mode_row.pack(fill="x",pady=(14,0))
+        ttk.Checkbutton(
+            dev_mode_row,text="Modo desenvolvedor · saída bruta dos comandos",
+            variable=self.developer_mode_var,command=self._preview_developer_mode,
+        ).pack(anchor="w")
+        ttk.Label(
+            dev_mode_row,
+            text="Desativado: o painel mostra só o resumo. Ativado: exibe linhas técnicas completas do yt-dlp/FFmpeg e detalhes de diagnóstico.",
+            style="Card.TLabel",wraplength=760,justify="left",
+        ).pack(anchor="w",padx=(24,0),pady=(2,0))
+        ttk.Checkbutton(
+            appearance,text="Animações espaciais e transições suaves",
+            variable=self.animations_enabled_var,command=self._preview_animations,
+        ).pack(anchor="w",pady=(12,0))
+        ttk.Label(
+            appearance,text="Desative para reduzir movimento e economizar recursos gráficos.",
+            style="Card.TLabel",wraplength=760,justify="left",
+        ).pack(anchor="w",padx=(24,0),pady=(2,0))
         self.settings_vars["theme"].trace_add("write",lambda *_:self._preview_theme_from_setting())
         self.settings_vars["ui_density"].trace_add("write",lambda *_:self._preview_theme_from_setting())
         self.settings_vars["accent_color"].trace_add("write",lambda *_:self._preview_theme_from_setting())
@@ -661,9 +1130,9 @@ class MediaDownloaderApp:
         self._setting_row(body,"subtitle_mode","Legendas de vídeo","Selecione quais legendas salvar.",choices=["Desativadas","Legendas manuais","Manuais + automáticas"])
         actions=ttk.Frame(body)
         actions.pack(fill="x",pady=(12,24))
-        ttk.Button(actions,text="Salvar personalização",style="Accent.TButton",command=self.save_settings).pack(side="right")
-        ttk.Button(actions,text="Reverter tudo para padrão",style="Secondary.TButton",command=lambda:self.reset_all("default")).pack(side="left")
-        ttk.Button(actions,text="Reverter para instalação inicial",style="Secondary.TButton",command=lambda:self.reset_all("baseline")).pack(side="left",padx=(8,0))
+        RoundedGlowButton(actions,text="Salvar personalização",style="Accent.TButton",command=self.save_settings).pack(side="right")
+        RoundedGlowButton(actions,text="Reverter tudo para padrão",style="Secondary.TButton",command=lambda:self.reset_all("default")).pack(side="left")
+        RoundedGlowButton(actions,text="Reverter para instalação inicial",style="Secondary.TButton",command=lambda:self.reset_all("baseline")).pack(side="left",padx=(8,0))
         note=self._card(body,12)
         note.pack(fill="x",pady=(0,20))
         ttk.Label(note,text="Como as personalizações são salvas",style="CardTitle.TLabel").pack(anchor="w")
@@ -694,6 +1163,10 @@ class MediaDownloaderApp:
         source_config=DEFAULT_CONFIG if source=="default" else load_installation_baseline()
         for key in self.settings_vars:
             self.settings_vars[key].set(self._display_setting_value(key,source_config.get(key,DEFAULT_CONFIG.get(key,""))))
+        self.developer_mode_var.set(bool(source_config.get("developer_mode",False)))
+        self._preview_developer_mode()
+        self.animations_enabled_var.set(bool(source_config.get("animations_enabled", True)))
+        self._preview_animations()
         self._preview_theme_from_setting()
         messagebox.showinfo("Configurações","Os valores foram revertidos nesta tela. Clique em Salvar personalização para gravá-los.")
     @staticmethod
@@ -745,10 +1218,16 @@ class MediaDownloaderApp:
             new_config[key]=self._stored_setting_value(key,self.settings_vars[key].get())
         new_config["accent_color"]=accent.upper()
         new_config["auto_video_quality"]=q
+        new_config["developer_mode"]=bool(self.developer_mode_var.get())
+        new_config["animations_enabled"]=bool(self.animations_enabled_var.get())
         new_config["audio_bitrate"]=b
         try:
             save_config(new_config)
             self.config=load_config()
+            self.developer_mode_var.set(bool(self.config.get("developer_mode",False)))
+            self._preview_developer_mode()
+            self.animations_enabled_var.set(bool(self.config.get("animations_enabled", True)))
+            self._preview_animations()
             self.playlist_strategy_var.set(self._strategy_label(self.config.get("playlist_strategy","sequential")))
             self.playlist_parallelism_var.set(str(self.config.get("playlist_parallelism",3)))
             self._apply_theme(self.config.get("theme","dark"))
@@ -785,10 +1264,10 @@ class MediaDownloaderApp:
 
         actions = ttk.Frame(body)
         actions.pack(fill="x", pady=(14, 24))
-        self.install_btn = ttk.Button(actions, text="Instalar/Reparar automaticamente", style="Accent.TButton", command=self.install_dependencies_async)
+        self.install_btn = RoundedGlowButton(actions, text="Instalar/Reparar automaticamente", style="Accent.TButton", command=self.install_dependencies_async)
         self.install_btn.pack(side="left")
-        ttk.Button(actions, text="Atualizar informações", style="Secondary.TButton", command=lambda: self._refresh_dependencies(force=True)).pack(side="left", padx=(8, 0))
-        ttk.Button(actions, text="Abrir Configurações", style="Secondary.TButton", command=lambda: self.show_page("settings")).pack(side="right")
+        RoundedGlowButton(actions, text="Atualizar informações", style="Secondary.TButton", command=lambda: self._refresh_dependencies(force=True)).pack(side="left", padx=(8, 0))
+        RoundedGlowButton(actions, text="Abrir Configurações", style="Secondary.TButton", command=lambda: self.show_page("settings")).pack(side="right")
 
         info = self._card(body, 12)
         info.pack(fill="x")
@@ -813,7 +1292,7 @@ class MediaDownloaderApp:
         if hasattr(self, "dep_cards"):
             for card in self.dep_cards.values():
                 card["status"].set("Verificando...")
-        self.dep_badge.configure(text="●  Verificando dependências", fg=self.colors["muted"])
+        self.dep_badge.configure(text="●", fg=self.colors["muted"])
 
         def worker():
             infos = {
@@ -848,10 +1327,10 @@ class MediaDownloaderApp:
                 card["error"].set(info.error or "—")
         self.dependency_state_var.set(f"Dependências {count}/3")
         if count == 3:
-            self.dep_badge.configure(text="●  Dependências prontas", fg=self.colors["good"])
+            self.dep_badge.configure(text="●", fg=self.colors["good"])
         else:
             color = self.colors["warn"] if count else self.colors["bad"]
-            self.dep_badge.configure(text=f"●  Dependências {count}/3", fg=color)
+            self.dep_badge.configure(text="●", fg=color)
         if self._dependency_refresh_pending:
             self._dependency_refresh_pending = False
             self._refresh_dependencies(force=True)
@@ -928,22 +1407,22 @@ class MediaDownloaderApp:
         actions.pack(fill="x", pady=(0, 12))
         buttons = ttk.Frame(actions, style="Card.TFrame")
         buttons.pack(fill="x")
-        self.app_update_check_button = ttk.Button(
+        self.app_update_check_button = RoundedGlowButton(
             buttons, text="Verificar atualizações", style="Accent.TButton",
             command=lambda: self._start_app_update_check(user_initiated=True),
         )
         self.app_update_check_button.pack(side="left")
-        self.app_update_install_button = ttk.Button(
+        self.app_update_install_button = RoundedGlowButton(
             buttons, text="Baixar e instalar", style="Secondary.TButton",
             state="disabled", command=self._show_cached_update_prompt,
         )
         self.app_update_install_button.pack(side="left", padx=(8, 0))
-        self.app_uninstall_button = ttk.Button(
+        self.app_uninstall_button = RoundedGlowButton(
             buttons, text="Desinstalar aplicativo", style="Secondary.TButton",
             command=self._start_uninstall,
         )
         self.app_uninstall_button.pack(side="left", padx=(8, 0))
-        self.app_update_repair_button = ttk.Button(
+        self.app_update_repair_button = RoundedGlowButton(
             buttons, text="Reparar todos os arquivos", style="Secondary.TButton",
             command=self._start_app_repair,
         )
@@ -1080,8 +1559,8 @@ class MediaDownloaderApp:
                 pass
             self._start_app_update(update, repair=False)
 
-        ttk.Button(actions, text="Atualizar agora", style="Accent.TButton", command=start_update).pack(side="left")
-        ttk.Button(actions, text="Continuar nesta versão", style="Secondary.TButton", command=later).pack(side="right")
+        RoundedGlowButton(actions, text="Atualizar agora", style="Accent.TButton", command=start_update).pack(side="left")
+        RoundedGlowButton(actions, text="Continuar nesta versão", style="Secondary.TButton", command=later).pack(side="right")
         dialog.protocol("WM_DELETE_WINDOW", later)
         dialog.update_idletasks()
         x = self.root.winfo_rootx() + max(0, (self.root.winfo_width() - dialog.winfo_width()) // 2)
@@ -1234,8 +1713,8 @@ class MediaDownloaderApp:
             ("Pastas", "As pastas de saída podem ser alteradas em Configurações. Elas ficam fora da área de instalação e são preservadas na desinstalação."),
             ("Dependências", "yt-dlp, FFmpeg e FFprobe são detectados por caminho manual, área privada da instalação e PATH. Na primeira execução, o bootstrap tenta instalar versões compatíveis automaticamente."),
             ("Arquitetura", "Windows x86/x64/ARM64, Linux x86/x64/ARM64/ARMv7 e macOS Intel/Apple Silicon são identificados. A build compatível é priorizada."),
-            ("Temas", "Claro, escuro ou Sistema. Sistema consulta a preferência visual do Windows, macOS ou, quando disponível, do ambiente Linux."),
-            ("Erros", "A interface mostra uma explicação simples e mantém detalhes técnicos no painel de mensagens."),
+            ("Temas", "Claro, escuro ou Sistema. O tema escuro usa tons de azul espacial, violeta e rosa; Sistema consulta a preferência visual do Windows, macOS ou, quando disponível, do ambiente Linux."),
+            ("Erros", "A interface mostra uma explicação simples. Para conferir a saída bruta de yt-dlp/FFmpeg, ative o Modo desenvolvedor nas Configurações."),
             ("Segurança e privacidade", "O app usa listas de argumentos, valida URLs HTTP/HTTPS, redige dados sensíveis nos logs e não tenta burlar DRM, paywall ou controles de acesso. Nenhum programa pode garantir 100% de segurança ou ausência de falsos positivos em antivírus. Baixe builds de fontes oficiais e verifique o hash do artefato distribuído."),
             ("Sites", "O suporte é o que o yt-dlp oferecer na versão instalada. O aplicativo não tenta burlar DRM, autenticação, paywall ou conteúdo privado."),
         ]
@@ -1272,7 +1751,7 @@ class MediaDownloaderApp:
         info.pack(fill="x", pady=(12, 10))
         ttk.Label(info, text="O que o aplicativo executa localmente", style="CardTitle.TLabel").pack(anchor="w")
         ttk.Label(info, text="A interface executa apenas processos locais necessários para yt-dlp e FFmpeg/FFprobe, usando listas de argumentos em vez de comandos concatenados. URL, senhas, tokens e cookies não são gravados nos logs.", style="Card.TLabel", wraplength=760, justify="left").pack(anchor="w", pady=(4, 0))
-        ttk.Button(body, text="Desinstalar", style="Danger.TButton", command=self._uninstall).pack(anchor="e", pady=(0, 25))
+        RoundedGlowButton(body, text="Desinstalar", style="Danger.TButton", command=self._uninstall).pack(anchor="e", pady=(0, 25))
         self._update_developer_vars()
 
     def _update_developer_vars(self):
@@ -1302,7 +1781,7 @@ class MediaDownloaderApp:
         self.root.after(100, self.root.destroy)
 
     def _animate_hero_visual(self):
-        """Draw a lightweight, GPU-free purple orbit animation in the home hero."""
+        """Render lightweight space particles and deforming orb shapes on the home hero."""
         canvas = getattr(self, "hero_visual", None)
         if canvas is None:
             return
@@ -1314,35 +1793,66 @@ class MediaDownloaderApp:
             height = max(canvas.winfo_height(), 112)
             cx, cy = width / 2.0, height / 2.0
             phase = self._hero_visual_phase
+            panel = self.colors.get("panel2", "#191F38")
             accent = self.colors.get("accent", "#8B5CF6")
-            glow = _blend_hex(accent, self.colors.get("panel2", "#1A2540"), 0.38)
-            faint = _blend_hex(accent, self.colors.get("panel2", "#1A2540"), 0.68)
+            pink = self.colors.get("pink", "#F472B6")
+            blue = self.colors.get("space", "#60A5FA")
+            violet_glow = _blend_hex(accent, panel, 0.36)
+            pink_glow = _blend_hex(pink, panel, 0.42)
+            blue_glow = _blend_hex(blue, panel, 0.42)
 
-            # Concentric rings and drifting particles form a subtle, launcher-like motif.
-            for index, base_radius in enumerate((21, 30, 39)):
-                radius = base_radius + math.sin(phase + index * 0.7) * 1.6
+            for index, radius in enumerate((25, 37, 45)):
+                wobble = math.sin(phase * 0.8 + index * 0.9) * 1.8
                 canvas.create_oval(
-                    cx - radius, cy - radius, cx + radius, cy + radius,
-                    outline=(accent if index == 0 else glow if index == 1 else faint),
-                    width=(2 if index == 0 else 1),
+                    cx - radius - wobble, cy - radius * 0.78,
+                    cx + radius + wobble, cy + radius * 0.78,
+                    outline=(violet_glow if index == 0 else pink_glow if index == 1 else blue_glow),
+                    width=2 if index == 0 else 1,
                 )
-            for index in range(8):
-                angle = phase + index * (math.tau / 8.0)
-                radius = 36 + 3 * math.sin(phase * 1.4 + index)
+
+            # Soft, smoothed polygons mimic liquid orbs, morphing with every frame.
+            for blob_index, (offset_x, offset_y, base, color, outline) in enumerate((
+                (-19, -12, 15, blue_glow, blue),
+                (18, -7, 17, pink_glow, pink),
+                (0, 13, 20, violet_glow, accent),
+            )):
+                points = []
+                blob_phase = phase * (0.78 + blob_index * 0.11) + blob_index * 1.9
+                for index in range(36):
+                    angle = math.tau * index / 36.0
+                    wave = (
+                        math.sin(angle * 3 + blob_phase) * 0.16
+                        + math.cos(angle * 2 - blob_phase * 0.7) * 0.10
+                        + math.sin(angle * 5 + phase * 0.55) * 0.045
+                    )
+                    rx = base * (1.0 + wave)
+                    ry = base * (0.77 + wave * 0.7)
+                    points.extend((
+                        cx + offset_x + math.cos(angle) * rx,
+                        cy + offset_y + math.sin(angle) * ry,
+                    ))
+                canvas.create_polygon(
+                    points, smooth=True, splinesteps=10, fill=color, outline=outline, width=1,
+                )
+
+            for index in range(11):
+                angle = phase * (0.55 + (index % 3) * 0.12) + index * (math.tau / 11.0)
+                radius = 39 + 4 * math.sin(phase * 1.2 + index * 0.8)
                 x = cx + math.cos(angle) * radius
-                y = cy + math.sin(angle) * radius
-                size = 1.5 if index % 3 else 2.5
-                color = accent if index % 3 == 0 else glow
+                y = cy + math.sin(angle) * radius * 0.75
+                size = 1.2 if index % 3 else 2.2
+                color = (pink if index % 3 == 0 else blue if index % 3 == 1 else accent)
                 canvas.create_oval(x-size, y-size, x+size, y+size, fill=color, outline="")
-            # Keep the central glyph clear and legible instead of using a large image.
             canvas.create_text(
-                cx, cy, text="↓", fill=self.colors.get("fg", "#F3F6FC"),
-                font=("Segoe UI", 28, "bold"),
+                cx, cy, text="↓", fill=self.colors.get("fg", "#F4F5FF"),
+                font=("Segoe UI", 27, "bold"),
             )
-            self._hero_visual_phase = (phase + 0.16) % math.tau
-            self.root.after(90, self._animate_hero_visual)
+            self._hero_visual_phase = (phase + 0.13) % math.tau
+            if self.config.get("animations_enabled", True):
+                self._hero_animation_job = self.root.after(72, self._animate_hero_visual)
+            else:
+                self._hero_animation_job = None
         except tk.TclError:
-            # Window shutdown cancels cosmetic animation quietly.
             return
 
     # ---------- Page navigation and transitions ----------
@@ -1394,7 +1904,10 @@ class MediaDownloaderApp:
         self.page_title_var.set(title)
         self.page_subtitle_var.set(subtitle)
         for key, button in self.nav_buttons.items():
-            button.configure(style="Selected.Nav.TButton" if key == name else "Nav.TButton")
+            if isinstance(button, IconNavButton):
+                button.set_active(key == name)
+            else:
+                button.configure(style="Selected.Nav.TButton" if key == name else "Nav.TButton")
 
         if name == "settings":
             self._sync_settings_form()
@@ -1404,7 +1917,7 @@ class MediaDownloaderApp:
             self._update_developer_vars()
 
         width = self.pages_area.winfo_width()
-        if old_name is None or old_name == name or width < 180:
+        if old_name is None or old_name == name or width < 180 or not self.config.get("animations_enabled", True):
             for frame in self.page_frames.values():
                 frame.place_forget()
                 frame.pack_forget()
@@ -1429,10 +1942,11 @@ class MediaDownloaderApp:
             try:
                 if not self.root.winfo_exists():
                     return
-                progress = min(1.0, step / 8.0)
-                new_frame.place_configure(x=round(28 * (1.0 - progress)))
-                old_frame.place_configure(x=-round(12 * progress))
-                if step >= 8:
+                progress = min(1.0, step / 10.0)
+                eased = 1.0 - (1.0 - progress) ** 3
+                new_frame.place_configure(x=round(34 * (1.0 - eased)))
+                old_frame.place_configure(x=-round(14 * eased))
+                if step >= 10:
                     for frame in self.page_frames.values():
                         frame.place_forget()
                         frame.pack_forget()
@@ -1441,7 +1955,7 @@ class MediaDownloaderApp:
                     self._page_animation_target = None
                     self._page_animation_job = None
                     return
-                self._page_animation_job = self.root.after(16, lambda: animate(step + 1))
+                self._page_animation_job = self.root.after(14, lambda: animate(step + 1))
             except tk.TclError:
                 self._page_animation_job = None
                 self._page_animation_target = None
@@ -1450,6 +1964,10 @@ class MediaDownloaderApp:
     def _sync_settings_form(self):
         for key,var in self.settings_vars.items():
             var.set(self._display_setting_value(key,self.config.get(key,DEFAULT_CONFIG.get(key,""))))
+        self.developer_mode_var.set(bool(self.config.get("developer_mode",False)))
+        self._preview_developer_mode()
+        self.animations_enabled_var.set(bool(self.config.get("animations_enabled", True)))
+        self._preview_animations()
         self._apply_theme(self.config.get("theme","dark"))
         if hasattr(self,"playlist_strategy_var"):
             self.playlist_strategy_var.set(self._strategy_label(self.config.get("playlist_strategy","sequential")))
@@ -1464,13 +1982,54 @@ class MediaDownloaderApp:
         self.quality["values"] = values
         self.quality_var.set(current if current in values else values[0])
 
-    def _append_log(self, message: str):
+    def _append_log(self, message: str, raw: bool = False):
+        """Append user-facing activity or preserve raw command output for developer mode."""
+        message = str(message).rstrip()
+        if not message:
+            return
+        self.log_history.append((message, bool(raw)))
+        if len(self.log_history) > 600:
+            del self.log_history[:len(self.log_history) - 600]
+        if raw and not self._developer_mode_active:
+            return
         self.log_text.configure(state="normal")
         self.log_text.insert("end", message + "\n")
         self.log_text.see("end")
         self.log_text.configure(state="disabled")
 
+    def _render_log_history(self):
+        if not hasattr(self, "log_text"):
+            return
+        self.log_text.configure(state="normal")
+        self.log_text.delete("1.0", "end")
+        for message, raw in self.log_history:
+            if raw and not self._developer_mode_active:
+                continue
+            self.log_text.insert("end", message + "\n")
+        self.log_text.see("end")
+        self.log_text.configure(state="disabled")
+
+    def _preview_developer_mode(self):
+        self._developer_mode_active = bool(self.developer_mode_var.get())
+        self.log_mode_var.set("CONSOLE TÉCNICO" if self._developer_mode_active else "RESUMO DE ATIVIDADE")
+        if hasattr(self, "log_text"):
+            self._render_log_history()
+
+    def _preview_animations(self):
+        enabled = bool(self.animations_enabled_var.get())
+        self.config["animations_enabled"] = enabled
+        job = getattr(self, "_hero_animation_job", None)
+        if not enabled and job is not None:
+            try:
+                self.root.after_cancel(job)
+            except tk.TclError:
+                pass
+            self._hero_animation_job = None
+        elif enabled and getattr(self, "hero_visual", None) is not None and job is None:
+            self._hero_animation_job = self.root.after(0, self._animate_hero_visual)
+
     def _clear_log(self):
+        self.log_history.clear()
         self.log_text.configure(state="normal")
         self.log_text.delete("1.0", "end")
         self.log_text.configure(state="disabled")
@@ -1483,6 +2042,8 @@ class MediaDownloaderApp:
                 processed += 1
                 if kind == "log":
                     self._append_log(str(data))
+                elif kind == "raw_log":
+                    self._append_log(str(data), raw=True)
                 elif kind == "progress":
                     percent = data.get("percent")
                     if percent is not None:
@@ -1903,7 +2464,7 @@ class MediaDownloaderApp:
             downloader = Downloader(
                 dep_infos["yt-dlp"], dep_infos["ffmpeg"], dep_infos["ffprobe"], self.logger,
                 progress=lambda data, pos=position: self.ui_queue.put(("playlist_item_progress", (pos, data))),
-                output=lambda line, pos=position, name=title: self.ui_queue.put(("log", f"[{pos + 1}/{len(items)}] {name}: {line}")),
+                output=lambda line, pos=position, name=title: self.ui_queue.put(("raw_log", f"[{pos + 1}/{len(items)}] {name}: {line}")),
                 options=options,
             )
             key = f"playlist-{position}"
@@ -2026,7 +2587,7 @@ class MediaDownloaderApp:
     def _download_worker(self, mode: str, url: str, value: int, playlist: bool = False):
         downloader = Downloader(self.dep_infos["yt-dlp"], self.dep_infos["ffmpeg"], self.dep_infos["ffprobe"],
                                 self.logger, progress=lambda data: self.ui_queue.put(("progress", data)),
-                                output=lambda line: self.ui_queue.put(("log", line)), options=self._downloader_options())
+                                output=lambda line: self.ui_queue.put(("raw_log", line)), options=self._downloader_options())
         self.downloader = downloader
         if self.cancel_requested.is_set():
             downloader.cancel()
@@ -2140,13 +2701,13 @@ class MediaDownloaderApp:
             return
         self._append_log(result.message)
         if result.details:
-            self._append_log("Detalhes:\n" + result.details[-6000:])
+            self._append_log("Detalhes:\n" + result.details[-6000:], raw=True)
         if getattr(result, "completed_with_warnings", False):
             self.status_var.set("Concluído com avisos")
             self.stage_var.set("Playlist processada; verifique os avisos")
             messagebox.showwarning(
                 "Playlist processada com avisos",
-                result.message + "\n\nIsso não significa que todos os itens falharam; confira o painel de detalhes para identificar entradas indisponíveis.",
+                result.message + "\n\nAtive o Modo desenvolvedor nas Configurações para consultar os detalhes técnicos dos itens indisponíveis.",
             )
         elif result.returncode == 0:
             self.status_var.set(result.message)
@@ -2158,7 +2719,7 @@ class MediaDownloaderApp:
         else:
             self.status_var.set("Falha no download")
             self.stage_var.set("Erro")
-            messagebox.showerror("Download", result.message + "\n\nVeja os detalhes no painel de mensagens.")
+            messagebox.showerror("Download", result.message + "\n\nAtive o Modo desenvolvedor nas Configurações para consultar os detalhes técnicos.")
 
 
 def run() -> None:

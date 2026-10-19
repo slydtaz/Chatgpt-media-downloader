@@ -6,6 +6,7 @@ from app.gui import (
     _blend_hex,
     _contrast_text,
     _valid_hex_color,
+    _rounded_polygon,
 )
 
 
@@ -15,6 +16,14 @@ class GuiThemeTests(unittest.TestCase):
         required = {"bg", "panel", "panel2", "field", "fg", "muted", "border", "accent", "accent2", "accent_fg"}
         for palette in PALETTES.values():
             self.assertTrue(required.issubset(palette))
+
+    def test_space_palette_exposes_violet_blue_and_pink_accents(self):
+        for name in ("dark", "oled"):
+            self.assertIn("space", PALETTES[name])
+            self.assertIn("pink", PALETTES[name])
+        points = _rounded_polygon(0, 0, 100, 48, 14)
+        self.assertEqual(len(points) % 2, 0)
+        self.assertGreaterEqual(len(points), 24)
 
     def test_custom_accent_color_validation_and_contrast(self):
         self.assertTrue(_valid_hex_color("#8B5CF6"))

@@ -1,3 +1,12 @@
+## 5.2.0 - stable
+
+- Substitui o bloco com estrela da marca por uma imagem PNG estática e transparente com o símbolo branco, pequenas estrelas e nuvem azul; a arte fica embutida no código e funciona offline.
+- Arredonda os cartões principais e introduz botões em rosa-violeta com brilho e destaque ao passar o cursor, mantendo os controles e comandos existentes.
+- Troca a barra lateral por navegação compacta por ícones e dicas de contexto; melhora as transições entre páginas e permite desativar os movimentos nas Configurações.
+- Simplifica o painel de atividade por padrão. A saída bruta de yt-dlp/FFmpeg e detalhes extensos passam a ficar sob o **Modo desenvolvedor**, configurável e persistente.
+- Acrescenta a opção de reduzir/desativar movimento, testes da nova paleta e dos cantos arredondados, e captura automatizada de todas as abas em uma janela Windows real.
+- Mantém compatibilidade com configurações antigas: as novas opções recebem valores padrão quando ainda não existem no perfil.
+
 ## 5.1.5 - stable (hotfix-5)
 
 - Corrige a falha de inicialização: _strategy_label era chamado como método de instância, mas não aceitava o argumento implícito self. Agora o formatador é um método estático e tem teste de regressão.
