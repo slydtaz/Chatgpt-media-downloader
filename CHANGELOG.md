@@ -1,3 +1,11 @@
+## 5.1.3 - stable (hotfix-3)
+
+- Corrige a janela azul-escura vazia durante o início: a janela Tk fica oculta enquanto todos os componentes são construídos e só aparece após a interface estar pronta.
+- Se a construção da interface falhar, a janela parcial é destruída, a exceção é registrada em app.log e o erro volta ao bootstrap em vez de deixar uma janela sem conteúdo aberta.
+- Adiciona transições curtas entre páginas e uma animação leve de órbitas/partículas violeta no painel inicial, desenhada em Canvas sem dependências gráficas adicionais.
+- Refina a composição da tela inicial com arte animada discreta, mantendo o foco em link, formato, progresso e histórico.
+- Base visual inspirada em convenções gerais do SKlauncher 4.0 Beta (tema cósmico escuro e realces violeta), sem reutilizar marca, ícones ou recursos proprietários.
+
 ## 5.1.2 - stable (hotfix-2)
 
 - A tela de falha crítica agora oferece opções explícitas para tentar reparar, desinstalar ou cancelar; uma tentativa fracassada já não impede o usuário de abrir esse menu outra vez.
