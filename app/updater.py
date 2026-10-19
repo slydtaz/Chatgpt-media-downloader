@@ -43,6 +43,7 @@ class ReleaseAsset:
     name: str
     url: str
     size: int
+    sha256_digest: str = ""
 
 
 class UpdateError(RuntimeError):
@@ -162,7 +163,17 @@ def _asset(release: dict, name: str) -> Optional[ReleaseAsset]:
             return None
         if not isinstance(url, str) or not _trusted_github_url(url) or size <= 0:
             return None
-        return ReleaseAsset(name, url, size)
+        # GitHub's own asset digest is independent of the project's checksum
+        # manifest. When present, require a supported SHA-256 value and compare
+        # it with the bytes downloaded below.
+        raw_digest = str(item.get("digest") or "").strip()
+        sha256_digest = ""
+        if raw_digest:
+            match = re.fullmatch(r"(?i)sha256:([0-9a-f]{64})", raw_digest)
+            if not match:
+                return None
+            sha256_digest = match.group(1).lower()
+        return ReleaseAsset(name, url, size, sha256_digest)
     return None
 
 
@@ -195,6 +206,15 @@ def _checksum_asset(release: dict) -> Optional[ReleaseAsset]:
     return _asset(release, "SHA2-256SUMS") or _asset(release, "checksums.sha256")
 
 
+def _sha256_file(path: Path) -> str:
+    """Hash a file incrementally so large dependency archives stay memory-safe."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest().lower()
+
+
 def _verify_checksum(release: dict, asset: ReleaseAsset, downloaded: Path) -> bool:
     """Fail closed when the upstream release does not publish a matching SHA-256 manifest."""
     checksum_asset = _checksum_asset(release)
@@ -207,6 +227,8 @@ def _verify_checksum(release: dict, asset: ReleaseAsset, downloaded: Path) -> bo
             maximum=MAX_CHECKSUM_BYTES,
             expected_size=checksum_asset.size,
         )
+        if checksum_asset.sha256_digest and _sha256_file(temp) != checksum_asset.sha256_digest:
+            return False
         text = temp.read_text(encoding="utf-8", errors="replace")
         expected = None
         for line in text.splitlines():
@@ -218,11 +240,12 @@ def _verify_checksum(release: dict, asset: ReleaseAsset, downloaded: Path) -> bo
                     break
         if not expected or not downloaded.is_file():
             return False
-        h = hashlib.sha256()
-        with downloaded.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                h.update(chunk)
-        return h.hexdigest().lower() == expected
+        actual = _sha256_file(downloaded)
+        if actual != expected:
+            return False
+        if asset.sha256_digest and actual != asset.sha256_digest:
+            return False
+        return True
     except (OSError, UpdateError, ValueError):
         return False
     finally:

@@ -104,6 +104,57 @@ class DependencyDownloadTrustTests(unittest.TestCase):
             with self.subTest(bad=bad):
                 self.assertIsNone(_asset(bad, "tool.exe"))
 
+    def test_asset_metadata_rejects_unsupported_digest_format(self):
+        release = {
+            "assets": [{
+                "name": "tool.exe",
+                "browser_download_url": "https://github.com/vendor/project/releases/download/v1/tool.exe",
+                "size": 1024,
+                "digest": "sha1:" + "a" * 40,
+            }]
+        }
+        self.assertIsNone(_asset(release, "tool.exe"))
+
+    def test_checksum_manifest_and_payload_must_match_github_digests(self):
+        payload = b"verified dependency bytes"
+        payload_digest = hashlib.sha256(payload).hexdigest()
+        manifest = f"{payload_digest}  tool.exe\n".encode("utf-8")
+        manifest_digest = hashlib.sha256(manifest).hexdigest()
+        asset_url = "https://github.com/vendor/project/releases/download/v1/tool.exe"
+        sums_url = "https://github.com/vendor/project/releases/download/v1/checksums.sha256"
+        asset = ReleaseAsset("tool.exe", asset_url, len(payload), payload_digest)
+        release = {
+            "assets": [{
+                "name": "checksums.sha256",
+                "browser_download_url": sums_url,
+                "size": len(manifest),
+                "digest": "sha256:" + manifest_digest,
+            }]
+        }
+
+        with TemporaryDirectory() as tmp:
+            file = Path(tmp) / asset.name
+            file.write_bytes(payload)
+
+            def write_manifest(url, destination, **kwargs):
+                destination.write_bytes(manifest)
+
+            with patch("app.updater._download", side_effect=write_manifest):
+                self.assertTrue(_verify_checksum(release, asset, file))
+                wrong_asset_digest = ReleaseAsset("tool.exe", asset_url, len(payload), "0" * 64)
+                self.assertFalse(_verify_checksum(release, wrong_asset_digest, file))
+
+            bad_release = {
+                "assets": [{
+                    "name": "checksums.sha256",
+                    "browser_download_url": sums_url,
+                    "size": len(manifest),
+                    "digest": "sha256:" + "0" * 64,
+                }]
+            }
+            with patch("app.updater._download", side_effect=write_manifest):
+                self.assertFalse(_verify_checksum(bad_release, asset, file))
+
     def test_missing_upstream_checksum_manifest_fails_closed(self):
         asset = ReleaseAsset("tool.exe", "https://github.com/project/tool/releases/download/v1/tool.exe", 4)
         with TemporaryDirectory() as tmp:
