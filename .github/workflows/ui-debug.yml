@@ -57,7 +57,7 @@ jobs:
       - name: Package standalone UI-debug folder (not a release)
         shell: pwsh
         run: |
-          $archive = "ui-debug-app-0.1.0-dev.3.zip"
+          $archive = "ui-debug-app-0.1.0-dev.4.zip"
           $packageRoot = Join-Path $env:RUNNER_TEMP "ui-debug-package"
           New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
           $files = @(
@@ -81,14 +81,14 @@ jobs:
       - name: Upload standalone UI-debug package (not a release)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ui-debug-app-0.1.0-dev.3
-          path: ui-debug-app-0.1.0-dev.3.zip
+          name: ui-debug-app-0.1.0-dev.4
+          path: ui-debug-app-0.1.0-dev.4.zip
           if-no-files-found: error
           retention-days: 14
       - name: Upload visual review artifact (not a release)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ui-debug-preview-0.1.0-dev.3
+          name: ui-debug-preview-0.1.0-dev.4
           path: ui-debug-preview-output/
           if-no-files-found: error
           retention-days: 14
