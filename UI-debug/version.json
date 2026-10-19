@@ -1,6 +1,6 @@
 {
   "app_name": "ChatGPT Media Downloader UI-debug",
-  "version": "0.1.0-dev.2",
+  "version": "0.1.0-dev.3",
   "channel": "development",
   "update_branch": "ui-debug",
   "minimum_python": "3.10",
