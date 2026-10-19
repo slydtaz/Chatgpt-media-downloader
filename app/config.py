@@ -134,7 +134,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "subtitle_mode": "off",
     "update_open_after": True,
     "update_check_on_startup": True,
-    "settings_schema_version": 2,
+    "settings_schema_version": 3,
 }
 
 
