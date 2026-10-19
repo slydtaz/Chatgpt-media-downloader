@@ -331,7 +331,7 @@ def perform_cleanup(plan: CleanupPlan, *, remove_portable: bool = False,
                     env: Mapping[str, str] | None = None) -> list[str]:
     ctx = _context(env)
     log: list[str] = []
-    media_to_preserve = [item.path for item in plan.output_dirs if item.exists and not remove_media]
+    media_to_preserve = [item.path for item in plan.output_dirs if item.exists and (not remove_media or not item.safe_to_remove)]
     if remove_media:
         for item in plan.output_dirs:
             if not item.exists:
