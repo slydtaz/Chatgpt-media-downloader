@@ -81,6 +81,51 @@ class DependencyTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 extract_archive(archive, root / "tools")
 
+    def test_extract_archive_rejects_duplicate_tool_basenames(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "duplicate-tools.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("one/ffmpeg.exe", b"first")
+                zf.writestr("two/ffmpeg.exe", b"second")
+            with self.assertRaises(ValueError):
+                extract_archive(archive, root / "tools")
+
+    def test_extract_archive_reports_corrupt_zip_as_value_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "corrupt.zip"
+            archive.write_bytes(b"not a zip archive")
+            with self.assertRaises(ValueError):
+                extract_archive(archive, root / "tools")
+
+    def test_extract_archive_rejects_oversized_compressed_archive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "tools.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("release/ffmpeg.exe", b"small executable")
+            with patch("app.dependencies.MAX_ARCHIVE_COMPRESSED_BYTES", 1):
+                with self.assertRaises(ValueError):
+                    extract_archive(archive, root / "tools")
+
+    @unittest.skipIf(os.name == "nt", "Symlink creation may require elevated privileges on Windows.")
+    def test_extract_archive_rejects_destination_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "tools.zip"
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "sentinel.txt").write_text("preserve", encoding="utf-8")
+            destination = root / "tools"
+            destination.symlink_to(outside, target_is_directory=True)
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("release/ffmpeg.exe", b"replacement")
+            with self.assertRaises(ValueError):
+                extract_archive(archive, destination)
+            self.assertEqual((outside / "sentinel.txt").read_text(encoding="utf-8"), "preserve")
+            self.assertFalse((outside / "ffmpeg.exe").exists())
+
     def test_extract_archive_rejects_missing_or_unrecognized_payload(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
