@@ -920,8 +920,7 @@ class CosmicSplash:
                 self.canvas.itemconfigure(item,fill=blend_hex(SPLASH_BACKGROUND,original,appear*(1-fade)))
             if age > 1520:
                 self.canvas.delete(m["tag"]); self.active_texts.remove(m)
-                try: m["font"].destroy()
-                except tk.TclError: pass
+                m.pop("font", None)
         try: self._animation_after = self.window.after(30,self._animate)
         except tk.TclError: self.close()
 
