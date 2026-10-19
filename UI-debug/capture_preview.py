@@ -66,7 +66,7 @@ def make_contact_sheet(items, target: Path):
         "#080D19",
     )
     draw = ImageDraw.Draw(canvas)
-    draw.text((margin, 16), "UI-debug 0.1.0-dev.3  —  prévia da interface espacial", font=_font(24), fill="#F3F6FF")
+    draw.text((margin, 16), f"UI-debug {ui_debug.APP_VERSION}  —  prévia da interface espacial", font=_font(24), fill="#F3F6FF")
     for index, (label, image) in enumerate(items):
         col, row = index % columns, index // columns
         x = margin + col * (thumb_w + gap)
@@ -98,7 +98,7 @@ def main() -> int:
     root = tk.Tk()
     captures = []
     try:
-        root.title("UI-debug 0.1.0-dev.3 — prévia")
+        root.title(f"UI-debug {ui_debug.APP_VERSION} — prévia")
         screen_w, screen_h = root.winfo_screenwidth(), root.winfo_screenheight()
         desktop_w, desktop_h = ImageGrab.grab().size
         width = max(960, min(1200, screen_w - 40, desktop_w - 32))
@@ -108,7 +108,10 @@ def main() -> int:
         root.geometry("%sx%s+4+4" % (width, height))
         root.update_idletasks()
 
-        app = ui_debug.SpaceUIPrototype(root)
+        # Capture the same full-screen orbital loader used at startup, then
+        # close it and capture the actual application pages underneath.
+        splash = ui_debug.CosmicSplash(root, mode="startup", looping=False)
+        app = ui_debug.SpaceUIPrototype(root, show_splash=False)
         root.geometry("%sx%s+4+4" % (width, height))
         root.deiconify()
         root.lift()
@@ -117,7 +120,16 @@ def main() -> int:
         except tk.TclError:
             pass
         root.update()
-        time.sleep(0.35)
+        time.sleep(0.25)
+        root.update()
+        loading = capture_window(splash.window)
+        loading.save(output / "00-carregamento.png", format="PNG", optimize=True)
+        captures.append(("Carregamento em tela cheia", loading))
+        print("CAPTURED 00-carregamento.png %sx%s" % (loading.width, loading.height), flush=True)
+        splash.close()
+        root.update_idletasks()
+        root.update()
+        time.sleep(0.12)
         root.update()
 
         for page_key, filename, label in PAGES:
@@ -134,6 +146,7 @@ def main() -> int:
         report = {
             "version": ui_debug.APP_VERSION,
             "channel": ui_debug.CHANNEL,
+            "startup_capture": "00-carregamento.png",
             "pages": [{"key": key, "file": filename, "label": label} for key, filename, label in PAGES],
             "production_modules_imported": False,
             "media_downloads_started": False,
