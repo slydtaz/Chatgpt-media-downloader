@@ -142,52 +142,61 @@ def ellipse_line_points(cx: float, cy: float, rx: float, ry: float, rotation: fl
 
 
 def draw_section_icon(canvas: tk.Canvas, cx: float, cy: float, key: str, tint: str, accent: str) -> str:
-    """Render distinct, high-contrast vector icons for each navigation section."""
+    """Render distinct, crisp vector icons and preserve stroke/fill roles during theme changes."""
     tag = "nav-icon-" + key
-    width = 2.2
-    canvas_items = []
+
+    def line(*points, color=tint, weight=2.2):
+        return canvas.create_line(*points, fill=color, width=weight, capstyle=tk.ROUND,
+                                  joinstyle=tk.ROUND, smooth=False, tags=(tag, "nav-icon-line"))
+
+    def outline_oval(x1,y1,x2,y2):
+        return canvas.create_oval(x1,y1,x2,y2,fill="",outline=tint,width=2.2,
+                                  tags=(tag,"nav-icon-outline"))
+
+    def filled_oval(x1,y1,x2,y2,color=accent):
+        return canvas.create_oval(x1,y1,x2,y2,fill=color,outline=color,width=1.0,
+                                  tags=(tag,"nav-icon-filled"))
+
+    def filled_polygon(*points):
+        return canvas.create_polygon(*points,fill=accent,outline=accent,width=1.0,
+                                     tags=(tag,"nav-icon-filled"))
+
     if key == "home":
-        canvas_items.append(canvas.create_line(cx-9, cy-1, cx, cy-9, cx+9, cy-1,
-            fill=tint, width=width, capstyle=tk.ROUND, joinstyle=tk.ROUND, tags=tag))
-        canvas_items.append(canvas.create_line(cx-6.5, cy-2, cx-6.5, cy+8, cx+6.5, cy+8, cx+6.5, cy-2,
-            fill=tint, width=width, capstyle=tk.ROUND, joinstyle=tk.ROUND, tags=tag))
-        canvas_items.append(canvas.create_line(cx-1.5, cy+8, cx-1.5, cy+2, cx+2.5, cy+2, cx+2.5, cy+8,
-            fill=accent, width=width, capstyle=tk.ROUND, joinstyle=tk.ROUND, tags=tag))
+        line(cx-9,cy-1,cx,cy-9,cx+9,cy-1)
+        line(cx-6.5,cy-2,cx-6.5,cy+8,cx+6.5,cy+8,cx+6.5,cy-2)
+        line(cx-1.5,cy+8,cx-1.5,cy+2,cx+2.5,cy+2,cx+2.5,cy+8,color=accent)
     elif key == "playlist":
-        for dy, length in ((-6, 12), (0, 15), (6, 10)):
-            canvas_items.append(canvas.create_oval(cx-9, cy+dy-1.2, cx-6.6, cy+dy+1.2,
-                fill=accent, outline="", tags=tag))
-            canvas_items.append(canvas.create_line(cx-3, cy+dy, cx-3+length, cy+dy,
-                fill=tint, width=width, capstyle=tk.ROUND, tags=tag))
+        for dy,length in ((-6,12),(0,15),(6,10)):
+            filled_oval(cx-9,cy+dy-1.2,cx-6.6,cy+dy+1.2)
+            line(cx-3,cy+dy,cx-3+length,cy+dy)
     elif key == "settings":
-        for dy, knob_x in ((-6, cx-2.5), (0, cx+3.5), (6, cx-5.0)):
-            canvas_items.append(canvas.create_line(cx-9, cy+dy, cx+9, cy+dy,
-                fill=tint, width=width, capstyle=tk.ROUND, tags=tag))
-            canvas_items.append(canvas.create_oval(knob_x-2.4, cy+dy-2.4, knob_x+2.4, cy+dy+2.4,
-                fill=accent, outline=tint, width=1.0, tags=tag))
+        for dy,knob_x in ((-6,cx-2.5),(0,cx+3.5),(6,cx-5.0)):
+            line(cx-9,cy+dy,cx+9,cy+dy)
+            # Distinct slider knobs are outlined capsules instead of filled discs.
+            canvas.create_oval(knob_x-2.8,cy+dy-2.8,knob_x+2.8,cy+dy+2.8,
+                fill=accent,outline=tint,width=1.5,tags=(tag,"nav-icon-outline"))
     elif key == "dependencies":
-        nodes = ((cx,cy-7.5),(cx-7.3,cy+5.5),(cx+7.3,cy+5.5))
-        canvas_items.append(canvas.create_line(*nodes[0],*nodes[1],fill=tint,width=width,tags=tag))
-        canvas_items.append(canvas.create_line(*nodes[0],*nodes[2],fill=tint,width=width,tags=tag))
-        canvas_items.append(canvas.create_line(*nodes[1],*nodes[2],fill=tint,width=width,tags=tag))
+        nodes=((cx,cy-7.5),(cx-7.3,cy+5.5),(cx+7.3,cy+5.5))
+        line(*nodes[0],*nodes[1])
+        line(*nodes[0],*nodes[2])
+        line(*nodes[1],*nodes[2],color=accent,weight=1.8)
         for index,(x,y) in enumerate(nodes):
-            r=3.1 if index==0 else 2.8
-            canvas_items.append(canvas.create_oval(x-r,y-r,x+r,y+r,fill=accent if index==0 else tint,
-                outline=tint,width=1.0,tags=tag))
+            radius=3.1 if index==0 else 2.8
+            filled_oval(x-radius,y-radius,x+radius,y+radius,accent if index==0 else tint)
     elif key == "updates":
-        canvas_items.append(canvas.create_arc(cx-9,cy-9,cx+9,cy+9,start=35,extent=285,style=tk.ARC,
-            outline=tint,width=width+0.2,tags=tag))
-        canvas_items.append(canvas.create_polygon(cx+4,cy-9,cx+10,cy-9,cx+8.5,cy-3,
-            fill=accent,outline=tint,width=1.0,tags=tag))
-        canvas_items.append(canvas.create_line(cx-3,cy, cx+4,cy,fill=accent,width=width,capstyle=tk.ROUND,tags=tag))
+        canvas.create_arc(cx-9,cy-9,cx+9,cy+9,start=35,extent=285,style=tk.ARC,
+                          outline=tint,width=2.4,tags=(tag,"nav-icon-outline"))
+        filled_polygon(cx+4,cy-9,cx+10,cy-9,cx+8.5,cy-3)
+        line(cx-3,cy,cx+4,cy,color=accent)
     elif key == "help":
-        canvas_items.append(canvas.create_oval(cx-9,cy-9,cx+9,cy+9,fill="",outline=tint,width=width,tags=tag))
-        canvas_items.append(canvas.create_text(cx,cy-0.5,text="?",fill=accent,font=("Segoe UI",15,"bold"),tags=tag))
-        canvas_items.append(canvas.create_oval(cx-1,cy+5,cx+1,cy+7,fill=tint,outline="",tags=tag))
+        outline_oval(cx-9,cy-9,cx+9,cy+9)
+        canvas.create_text(cx,cy-0.7,text="?",fill=accent,font=("Segoe UI",15,"bold"),
+                           tags=(tag,"nav-icon-text"))
+        filled_oval(cx-1,cy+5,cx+1,cy+7,tint)
     else:  # diagnostics
-        canvas_items.append(canvas.create_line(cx-9,cy,cx-5,cy,cx-2,cy-6,cx+1,cy+6,cx+4,cy-3,cx+7,cy,cx+10,cy,
-            fill=tint,width=width+0.2,capstyle=tk.ROUND,joinstyle=tk.ROUND,smooth=True,splinesteps=12,tags=tag))
-        canvas_items.append(canvas.create_line(cx-9,cy+8,cx+9,cy+8,fill=accent,width=1.3,capstyle=tk.ROUND,tags=tag))
+        line(cx-9,cy,cx-5,cy,cx-2,cy-6,cx+1,cy+6,cx+4,cy-3,cx+7,cy,cx+10,cy,
+             weight=2.4)
+        line(cx-9,cy+8,cx+9,cy+8,color=accent,weight=1.6)
     return tag
 
 def rounded_span(y: int, width: int, height: int, radius: int) -> tuple[int, int]:
@@ -1207,6 +1216,20 @@ class SpaceUIPrototype:
             pane.pack(fill="both", expand=True)
             builder(pane.body)
 
+    def _tint_nav_icon(self, nav, tag, color):
+        """Tint each vector item by type so outlines remain outlines and strokes stay sharp."""
+        nav.itemconfigure(tag, fill=color)
+        for item_tag, options in (
+            ("nav-icon-line", {"fill": color, "width": 2.4}),
+            ("nav-icon-text", {"fill": color}),
+            ("nav-icon-outline", {"outline": color, "width": 2.3}),
+            ("nav-icon-filled", {"fill": color, "outline": color}),
+        ):
+            try:
+                nav.itemconfigure(item_tag, **options)
+            except tk.TclError:
+                pass
+
     def _route_wheel(self, event):
         pane = getattr(self, "page_panes", {}).get(self.current_page)
         if pane is None or not pane.winfo_ismapped() or not pane._event_inside(event):
@@ -1611,7 +1634,7 @@ class SpaceUIPrototype:
             active = key == name
             c = self.colors
             nav.itemconfigure(shape, fill=blend_hex(c["accent"], c["accent2"], 0.20) if active else c["panel"], outline=c["border"] if active else "")
-            nav.itemconfigure(icon, fill=c["accent2"] if active else c["muted"], outline=c["accent2"] if active else c["muted"], width=2.2)
+            self._tint_nav_icon(nav, icon, c["accent2"] if active else c["muted"])
             nav.itemconfigure(label_id, fill=c["fg"] if active else c["muted"], font=("Segoe UI", 10, "bold" if active else "normal"))
         if name == "settings":
             self._sync_settings_controls()
