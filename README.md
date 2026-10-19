@@ -9,7 +9,7 @@
 [Sugerir uma melhoria](https://github.com/slydtaz/chatgpt-media-downloader/issues/new?template=feature_request.yml)
 
 ![Sistema: Windows](https://img.shields.io/badge/SO-Windows-0078D6)
-![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.3.0-blue)
+![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.3.1-blue)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green)
 
 </div>
@@ -18,11 +18,17 @@
 
 > **Aviso de nome:** “ChatGPT” no nome é apenas parte do identificador do projeto. Este software é independente e **não é afiliado, patrocinado, certificado ou distribuído pela OpenAI**.
 
-> **Interface 5.3.0:** usa uma identidade visual profissional em azul e cinza, navegação compacta, cartões discretos e botões sólidos. Novas instalações iniciam sem animações; as preferências e cores personalizadas existentes são preservadas. A versão acrescenta validações de URLs, extração segura de arquivos compactados, validação mais rígida dos downloads de dependências e testes de segurança.
+> **Interface 5.3.1:** usa uma identidade visual profissional em azul e cinza, navegação compacta, cartões discretos e botões sólidos. Novas instalações iniciam sem animações; as preferências e cores personalizadas existentes são preservadas. A versão acrescenta validações de URLs, extração segura de arquivos compactados, validação mais rígida dos downloads de dependências e testes de segurança.
 
 ## 🎨 Aparência e personalização
 
 A interface usa navegação lateral compacta, painéis organizados e botões com cores sólidas. Personalize o tema **Escuro**, **Claro** ou **Preto OLED**, escolha uma cor de destaque, altere o espaçamento entre **Confortável** e **Compacto**, e ative/desative animações nas Configurações. O **Modo desenvolvedor** mostra a saída técnica dos comandos; por padrão, o painel exibe um resumo da atividade. A paleta azul e cinza prioriza legibilidade, estados claros e aparência discreta.
+
+## 🛡️ Proteção de downloads e análise de segurança
+
+A versão 5.3.1 restringe redirecionamentos de atualizações e dependências a hosts HTTPS explicitamente autorizados e rejeita caminhos de extração inseguros. Os arquivos de dependências só são instalados quando o manifesto SHA-256 publicado pela origem corresponde ao download.
+
+A pipeline de distribuição inclui análise CodeQL e pode submeter os executáveis públicos ao VirusTotal. A publicação de uma nova Release exige configuração de certificado Authenticode confiável e chave VirusTotal nos secrets do repositório. Esses requisitos não significam que esta versão já foi assinada ou analisada: confira os relatórios anexados à Release. Nunca desative o antivírus para executar o aplicativo.
 
 ## 🔎 Integridade e proveniência
 
