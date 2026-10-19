@@ -71,9 +71,11 @@ class VisualConceptTests(unittest.TestCase):
         self.assertIn("órbitas", " ".join(ui_debug.STARTUP_MESSAGES).lower())
 
     def test_prototype_has_independent_development_version(self):
-        self.assertEqual(ui_debug.APP_VERSION, "0.1.0-dev.4")
+        self.assertEqual(ui_debug.APP_VERSION, "0.1.0-dev.5")
         self.assertEqual(ui_debug.CHANNEL, "development")
         self.assertIn("ui-debug", ui_debug.UPDATE_BRANCH)
+        self.assertNotIn("draw_orbit_icon", (ROOT / "ui_debug.py").read_text(encoding="utf-8"))
+        self.assertIn("def draw_section_icon", (ROOT / "ui_debug.py").read_text(encoding="utf-8"))
 
 
 class SelfUpdaterTests(unittest.TestCase):
