@@ -406,7 +406,7 @@ class MediaDownloaderApp:
         self.root.report_callback_exception = self._report_callback_exception
         self._poll_queue()
         # Small GPU-free Canvas animation inspired by SKlauncher 4.0's cosmic theme.
-        self.root.after(180, self._animate_hero_visual)
+        self._hero_animation_job = self.root.after(180, self._animate_hero_visual)
         self.root.after(2200, self._maybe_start_update_check)
 
     # ---------- Theme ----------
@@ -1727,9 +1727,15 @@ class MediaDownloaderApp:
     def _preview_animations(self):
         enabled = bool(self.animations_enabled_var.get())
         self.config["animations_enabled"] = enabled
-        if enabled and getattr(self, "hero_visual", None) is not None:
-            if getattr(self, "_hero_animation_job", None) is None:
-                self._hero_animation_job = self.root.after(0, self._animate_hero_visual)
+        job = getattr(self, "_hero_animation_job", None)
+        if not enabled and job is not None:
+            try:
+                self.root.after_cancel(job)
+            except tk.TclError:
+                pass
+            self._hero_animation_job = None
+        elif enabled and getattr(self, "hero_visual", None) is not None and job is None:
+            self._hero_animation_job = self.root.after(0, self._animate_hero_visual)
 
     def _clear_log(self):
         self.log_history.clear()
