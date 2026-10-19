@@ -26,6 +26,14 @@ Nenhum teste de unidade, hash de arquivo ou verificação automática prova que 
 
 O SHA-256 do build, testes e proveniência de CI ajudam a rastrear o arquivo gerado. Eles não substituem uma auditoria independente nem uma assinatura Authenticode confiável.
 
+## Análise antimalware e vulnerabilidades
+
+A pipeline 5.3.1 inclui análise estática CodeQL e tem um passo de análise dos dois executáveis públicos no VirusTotal quando a secret `VIRUSTOTAL_API_KEY` está configurada. O relatório `VirusTotal-Status.txt` registra os resultados ou explicita que o scan não foi realizado/terminou. Uma nova release não é publicada se a análise estiver ausente, pendente ou apresentar detecções maliciosas/suspeitas.
+
+A análise envia os executáveis destinados à distribuição pública para o VirusTotal; os arquivos enviados podem ser compartilhados com a comunidade de segurança conforme o serviço/termos aplicáveis. Nenhum log, configuração pessoal, token ou dado de usuário deve ser enviado. Uma detecção isolada pode ser falso positivo; investigue e solicite revisão ao fornecedor que a reportou, sem modificar o app para contornar o antivírus.
+
+A proveniência da GitHub Actions ajuda a verificar a origem e o processo de build, mas não certifica que o software não possui falhas. CodeQL, testes, hash, Authenticode e VirusTotal são camadas complementares, não uma promessa de invulnerabilidade ou de zero alertas.
+
 ## Limite da assinatura do Windows
 
 O workflow aceita assinatura Authenticode real quando o mantenedor configura um certificado de assinatura de código válido nos secrets `WINDOWS_SIGNING_CERT_BASE64` e `WINDOWS_SIGNING_CERT_PASSWORD`. Sem esse certificado, o executável continua **sem assinatura Authenticode** e o relatório publicado deve informar isso. Não serão usados nomes de empresa inventados, certificados próprios não confiáveis, metadados falsos ou técnicas para contornar o SmartScreen.
