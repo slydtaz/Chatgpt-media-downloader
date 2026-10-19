@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import stat
+import unicodedata
 import subprocess
 import sys
 import tempfile
@@ -392,6 +393,7 @@ def _safe_extract_zip(archive: Path, destination: Path) -> Path:
             # the whole archive before extraction so duplicate/colliding members
             # cannot overwrite a file that was already checked.
             seen_paths: dict[str, str] = {}
+            paths_with_descendants: set[str] = set()
             for member in members:
                 name = member.filename
                 directory_entry = name.endswith("/")
@@ -408,6 +410,20 @@ def _safe_extract_zip(archive: Path, destination: Path) -> Path:
                     raise AppUpdateError("O pacote de origem contém um caminho inseguro.")
 
                 pure = PurePosixPath(path_text)
+                # Windows filenames have additional restrictions that are not
+                # represented by PurePosixPath: ADS (colon), reserved device
+                # names, control characters, and trailing dots/spaces.
+                for part in pure.parts:
+                    normalized_compat = unicodedata.normalize("NFKC", part)
+                    reserved_stem = normalized_compat.split(".", 1)[0].rstrip(" .").upper()
+                    if (
+                        part.endswith((".", " "))
+                        or any(ord(char) < 32 or char in '<>:"|?*' for char in part)
+                        or reserved_stem in {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
+                        or re.fullmatch(r"(?:COM|LPT)[1-9]", reserved_stem)
+                    ):
+                        raise AppUpdateError("O pacote de origem contém um nome de arquivo incompatível com Windows.")
+
                 mode = (member.external_attr >> 16) & 0xFFFF
                 file_type = stat.S_IFMT(mode)
                 if file_type and file_type not in {stat.S_IFREG, stat.S_IFDIR}:
@@ -419,24 +435,30 @@ def _safe_extract_zip(archive: Path, destination: Path) -> Path:
                 if member.flag_bits & 0x1:
                     raise AppUpdateError("Arquivos ZIP criptografados não são aceitos.")
 
-                relative_name = "/".join(pure.parts)
-                path_key = relative_name.casefold()
+                # NFC + casefold catches case-insensitive duplicates and canonically
+                # equivalent Unicode names before extraction on all platforms.
+                normalized_parts = tuple(
+                    unicodedata.normalize("NFC", part.casefold()) for part in pure.parts
+                )
+                path_key = "/".join(normalized_parts)
                 entry_kind = "dir" if directory_entry or file_type == stat.S_IFDIR else "file"
                 if path_key in seen_paths:
-                    raise AppUpdateError("O pacote de origem contém caminhos duplicados ou incompatíveis entre maiúsculas e minúsculas.")
+                    raise AppUpdateError("O pacote de origem contém caminhos duplicados ou incompatíveis entre maiúsculas/minúsculas ou Unicode.")
 
-                for depth in range(1, len(pure.parts)):
-                    parent_key = "/".join(pure.parts[:depth]).casefold()
+                for depth in range(1, len(normalized_parts)):
+                    parent_key = "/".join(normalized_parts[:depth])
                     if seen_paths.get(parent_key) == "file":
                         raise AppUpdateError("O pacote de origem contém conflito entre arquivo e diretório.")
-                if entry_kind == "file" and any(
-                    previous.startswith(path_key + "/") for previous in seen_paths
-                ):
+                # Track parent prefixes as we go, avoiding an O(n²) scan of all
+                # previous members for every new file in a large source archive.
+                if entry_kind == "file" and path_key in paths_with_descendants:
                     raise AppUpdateError("O pacote de origem contém conflito entre arquivo e diretório.")
 
                 target = (destination / Path(*pure.parts)).resolve()
                 if target != dest_resolved and dest_resolved not in target.parents:
                     raise AppUpdateError("O pacote de origem tenta gravar fora da pasta temporária.")
+                for depth in range(1, len(normalized_parts)):
+                    paths_with_descendants.add("/".join(normalized_parts[:depth]))
                 seen_paths[path_key] = entry_kind
 
             zf.extractall(destination)
