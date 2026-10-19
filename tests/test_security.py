@@ -45,7 +45,7 @@ class SecurityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "extract"
             root.mkdir()
-            self.assertEqual(safe_archive_member_path(root, "media/tool.exe"), root / "media" / "tool.exe")
+            self.assertEqual(safe_archive_member_path(root, "media/tool.exe"), (root / "media" / "tool.exe").resolve())
 
     def test_safe_archive_member_path_rejects_traversal_and_absolute_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
