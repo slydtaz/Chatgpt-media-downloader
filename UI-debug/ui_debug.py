@@ -7,6 +7,11 @@ Downloads, playlist processing, dependency installation and repair are mocked.
 Only theme/preferences persistence and this prototype's own update checker work.
 """
 
+import base64
+import concurrent.futures
+import html
+import ipaddress
+import io
 import json
 import math
 import os
@@ -20,6 +25,7 @@ import sys
 import tempfile
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -29,7 +35,7 @@ import tkinter.font as tkfont
 
 
 APP_NAME = "ChatGPT Media Downloader — UI-debug"
-APP_VERSION = "0.1.0-dev.6"
+APP_VERSION = "0.1.0-dev.7"
 CHANNEL = "development"
 REPO_OWNER = "slydtaz"
 REPO_NAME = "Chatgpt-media-downloader"
@@ -141,62 +147,76 @@ def ellipse_line_points(cx: float, cy: float, rx: float, ry: float, rotation: fl
     return points
 
 
-def draw_section_icon(canvas: tk.Canvas, cx: float, cy: float, key: str, tint: str, accent: str) -> str:
-    """Render distinct, crisp vector icons and preserve stroke/fill roles during theme changes."""
+def draw_section_icon(
+    canvas: tk.Canvas, cx: float, cy: float, key: str, tint: str, accent: str, *, scale: float = 1.18
+) -> str:
+    """Draw larger round-capped vector icons so navigation glyphs look less blocky."""
     tag = "nav-icon-" + key
+    scale = max(.85, min(1.65, float(scale)))
 
-    def line(*points, color=tint, weight=2.2):
-        return canvas.create_line(*points, fill=color, width=weight, capstyle=tk.ROUND,
-                                  joinstyle=tk.ROUND, smooth=False, tags=(tag, "nav-icon-line"))
+    def point(x, y):
+        return cx + (x-cx)*scale, cy + (y-cy)*scale
+
+    def points(values):
+        transformed=[]
+        for x,y in zip(values[0::2],values[1::2]):
+            transformed.extend(point(x,y))
+        return transformed
+
+    def line(*coords,color=tint,weight=2.45):
+        return canvas.create_line(*points(coords),fill=color,width=weight*scale,
+            capstyle=tk.ROUND,joinstyle=tk.ROUND,smooth=False,tags=(tag,"nav-icon-line"))
 
     def outline_oval(x1,y1,x2,y2):
-        return canvas.create_oval(x1,y1,x2,y2,fill="",outline=tint,width=2.2,
+        x1,y1=point(x1,y1); x2,y2=point(x2,y2)
+        return canvas.create_oval(x1,y1,x2,y2,fill="",outline=tint,width=2.45*scale,
                                   tags=(tag,"nav-icon-outline"))
 
     def filled_oval(x1,y1,x2,y2,color=accent):
-        return canvas.create_oval(x1,y1,x2,y2,fill=color,outline=color,width=1.0,
+        x1,y1=point(x1,y1); x2,y2=point(x2,y2)
+        return canvas.create_oval(x1,y1,x2,y2,fill=color,outline=color,width=1.1*scale,
                                   tags=(tag,"nav-icon-filled"))
 
-    def filled_polygon(*points):
-        return canvas.create_polygon(*points,fill=accent,outline=accent,width=1.0,
-                                     tags=(tag,"nav-icon-filled"))
+    def filled_polygon(*coords):
+        return canvas.create_polygon(*points(coords),fill=accent,outline=accent,width=1.1*scale,
+                                     smooth=True,splinesteps=16,tags=(tag,"nav-icon-filled"))
 
     if key == "home":
-        line(cx-9,cy-1,cx,cy-9,cx+9,cy-1)
-        line(cx-6.5,cy-2,cx-6.5,cy+8,cx+6.5,cy+8,cx+6.5,cy-2)
-        line(cx-1.5,cy+8,cx-1.5,cy+2,cx+2.5,cy+2,cx+2.5,cy+8,color=accent)
+        line(cx-9,cy-1,cx,cy-9,cx+9,cy-1,weight=2.6)
+        line(cx-6.5,cy-2,cx-6.5,cy+8,cx+6.5,cy+8,cx+6.5,cy-2,weight=2.5)
+        line(cx-1.5,cy+8,cx-1.5,cy+2,cx+2.5,cy+2,cx+2.5,cy+8,color=accent,weight=2.3)
     elif key == "playlist":
         for dy,length in ((-6,12),(0,15),(6,10)):
             filled_oval(cx-9,cy+dy-1.2,cx-6.6,cy+dy+1.2)
-            line(cx-3,cy+dy,cx-3+length,cy+dy)
+            line(cx-3,cy+dy,cx-3+length,cy+dy,weight=2.6)
     elif key == "settings":
         for dy,knob_x in ((-6,cx-2.5),(0,cx+3.5),(6,cx-5.0)):
-            line(cx-9,cy+dy,cx+9,cy+dy)
-            # Distinct slider knobs are outlined capsules instead of filled discs.
-            canvas.create_oval(knob_x-2.8,cy+dy-2.8,knob_x+2.8,cy+dy+2.8,
-                fill=accent,outline=tint,width=1.5,tags=(tag,"nav-icon-outline"))
+            line(cx-9,cy+dy,cx+9,cy+dy,weight=2.4)
+            x1,y1=point(knob_x-2.8,cy+dy-2.8); x2,y2=point(knob_x+2.8,cy+dy+2.8)
+            canvas.create_oval(x1,y1,x2,y2,fill=accent,outline=tint,width=1.7*scale,
+                               tags=(tag,"nav-icon-outline"))
     elif key == "dependencies":
         nodes=((cx,cy-7.5),(cx-7.3,cy+5.5),(cx+7.3,cy+5.5))
-        line(*nodes[0],*nodes[1])
-        line(*nodes[0],*nodes[2])
-        line(*nodes[1],*nodes[2],color=accent,weight=1.8)
+        line(*nodes[0],*nodes[1],weight=2.6); line(*nodes[0],*nodes[2],weight=2.6)
+        line(*nodes[1],*nodes[2],color=accent,weight=2.1)
         for index,(x,y) in enumerate(nodes):
             radius=3.1 if index==0 else 2.8
             filled_oval(x-radius,y-radius,x+radius,y+radius,accent if index==0 else tint)
     elif key == "updates":
-        canvas.create_arc(cx-9,cy-9,cx+9,cy+9,start=35,extent=285,style=tk.ARC,
-                          outline=tint,width=2.4,tags=(tag,"nav-icon-outline"))
+        x1,y1=point(cx-9,cy-9); x2,y2=point(cx+9,cy+9)
+        canvas.create_arc(x1,y1,x2,y2,start=35,extent=285,style=tk.ARC,outline=tint,
+                          width=2.7*scale,tags=(tag,"nav-icon-outline"))
         filled_polygon(cx+4,cy-9,cx+10,cy-9,cx+8.5,cy-3)
-        line(cx-3,cy,cx+4,cy,color=accent)
+        line(cx-3,cy,cx+4,cy,color=accent,weight=2.4)
     elif key == "help":
         outline_oval(cx-9,cy-9,cx+9,cy+9)
-        canvas.create_text(cx,cy-0.7,text="?",fill=accent,font=("Segoe UI",15,"bold"),
+        x,y=point(cx,cy-.7)
+        canvas.create_text(x,y,text="?",fill=accent,font=("Segoe UI",max(11,int(15*scale)),"bold"),
                            tags=(tag,"nav-icon-text"))
         filled_oval(cx-1,cy+5,cx+1,cy+7,tint)
-    else:  # diagnostics
-        line(cx-9,cy,cx-5,cy,cx-2,cy-6,cx+1,cy+6,cx+4,cy-3,cx+7,cy,cx+10,cy,
-             weight=2.4)
-        line(cx-9,cy+8,cx+9,cy+8,color=accent,weight=1.6)
+    else:
+        line(cx-9,cy,cx-5,cy,cx-2,cy-6,cx+1,cy+6,cx+4,cy-3,cx+7,cy,cx+10,cy,weight=2.7)
+        line(cx-9,cy+8,cx+9,cy+8,color=accent,weight=1.9)
     return tag
 
 def rounded_span(y: int, width: int, height: int, radius: int) -> tuple[int, int]:
@@ -206,6 +226,190 @@ def rounded_span(y: int, width: int, height: int, radius: int) -> tuple[int, int
     depth = abs(y - center_y) - (height / 2 - r)
     inset = r - (max(0.0, r * r - depth * depth) ** 0.5) if depth > 0 else 0
     return max(0, int(inset)), min(width, int(width - inset))
+
+
+def validate_preview_url(raw_url: str) -> str:
+    """Accept public HTTP(S) media URLs only; reject local names/IPs and credentials."""
+    value = str(raw_url or "").strip()
+    parts = urllib.parse.urlsplit(value)
+    if parts.scheme.lower() not in {"http", "https"} or not parts.hostname:
+        raise ValueError("Cole um endereço público começando com https:// ou http://.")
+    if parts.username or parts.password:
+        raise ValueError("Links com credenciais embutidas não são aceitos.")
+    hostname = parts.hostname.rstrip(".").lower()
+    if hostname in {"localhost", "localhost.localdomain"} or hostname.endswith(
+        (".localhost", ".local", ".internal", ".test", ".invalid", ".example")
+    ):
+        raise ValueError("Endereços locais/de exemplo não podem gerar uma prévia.")
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        address = None
+    if address is not None:
+        if not address.is_global:
+            raise ValueError("Endereços IP privados ou reservados não podem gerar uma prévia.")
+    elif "." not in hostname:
+        raise ValueError("O endereço precisa apontar para um domínio público.")
+    try:
+        port = parts.port
+    except ValueError as exc:
+        raise ValueError("A porta do link não é válida.") from exc
+    if port not in (None, 80, 443):
+        raise ValueError("Portas personalizadas não são aceitas para prévias.")
+    return urllib.parse.urlunsplit((parts.scheme.lower(), parts.netloc, parts.path, parts.query, ""))
+
+
+def format_media_duration(value) -> str:
+    """Format a duration in seconds as mm:ss or h:mm:ss."""
+    try:
+        seconds = max(0, int(float(value)))
+    except (TypeError, ValueError, OverflowError):
+        return "Duração desconhecida"
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:d}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes:02d}:{seconds:02d}"
+
+
+def _thumbnail_from_info(info: dict) -> str:
+    """Pick the largest thumbnail URL advertised in extractor metadata."""
+    candidates = []
+    for image in info.get("thumbnails") or []:
+        if not isinstance(image, dict) or not image.get("url"):
+            continue
+        try:
+            area = int(image.get("width") or 0) * int(image.get("height") or 0)
+        except (TypeError, ValueError, OverflowError):
+            area = 0
+        candidates.append((area, image["url"]))
+    return str(max(candidates, default=(0, info.get("thumbnail")))[1] or "")
+
+
+def _normalize_media_item(info: dict, fallback_url: str) -> dict:
+    item_url = str(info.get("webpage_url") or info.get("original_url") or info.get("url") or fallback_url)
+    if not item_url.startswith(("http://", "https://")) and info.get("id"):
+        extractor = str(info.get("ie_key") or info.get("extractor_key") or "").lower()
+        if "youtube" in extractor:
+            item_url = "https://www.youtube.com/watch?v=" + urllib.parse.quote(str(info["id"]), safe="")
+    return {
+        "title": html.unescape(str(info.get("title") or info.get("id") or "Mídia sem título")),
+        "channel": html.unescape(str(info.get("channel") or info.get("uploader") or info.get("creator") or "Canal não informado")),
+        "duration": info.get("duration"),
+        "duration_text": format_media_duration(info.get("duration")),
+        "thumbnail_url": _thumbnail_from_info(info),
+        "url": item_url,
+    }
+
+
+def fetch_preview_metadata(raw_url: str, *, playlist: bool = False, max_items: int = 20) -> dict:
+    """Resolve public metadata only. This never downloads a media file or runs a converter."""
+    url = validate_preview_url(raw_url)
+    try:
+        import yt_dlp
+    except ImportError:
+        yt_dlp = None
+
+    if yt_dlp is not None:
+        class QuietPreviewLogger:
+            def debug(self, _message): pass
+            def warning(self, _message): pass
+            def error(self, _message): pass
+
+        options = {
+            "quiet": True, "no_warnings": True, "skip_download": True,
+            "noplaylist": not playlist, "ignoreerrors": True, "logger": QuietPreviewLogger(),
+            "socket_timeout": 8, "retries": 0, "extractor_retries": 0,
+            "playlist_items": f"1-{max(1, min(int(max_items), 40))}" if playlist else None,
+            "extract_flat": "in_playlist" if playlist else False,
+            "cachedir": False, "overwrites": False, "nopart": True,
+        }
+        options = {key: value for key, value in options.items() if value is not None}
+        try:
+            with yt_dlp.YoutubeDL(options) as extractor:
+                info = extractor.extract_info(url, download=False)
+        except Exception as exc:
+            raise RuntimeError("Não consegui ler os metadados desse link. Confira o endereço e tente novamente.") from exc
+        if not isinstance(info, dict):
+            raise RuntimeError("A fonte não retornou informações de mídia.")
+        entries = info.get("entries")
+        if playlist and entries is not None:
+            items = [
+                _normalize_media_item(entry, url)
+                for entry in list(entries)[:max_items] if isinstance(entry, dict)
+            ]
+            return {
+                "title": html.unescape(str(info.get("title") or "Lista de mídia")),
+                "channel": "Playlist / lista", "is_playlist": True,
+                "items": items, "url": url,
+            }
+        return {**_normalize_media_item(info, url), "is_playlist": False, "items": []}
+
+    parts = urllib.parse.urlsplit(url)
+    host = (parts.hostname or "").lower()
+    is_youtube = host == "youtu.be" or host == "youtube.com" or host.endswith(".youtube.com")
+    is_vimeo = host == "vimeo.com" or host.endswith(".vimeo.com")
+    query = dict(urllib.parse.parse_qsl(parts.query, keep_blank_values=True))
+    is_playlist_url = bool(query.get("list"))
+    if (not playlist or not is_playlist_url) and (is_youtube or is_vimeo):
+        endpoint = "https://www.youtube.com/oembed" if is_youtube else "https://vimeo.com/api/oembed.json"
+        request_query = urllib.parse.urlencode({"url": url, "format": "json"})
+        request = urllib.request.Request(endpoint + "?" + request_query, headers={"User-Agent": "MediaLabPreview/1.0"})
+        try:
+            with urllib.request.urlopen(request, timeout=8) as response:
+                payload = response.read(1024 * 1024 + 1)
+            if len(payload) > 1024 * 1024:
+                raise RuntimeError("A resposta de prévia ultrapassou o limite permitido.")
+            info = json.loads(payload.decode("utf-8"))
+        except Exception as exc:
+            raise RuntimeError("Não consegui gerar a prévia. Instale yt-dlp para ampliar o suporte a fontes.") from exc
+        return {
+            "title": html.unescape(str(info.get("title") or "Mídia sem título")),
+            "channel": html.unescape(str(info.get("author_name") or "Canal não informado")),
+            "duration": None, "duration_text": "Duração não fornecida",
+            "thumbnail_url": str(info.get("thumbnail_url") or ""),
+            "url": url, "is_playlist": False, "items": [],
+        }
+    requirement = "yt-dlp é necessário para prévias de playlists." if playlist else "Instale yt-dlp para gerar prévias desta fonte."
+    raise RuntimeError(requirement + " O protótipo ainda não inicia downloads reais.")
+
+
+def fetch_thumbnail_bytes(raw_url: str, *, max_bytes: int = 5 * 1024 * 1024) -> bytes | None:
+    """Fetch one small HTTPS thumbnail from a public host; never fetch media streams."""
+    value = str(raw_url or "").strip()
+    if not value:
+        return None
+    try:
+        parts = urllib.parse.urlsplit(value)
+        if parts.scheme.lower() != "https" or not parts.hostname or parts.username or parts.password:
+            return None
+        host = parts.hostname.rstrip(".").lower()
+        if host in {"localhost", "localhost.localdomain"} or host.endswith(
+            (".localhost", ".local", ".internal", ".test", ".invalid", ".example")
+        ):
+            return None
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            address = None
+        if address is not None and not address.is_global:
+            return None
+        if address is None and "." not in host:
+            return None
+        request = urllib.request.Request(value, headers={"User-Agent": "MediaLabPreview/1.0"})
+        with urllib.request.urlopen(request, timeout=8) as response:
+            final_url = urllib.parse.urlsplit(response.geturl())
+            if final_url.scheme.lower() != "https":
+                return None
+            try:
+                validate_preview_url(response.geturl())
+            except ValueError:
+                return None
+            declared_size = response.headers.get("Content-Length")
+            if declared_size and int(declared_size) > max_bytes:
+                return None
+            payload = response.read(max_bytes + 1)
+        return payload if 0 < len(payload) <= max_bytes else None
+    except (OSError, ValueError, urllib.error.URLError, TimeoutError):
+        return None
 
 
 def adaptive_ui_scale(screen_width: int, screen_height: int) -> float:
@@ -1098,6 +1302,13 @@ class SpaceUIPrototype:
         self.mini_graphs: list[tuple[tk.Canvas, object]] = []
         self.current_page = "home"
         self.toast_after = None
+        self._preview_busy = False
+        self._playlist_preview_busy = False
+        self.current_media_metadata: dict | None = None
+        self.media_preview_photo = None
+        self.playlist_count_label = None
+        self.playlist_selection_label = None
+        self._playlist_photo_refs: list = []
         self.update_info: dict | None = None
         self._update_busy = False
         self._stop = threading.Event()
@@ -1200,11 +1411,11 @@ class SpaceUIPrototype:
         self.nav_gap.pack(side="left", fill="y")
         brand = tk.Frame(self.sidebar, bg=self.colors["panel"], padx=self.scale_px(18), pady=self.scale_px(20))
         brand.pack(fill="x")
-        mark = OrbitalAtom(brand, self, size=self.scale_px(42))
+        mark = OrbitalAtom(brand, self, size=self.scale_px(58))
         mark.pack(side="left", padx=(0,self.scale_px(11)))
         titlebox = tk.Frame(brand, bg=self.colors["panel"])
         titlebox.pack(side="left", fill="x", expand=True)
-        self.label(titlebox, "MEDIA LAB", "fg", "panel", 10, "bold").pack(anchor="w")
+        self.label(titlebox, "MEDIA LAB", "fg", "panel", 12, "bold").pack(anchor="w")
         self.label(titlebox, "UI-debug  /  DEV", "muted", "panel", 8, "normal").pack(anchor="w", pady=(self.scale_px(3),0))
         self._divider(self.sidebar, "panel")
         self.label(self.sidebar, "WORKSPACE", "muted", "panel", 8, "bold").pack(anchor="w", padx=self.scale_px(20), pady=(self.scale_px(16),self.scale_px(8)))
@@ -1289,9 +1500,9 @@ class SpaceUIPrototype:
     def _tint_nav_icon(self, nav, tag, color):
         """Tint each vector item by type so outlines remain outlines and strokes stay sharp."""
         for item_tag, options in (
-            ("nav-icon-line", {"fill": color, "width": 2.4 * self.ui_scale}),
+            ("nav-icon-line", {"fill": color, "width": 2.9 * self.ui_scale}),
             ("nav-icon-text", {"fill": color}),
-            ("nav-icon-outline", {"outline": color, "width": 2.3 * self.ui_scale}),
+            ("nav-icon-outline", {"outline": color, "width": 2.8 * self.ui_scale}),
             ("nav-icon-filled", {"fill": color, "outline": color}),
         ):
             try:
