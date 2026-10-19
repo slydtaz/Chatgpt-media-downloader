@@ -161,18 +161,24 @@ class ScrollableFrame(ttk.Frame):
 
 
 def _rounded_polygon(x1: float, y1: float, x2: float, y2: float, radius: float) -> list[float]:
-    """Coordinates for a smooth rounded rectangle drawn on a Tk canvas."""
+    """Return points sampled along real quarter-circles for a crisp rounded rectangle."""
     r = max(2.0, min(radius, (x2 - x1) / 2.0, (y2 - y1) / 2.0))
-    return [
-        x1 + r, y1, x2 - r, y1,
-        x2 - r / 2, y1, x2, y1 + r / 2,
-        x2, y1 + r, x2, y2 - r,
-        x2, y2 - r / 2, x2 - r / 2, y2,
-        x2 - r, y2, x1 + r, y2,
-        x1 + r / 2, y2, x1, y2 - r / 2,
-        x1, y2 - r, x1, y1 + r,
-        x1, y1 + r / 2, x1 + r / 2, y1,
-    ]
+    points: list[tuple[float, float]] = [(x1 + r, y1), (x2 - r, y1)]
+
+    def arc(cx: float, cy: float, start: float, end: float, increment: float = 6.0):
+        steps = max(1, math.ceil((end - start) / increment))
+        for step in range(1, steps + 1):
+            angle = math.radians(start + (end - start) * step / steps)
+            points.append((cx + r * math.cos(angle), cy + r * math.sin(angle)))
+
+    arc(x2 - r, y1 + r, -90, 0)
+    points.append((x2, y2 - r))
+    arc(x2 - r, y2 - r, 0, 90)
+    points.append((x1 + r, y2))
+    arc(x1 + r, y2 - r, 90, 180)
+    points.append((x1, y1 + r))
+    arc(x1 + r, y1 + r, 180, 270)
+    return [coordinate for point in points for coordinate in point]
 
 
 class RoundedCard(ttk.Frame):
@@ -202,7 +208,7 @@ class RoundedCard(ttk.Frame):
             if width > 8 and height > 8:
                 self._canvas.create_polygon(
                     _rounded_polygon(1, 1, width - 2, height - 2, 30),
-                    smooth=True, splinesteps=14, fill=surface,
+                    smooth=False, splinesteps=14, fill=surface,
                     outline=colors.get("border", surface), width=1, tags="surface",
                 )
             self._canvas.lower()
@@ -291,12 +297,12 @@ class IconNavButton(tk.Canvas):
                 fill = _blend_hex(accent, panel, 0.68 if self.active else 0.84)
                 self.create_polygon(
                     _rounded_polygon(5, 2, width - 5, height - 2, 13),
-                    smooth=True, splinesteps=12, fill=fill, outline="",
+                    smooth=False, splinesteps=12, fill=fill, outline="",
                 )
             if self.active:
                 self.create_polygon(
                     _rounded_polygon(1, height / 2 - 8, 4, height / 2 + 8, 2),
-                    fill=colors.get("pink", accent), outline="",
+                    fill=colors.get("pink", accent), outline="", smooth=False,
                 )
             icon_color = accent if self.active else (colors["fg"] if self.hovered else colors["muted"])
             size = max(15, int(18 * self._scale))
