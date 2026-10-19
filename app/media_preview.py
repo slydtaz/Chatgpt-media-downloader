@@ -195,7 +195,7 @@ def fetch_thumbnail_bytes(url: str, *, timeout: float = 6.0) -> bytes | None:
             final_url = response.geturl()
             if not is_safe_thumbnail_url(final_url, resolve_dns=True):
                 return None
-            content_type = response.headers.get_content_type().lower()
+            content_type = str(response.headers.get("Content-Type", "")).split(";", 1)[0].strip().lower()
             if content_type and not content_type.startswith("image/"):
                 return None
             raw_length = response.headers.get("Content-Length")
