@@ -112,6 +112,8 @@ def _run_gui_smoke_test() -> int:
     update_check_original = None
     root = None
     failure: str | None = None
+    visited: list[str] = []
+    drawn_items = 0
     try:
         # Keep this smoke test completely isolated from the user's settings and tools.
         with tempfile.TemporaryDirectory(prefix="cgmd-gui-smoke-") as isolated_data:
