@@ -3,11 +3,12 @@ import io
 import urllib.error
 import urllib.request
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from app.security import (
     redact_sensitive, redacted_url, safe_archive_member_path,
-    RestrictedHTTPSRedirectHandler, safe_filename_part, validate_url,
+    RestrictedHTTPSRedirectHandler, safe_filename_part, trusted_urlopen, validate_url,
 )
 
 
@@ -43,6 +44,19 @@ class SecurityTests(unittest.TestCase):
             redacted_url("https://user:secret@[2001:db8::1]:8443/private?token=x"),
             "https://[2001:db8::1]:8443/<url-omitida>",
         )
+
+    def test_trusted_urlopen_rejects_untrusted_initial_url_before_network(self):
+        with mock.patch("urllib.request.build_opener") as build_opener:
+            for url in (
+                "http://github.com/payload.exe",
+                "https://attacker.example/payload.exe",
+                "https://github.com:444/payload.exe",
+                "https://user@github.com/payload.exe",
+            ):
+                with self.subTest(url=url):
+                    with self.assertRaises(Exception):
+                        trusted_urlopen(url, allowed_hosts={"github.com"})
+            build_opener.assert_not_called()
 
     def test_redirect_handler_rejects_untrusted_destination_before_following(self):
         handler = RestrictedHTTPSRedirectHandler({"github.com", "objects.githubusercontent.com"})
