@@ -41,7 +41,7 @@ def _font(size: int):
     return ImageFont.load_default()
 
 
-def capture_window(root, max_width=1280):
+def capture_window(root, max_width=1920):
     root.update_idletasks()
     root.update()
     x, y = root.winfo_rootx(), root.winfo_rooty()
@@ -101,10 +101,10 @@ def main() -> int:
         root.title(f"UI-debug {ui_debug.APP_VERSION} — prévia")
         screen_w, screen_h = root.winfo_screenwidth(), root.winfo_screenheight()
         desktop_w, desktop_h = ImageGrab.grab().size
-        width = max(960, min(1200, screen_w - 40, desktop_w - 32))
-        # Leave room for the Windows title bar and taskbar; the full client area
-        # still fits the prototype's minimum size on the hosted screenshot runner.
-        height = max(620, min(700, screen_h - 120, desktop_h - 120))
+        width = max(960, min(2560, screen_w - 40, desktop_w - 32))
+        # Capture close to the actual display size so high-DPI scaling is tested
+        # at the layout width it was designed for, instead of a small mock window.
+        height = max(620, min(1440, screen_h - 120, desktop_h - 120))
         root.geometry("%sx%s+4+4" % (width, height))
         root.update_idletasks()
 
