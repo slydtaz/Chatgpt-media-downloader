@@ -531,7 +531,7 @@ class MediaDownloaderApp:
         ttk.Separator(sidebar).pack(fill="x",pady=(12,9))
         self.dep_badge=tk.Label(sidebar,text="●",bg=self.colors["panel2"],fg=self.colors["muted"],anchor="center",font=("Segoe UI",10,"bold"),padx=7,pady=7)
         self.dep_badge.pack(fill="x",pady=(0,5))
-        Tooltip(self.dep_badge,"Estado das dependências",delay_ms=450,click_to_pin=False)
+        Tooltip(self.dep_badge,"Veja a aba Dependências para conferir o estado atual.",delay_ms=450,click_to_pin=False)
         ttk.Label(sidebar,text=f"v{VERSION}",style="SidebarMuted.TLabel",anchor="center",font=("Segoe UI",7)).pack(fill="x")
         content_wrap=ttk.Frame(outer)
         content_wrap.pack(side="left",fill="both",expand=True)
@@ -982,7 +982,7 @@ class MediaDownloaderApp:
         if hasattr(self, "dep_cards"):
             for card in self.dep_cards.values():
                 card["status"].set("Verificando...")
-        self.dep_badge.configure(text="●  Verificando dependências", fg=self.colors["muted"])
+        self.dep_badge.configure(text="●", fg=self.colors["muted"])
 
         def worker():
             infos = {
@@ -1017,10 +1017,10 @@ class MediaDownloaderApp:
                 card["error"].set(info.error or "—")
         self.dependency_state_var.set(f"Dependências {count}/3")
         if count == 3:
-            self.dep_badge.configure(text="●  Dependências prontas", fg=self.colors["good"])
+            self.dep_badge.configure(text="●", fg=self.colors["good"])
         else:
             color = self.colors["warn"] if count else self.colors["bad"]
-            self.dep_badge.configure(text=f"●  Dependências {count}/3", fg=color)
+            self.dep_badge.configure(text="●", fg=color)
         if self._dependency_refresh_pending:
             self._dependency_refresh_pending = False
             self._refresh_dependencies(force=True)
