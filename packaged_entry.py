@@ -183,12 +183,12 @@ def _run_gui_smoke_test() -> int:
             os.environ["LOCALAPPDATA"] = original_local_app_data
 
     smoke_report = (
-        "GUI SMOKE TEST FALHOU\\n" + failure
+        "GUI SMOKE TEST FALHOU\n" + failure
         if failure
-        else "GUI SMOKE TEST OK\\n"
-        + f"Elementos desenhados na animação: {drawn_items}\\n"
+        else "GUI SMOKE TEST OK\n"
+        + f"Elementos desenhados na animação: {drawn_items}\n"
         + "Páginas percorridas: " + ", ".join(visited)
-        + "\\nSem downloads de mídia nem verificações de atualização.\\n"
+        + "\nSem downloads de mídia nem verificações de atualização.\n"
     )
     smoke_path = os.environ.get("CGMD_SMOKE_LOG", "").strip()
     if smoke_path:
@@ -200,9 +200,9 @@ def _run_gui_smoke_test() -> int:
             _write_startup_log(f"Não foi possível gravar o relatório do smoke test: {exc}")
 
     if failure:
-        _write_startup_log("GUI SMOKE TEST FALHOU.\\n" + failure)
+        _write_startup_log("GUI SMOKE TEST FALHOU.\n" + failure)
         try:
-            sys.stderr.write(failure + "\\n")
+            sys.stderr.write(failure + "\n")
             sys.stderr.flush()
         except Exception:
             pass
