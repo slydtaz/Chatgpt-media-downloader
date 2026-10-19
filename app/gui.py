@@ -425,7 +425,7 @@ class MediaDownloaderApp:
                 "CosmicButton.border", "image", self.brand_images["button_normal"],
                 ("pressed", self.brand_images["button_pressed"]),
                 ("active", self.brand_images["button_hover"]),
-                border=(18, 14, 18, 14), sticky="nsew",
+                border=(12, 10, 12, 10), sticky="nsew",
             )
 
             def replace_border(layout):
