@@ -128,10 +128,12 @@ def _run_gui_smoke_test() -> int:
             MediaDownloaderApp._maybe_start_update_check = lambda self: None
 
             root = tk.Tk()
-            root.withdraw()
             root.geometry("1220x820")
             app = MediaDownloaderApp(root)
             root.update_idletasks()
+            root.deiconify()
+            root.update_idletasks()
+            root.update()
 
             app._animate_hero_visual()
             drawn_items = len(app.hero_visual.find_all())
@@ -192,15 +194,9 @@ def _run_gui_smoke_test() -> int:
     return 0
 
 def main(bootstrap_main=None) -> int:
-    """Run the application or the isolated CI-only GUI smoke-test mode."""
+    """Run the application, isolated GUI smoke test, or startup diagnostics."""
     if "--smoke-test-gui" in sys.argv[1:]:
         return _run_gui_smoke_test()
-
-    """Run the real bootstrap and report any exception that escapes it.
-
-    The optional callable is a test seam; production runs import the bootstrap
-    lazily so even an import error is captured by this function.
-    """
     _write_startup_log("ENTRYPOINT: início do executável.")
     try:
         if bootstrap_main is None:
