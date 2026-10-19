@@ -12,7 +12,7 @@ Nenhum teste de unidade, hash de arquivo ou verificação automática prova que 
 - Processos externos recebem listas de argumentos, não comandos concatenados para um shell.
 - Os logs removem caminhos de URL, query strings e padrões que aparentem conter credenciais.
 - Os instaladores de dependências aceitam apenas hosts HTTPS explicitamente permitidos do GitHub, validam redirecionamentos, aplicam limites de tamanho e verificam SHA-256 quando o projeto de origem publica um manifesto. Um manifesto ausente ou inválido interrompe a instalação automática.
-- Antes da extração, arquivos compactados têm seus caminhos validados; caminhos de travessia, links simbólicos e entradas especiais são rejeitados.
+- Antes da extração, arquivos compactados têm seus caminhos validados; caminhos de travessia, links simbólicos e entradas especiais são rejeitados. A extração usa staging exclusivo, limites para tamanho compactado/descompactado e número de entradas, rejeita caminhos e nomes de ferramenta ambíguos e preserva/restaura os binários existentes quando a promoção falha.
 - As atualizações do aplicativo verificam o host final, tamanho, hash e identidade de produto esperada antes de substituir os arquivos existentes. Os dados pessoais de configuração e as mídias baixadas ficam separados da instalação.
 - O download de playlists exige seleção dos itens disponíveis. O paralelismo tem limites explícitos e não habilita acesso a conteúdo privado.
 - O binário é empacotado sem ofuscação deliberada. Metadados PE identificam o produto, mas não autenticam o publicador.
