@@ -63,13 +63,24 @@ jobs:
         run: python -m pip install --upgrade pyinstaller
       - name: Compile source
         shell: cmd
-        run: python -c "from pathlib import Path; import py_compile; files = list(Path('app').glob('*.py')) + [Path('packaged_entry.py')]; [py_compile.compile(str(p), doraise=True) for p in files]"
+        run: python -c "from pathlib import Path; import py_compile; files = list(Path('app').glob('*.py')) + [Path('packaged_entry.py'), Path('emergency_uninstaller.py')]; [py_compile.compile(str(p), doraise=True) for p in files]"
       - name: Run tests before packaging
         shell: pwsh
         run: ./tests/run_unittest_ci.ps1
       - name: Build EXE
         shell: cmd
         run: python -m PyInstaller --noconfirm --clean ChatGPTMediaDownloader.spec
+      - name: Smoke-test packaged GUI (no downloads or update checks)
+        shell: pwsh
+        run: |
+          & '.\\dist\\ChatGPTMediaDownloader.exe' --smoke-test-gui
+          if ($LASTEXITCODE -ne 0) { throw "GUI smoke test failed with exit code $LASTEXITCODE." }
+      - name: Build standalone emergency uninstaller
+        shell: cmd
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --noconsole --name GPT-Media-Uninstaller --distpath dist-uninstaller --workpath build/uninstaller emergency_uninstaller.py
+          if not exist "dist-uninstaller\\GPT-Media-Uninstaller.exe" exit /b 1
+          copy /y "dist-uninstaller\\GPT-Media-Uninstaller.exe" "dist\\GPT-Media-Uninstaller.exe"
       - name: Sign EXE with Authenticode when a trusted certificate is configured
         shell: pwsh
         env:
@@ -122,6 +133,7 @@ jobs:
         shell: pwsh
         run: |
           if (!(Test-Path 'dist/ChatGPTMediaDownloader.exe')) { throw 'EXE was not created' }
+          if (!(Test-Path 'dist/GPT-Media-Uninstaller.exe')) { throw 'GPT Media Uninstaller was not created' }
           if (!(Test-Path 'dist/Windows-Signature-Status.txt')) { throw 'Signature status was not created' }
           $hash = (Get-FileHash 'dist/ChatGPTMediaDownloader.exe' -Algorithm SHA256).Hash.ToLower()
           "$hash  ChatGPTMediaDownloader.exe" | Out-File -Encoding ascii 'dist/SHA256SUMS.txt'
@@ -139,11 +151,13 @@ jobs:
             Recommended for users: download ChatGPTMediaDownloader.exe.
             SHA256SUMS.txt contains the SHA-256 checksum of the same build.
             Windows-Signature-Status.txt records whether Authenticode signing was configured and verified.
+            GPT-Media-Uninstaller.exe is a standalone emergency cleanup tool; downloaded media are preserved by default.
             The attached source ZIP is intended for developers, auditing and compilation.
           make_latest: true
           overwrite_files: true
           files: |
             dist/ChatGPTMediaDownloader.exe
+            dist/GPT-Media-Uninstaller.exe
             dist/SHA256SUMS.txt
             dist/Windows-Signature-Status.txt
             dist/*-source.zip
