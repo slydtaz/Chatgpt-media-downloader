@@ -340,6 +340,8 @@ def perform_cleanup(plan: CleanupPlan, *, remove_portable: bool = False,
                 log.append(f"PRESERVADO por segurança (pasta não dedicada): {item.path}")
                 continue
             try:
+                if item.path.is_symlink():
+                    raise RuntimeError("A pasta de mídia tornou-se um link simbólico; exclusão cancelada.")
                 resolved = item.path.resolve(strict=True)
                 if resolved == Path(resolved.anchor) or resolved == Path(ctx["USERPROFILE"]).resolve():
                     raise RuntimeError("Caminho de mídia amplo demais.")
