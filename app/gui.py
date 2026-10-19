@@ -916,7 +916,7 @@ class MediaDownloaderApp:
         self.style.configure("TCombobox",padding=8 if not compact else 6,fieldbackground=c["field"],foreground=c["input_fg"],arrowcolor=c["accent"])
         self.style.map("TCombobox",fieldbackground=[("readonly",c["field"])],foreground=[("readonly",c["input_fg"])])
         self.style.configure("TProgressbar",thickness=10 if compact else 12,troughcolor=c["panel2"],background=c["accent"])
-        self.style.configure("Treeview",background=c["field"],fieldbackground=c["field"],foreground=c["fg"],rowheight=24 if compact else 31,bordercolor=c["border"])
+        self.style.configure("Treeview",background=c["field"],fieldbackground=c["field"],foreground=c["fg"],rowheight=50 if compact else 58,bordercolor=c["border"])
         self.style.map("Treeview",background=[("selected",c["accent2"])],foreground=[("selected",c["accent_fg"])])
         self.style.configure("Treeview.Heading",background=c["panel2"],foreground=c["fg"],relief="flat",padding=(8,7),font=("Segoe UI",9,"bold"))
         self.style.map("Treeview.Heading",background=[("active",c["button_hover"])])
@@ -1152,6 +1152,199 @@ class MediaDownloaderApp:
         ttk.Label(footer,text="Dica: use o gerenciador de playlists para escolher itens individualmente.",style="Muted.TLabel").pack(side="left")
         self.cancel_btn=RoundedGlowButton(footer,text="Cancelar download",style="Secondary.TButton",command=self.cancel_download,state="disabled")
         self.cancel_btn.pack(side="right")
+    def _draw_brand_logo(self):
+        if not hasattr(self, "brand_logo_canvas"):
+            return
+        canvas = self.brand_logo_canvas
+        try:
+            canvas.delete("all")
+            width = max(76, canvas.winfo_width())
+            height = max(62, canvas.winfo_height())
+            cx, cy = width / 2, height / 2
+            colors = [
+                self.colors.get("pink", "#EC4899"),
+                self.colors.get("accent", "#8B5CF6"),
+                self.colors.get("space", "#22D3EE"),
+            ]
+            for orbit_index, rotation in enumerate((0, math.pi / 3, -math.pi / 3)):
+                points = []
+                for step in range(49):
+                    angle = 2 * math.pi * step / 48
+                    x = 22 * math.cos(angle)
+                    y = 11.5 * math.sin(angle)
+                    px = cx + x * math.cos(rotation) - y * math.sin(rotation)
+                    py = cy + x * math.sin(rotation) + y * math.cos(rotation)
+                    points.extend((px, py))
+                canvas.create_line(
+                    *points, fill=colors[orbit_index], width=2.2,
+                    smooth=True, splinesteps=24, capstyle=tk.ROUND, joinstyle=tk.ROUND,
+                )
+            canvas.create_oval(cx-5, cy-5, cx+5, cy+5,
+                               fill=self.colors.get("accent", "#8B5CF6"),
+                               outline=self.colors.get("pink", "#EC4899"), width=1.4)
+            canvas.create_oval(cx-1.6, cy-1.6, cx+1.6, cy+1.6,
+                               fill="#FFFFFF", outline="")
+        except tk.TclError:
+            pass
+
+    def _make_thumbnail_placeholder(self, width: int, height: int):
+        """Create a local gradient/play placeholder without any network request."""
+        image = tk.PhotoImage(master=self.root, width=width, height=height)
+        base = self.colors.get("panel2", "#18182F")
+        accent = self.colors.get("accent", "#8B5CF6")
+        cyan = self.colors.get("space", "#22D3EE")
+        step = max(1, width // 18)
+        for x in range(0, width, step):
+            amount = x / max(1, width - 1)
+            blended = _blend_hex(base, accent, 0.20 + amount * 0.42)
+            blended = _blend_hex(blended, cyan, amount * 0.14)
+            image.put(blended, to=(x, 0, min(width, x + step), height))
+        center_x, center_y = width // 2, height // 2
+        radius = max(4, min(width, height) // 4)
+        for dy in range(-radius, radius + 1):
+            spread = int((radius - abs(dy)) * 0.85)
+            left = center_x - max(1, spread // 2)
+            right = min(width, center_x + spread + 1)
+            image.put("#F8F7FF", to=(left, center_y + dy, right, center_y + dy + 1))
+        image.put(accent, to=(0, height - 2, width, height))
+        image.put(cyan, to=(0, height - 1, width, height))
+        return image
+
+    def _thumbnail_photo_from_bytes(self, data: bytes, width: int, height: int):
+        if not data:
+            return None
+        if Image is not None and ImageTk is not None:
+            try:
+                with Image.open(io.BytesIO(data)) as source:
+                    if source.width < 1 or source.height < 1 or source.width * source.height > 25_000_000:
+                        return None
+                    rendered = source.convert("RGB")
+                resampling = getattr(Image, "Resampling", Image).LANCZOS
+                rendered.thumbnail((width, height), resampling)
+                background = Image.new(
+                    "RGB", (width, height),
+                    self.colors.get("panel2", "#18182F"),
+                )
+                background.paste(
+                    rendered,
+                    ((width - rendered.width) // 2, (height - rendered.height) // 2),
+                )
+                return ImageTk.PhotoImage(background, master=self.root)
+            except Exception as exc:
+                self.logger.debug("Não foi possível renderizar a thumbnail: %s", type(exc).__name__)
+                return None
+        try:
+            # Tk decodes a subset of formats when Pillow is absent (typically PNG/GIF).
+            photo = tk.PhotoImage(master=self.root, data=data)
+            if photo.width() > width * 3 or photo.height() > height * 3:
+                return photo.subsample(
+                    max(1, (photo.width() + width - 1) // width),
+                    max(1, (photo.height() + height - 1) // height),
+                )
+            return photo
+        except tk.TclError:
+            return None
+
+    def _show_media_preview_card(self):
+        if not self._media_preview_visible:
+            self.media_preview_card.pack(fill="x", before=self.progress_card, pady=(0, 13))
+            self._media_preview_visible = True
+
+    def _hide_media_preview_card(self):
+        if self._media_preview_visible:
+            self.media_preview_card.pack_forget()
+            self._media_preview_visible = False
+
+    def _schedule_media_preview(self, *_args):
+        self._media_preview_generation += 1
+        generation = self._media_preview_generation
+        pending = self._media_preview_after
+        if pending is not None:
+            try:
+                self.root.after_cancel(pending)
+            except tk.TclError:
+                pass
+            self._media_preview_after = None
+        url = self.url_var.get().strip()
+        valid, _message = validate_url(url)
+        if not url or not valid or self._looks_like_playlist(url):
+            self._hide_media_preview_card()
+            return
+        self._show_media_preview_card()
+        self.media_preview_title_var.set("Procurando a prévia…")
+        self.media_preview_meta_var.set("Lendo título, canal, duração e capa — sem baixar o vídeo/áudio.")
+        self.media_preview_status_var.set("Consultando metadados")
+        self.media_preview_photo = None
+        self.media_preview_poster.configure(image=self.media_preview_placeholder)
+        self._media_preview_after = self.root.after(
+            950, lambda u=url, g=generation: self._start_media_preview(u, g, 0)
+        )
+
+    def _refresh_media_preview(self):
+        self._schedule_media_preview()
+
+    def _start_media_preview(self, url: str, generation: int, attempt: int = 0):
+        self._media_preview_after = None
+        if generation != self._media_preview_generation or url != self.url_var.get().strip():
+            return
+        valid, _message = validate_url(url)
+        if not valid or self._looks_like_playlist(url):
+            self._hide_media_preview_card()
+            return
+        self._show_media_preview_card()
+        refresh_thread = getattr(self, "_dependency_refresh_thread", None)
+        if not self._dependencies_checked or (refresh_thread and refresh_thread.is_alive()):
+            if attempt < 10:
+                self.media_preview_status_var.set("Aguardando a verificação das dependências…")
+                self._media_preview_after = self.root.after(
+                    500, lambda u=url, g=generation, a=attempt+1: self._start_media_preview(u, g, a)
+                )
+                return
+            self.media_preview_status_var.set("A verificação de yt-dlp demorou demais")
+            self.media_preview_meta_var.set("Abra Dependências e confira se a ferramenta de mídia está pronta.")
+            return
+        tool = self.dep_infos.get("yt-dlp")
+        if not tool or not tool.path or not tool.executable_ok:
+            self.media_preview_status_var.set("Prévia indisponível")
+            self.media_preview_meta_var.set("A prévia automática precisa do yt-dlp. Abra Dependências para instalar/reparar.")
+            return
+        self.media_preview_status_var.set("Carregando metadados e capa…")
+        threading.Thread(
+            target=self._media_preview_worker,
+            args=(generation, url, str(tool.path)),
+            name="cgmd-media-preview",
+            daemon=True,
+        ).start()
+
+    def _media_preview_worker(self, generation: int, url: str, yt_dlp_path: str):
+        try:
+            preview = inspect_media_preview(yt_dlp_path, url)
+            self.ui_queue.put(("media_preview_done", (generation, url, preview, None)))
+        except Exception as exc:
+            self.ui_queue.put(("media_preview_done", (generation, url, None, str(exc))))
+
+    def _playlist_photo_for_item(self, item: dict):
+        url = str(item.get("thumbnail_url") or "")
+        if not url:
+            return self.playlist_thumbnail_placeholder
+        cached = self._playlist_thumbnail_cache.get(url)
+        if cached is not None:
+            return cached
+        if url not in self._playlist_thumbnail_requested and len(self._playlist_thumbnail_requested) < 80:
+            self._playlist_thumbnail_requested.add(url)
+            try:
+                self._thumbnail_executor.submit(self._playlist_thumbnail_worker, url)
+            except RuntimeError:
+                self._playlist_thumbnail_requested.discard(url)
+        return self.playlist_thumbnail_placeholder
+
+    def _playlist_thumbnail_worker(self, url: str):
+        try:
+            data = fetch_thumbnail_bytes(url, timeout=5.5)
+        except Exception:
+            data = None
+        self.ui_queue.put(("playlist_thumbnail_done", (url, data)))
+
     @staticmethod
     def _strategy_label(value: str) -> str:
         """Format the stored playlist strategy; callable through class or instance."""
@@ -1197,7 +1390,9 @@ class MediaDownloaderApp:
         table_wrap = ttk.Frame(table_card, style="Card.TFrame")
         table_wrap.pack(fill="both", expand=True)
         columns = ("include", "index", "title", "duration", "mode", "quality", "status")
-        self.playlist_tree = ttk.Treeview(table_wrap, columns=columns, show="headings", height=12, selectmode="extended")
+        self.playlist_tree = ttk.Treeview(table_wrap, columns=columns, show="tree headings", height=12, selectmode="extended")
+        self.playlist_tree.heading("#0", text="Prévia")
+        self.playlist_tree.column("#0", width=90, minwidth=90, anchor="center", stretch=False)
         headings = {"include": "Baixar", "index": "#", "title": "Título", "duration": "Duração", "mode": "Formato", "quality": "Qualidade", "status": "Estado"}
         widths = {"include": 64, "index": 48, "title": 330, "duration": 82, "mode": 90, "quality": 92, "status": 108}
         for column in columns:
@@ -2324,6 +2519,38 @@ class MediaDownloaderApp:
                     self.percent_label.configure(text=f"{average:.0f}%")
                 elif kind == "playlist_download_done":
                     self._finish_playlist_download(data)
+                elif kind == "media_preview_done":
+                    generation, url, preview, error = data
+                    if generation != self._media_preview_generation or url != self.url_var.get().strip():
+                        continue
+                    if error or preview is None:
+                        self.media_preview_title_var.set("Não foi possível carregar esta prévia")
+                        self.media_preview_meta_var.set(str(error or "O site não disponibilizou metadados.")[:220])
+                        self.media_preview_status_var.set("Prévia indisponível")
+                        self.media_preview_photo = None
+                        self.media_preview_poster.configure(image=self.media_preview_placeholder)
+                    else:
+                        self.media_preview_title_var.set(preview.title or "Mídia sem título")
+                        details = [preview.creator or "Canal não informado"]
+                        if preview.duration is not None:
+                            details.append(format_duration(preview.duration))
+                        self.media_preview_meta_var.set("  •  ".join(details))
+                        photo = self._thumbnail_photo_from_bytes(preview.thumbnail_bytes, 220, 124) if preview.thumbnail_bytes else None
+                        self.media_preview_photo = photo
+                        self.media_preview_poster.configure(image=photo or self.media_preview_placeholder)
+                        self.media_preview_status_var.set(
+                            "Capa carregada" if photo else "Metadados carregados · capa indisponível"
+                        )
+                elif kind == "playlist_thumbnail_done":
+                    url, data = data
+                    photo = self._thumbnail_photo_from_bytes(data, 76, 43) if data else None
+                    if photo is not None:
+                        self._playlist_thumbnail_cache[url] = photo
+                        self._playlist_thumbnail_loaded.add(url)
+                    else:
+                        self._playlist_thumbnail_cache[url] = self.playlist_thumbnail_placeholder
+                        self._playlist_thumbnail_failed.add(url)
+                    self._render_playlist_rows()
                 elif kind == "dep_refresh_done":
                     self._dependency_refresh_thread = None
                     self._apply_dependency_results(data)
@@ -2371,7 +2598,9 @@ class MediaDownloaderApp:
                 value = int(self.config.get("auto_video_quality", 1080))
             self.playlist_items.append({
                 "position": position, "index": entry.index, "title": entry.title, "url": entry.url,
-                "video_id": entry.video_id, "duration": entry.duration, "available": entry.available,
+                "video_id": entry.video_id, "duration": entry.duration,
+                "thumbnail_url": getattr(entry, "thumbnail_url", ""),
+                "available": entry.available,
                 "note": entry.note, "included": bool(entry.available), "mode": mode, "value": value,
                 "status": "Disponível" if entry.available else "Indisponível", "success": None,
             })
@@ -2407,7 +2636,11 @@ class MediaDownloaderApp:
             mode = "Música / MP3" if item["mode"] == "music" else "Vídeo"
             quality = f"{item['value']} kbps" if item["mode"] == "music" else f"{item['value']}p"
             status = str(item.get("status") or ("Disponível" if item["available"] else "Indisponível"))
-            self.playlist_tree.insert("", "end", iid=iid, values=(included, item["index"], item["title"], format_duration(item.get("duration")), mode, quality, status))
+            thumbnail = self._playlist_photo_for_item(item)
+            self.playlist_tree.insert(
+                "", "end", iid=iid, image=thumbnail,
+                values=(included, item["index"], item["title"], format_duration(item.get("duration")), mode, quality, status),
+            )
             visible += 1
         restore = [iid for iid in prior_selection if iid in self.playlist_iid_to_position]
         if restore:
