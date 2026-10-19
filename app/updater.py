@@ -30,6 +30,7 @@ YT_API = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest"
 FF_API = "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/latest"
 MAX_DEPENDENCY_BYTES = 512 * 1024 * 1024
 MAX_CHECKSUM_BYTES = 16 * 1024 * 1024
+MAX_RELEASE_METADATA_BYTES = 5 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -43,13 +44,42 @@ class UpdateError(RuntimeError):
     pass
 
 
+def _trusted_github_api_url(url: str) -> bool:
+    try:
+        parts = urlsplit(url)
+        host = (parts.hostname or "").lower()
+        port = parts.port
+    except ValueError:
+        return False
+    return (
+        parts.scheme.lower() == "https"
+        and host == "api.github.com"
+        and parts.username is None
+        and parts.password is None
+        and port in {None, 443}
+    )
+
+
 def _request_json(url: str) -> dict:
+    if not _trusted_github_api_url(url):
+        raise UpdateError("A origem dos metadados da dependência não é autorizada.")
     request = urllib.request.Request(
         url,
         headers={"User-Agent": f"ChatGPT-Media-Downloader/{VERSION}", "Accept": "application/vnd.github+json"},
     )
     with urllib.request.urlopen(request, timeout=20) as response:
-        return json.loads(response.read().decode("utf-8"))
+        if not _trusted_github_api_url(response.geturl()):
+            raise UpdateError("O GitHub redirecionou os metadados para um domínio não autorizado.")
+        payload = response.read(MAX_RELEASE_METADATA_BYTES + 1)
+    if len(payload) > MAX_RELEASE_METADATA_BYTES:
+        raise UpdateError("Os metadados da release excedem o limite de segurança.")
+    try:
+        result = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise UpdateError("Os metadados da release não são JSON válido.") from exc
+    if not isinstance(result, dict):
+        raise UpdateError("O formato dos metadados da release é inesperado.")
+    return result
 
 
 def _download(
@@ -332,17 +362,34 @@ def _install_tool_from_release_locked(
         extract_dir.mkdir()
         if archive.suffix.lower() == ".zip":
             with zipfile.ZipFile(archive) as zf:
-                for member in zf.infolist():
-                    target_path = (extract_dir / member.filename).resolve()
-                    if not str(target_path).startswith(str(extract_dir.resolve()) + os.sep):
-                        raise UpdateError("Pacote FFmpeg contém caminho inseguro.")
+                members = zf.infolist()
+                if len(members) > MAX_ARCHIVE_MEMBERS or sum(max(0, item.file_size) for item in members) > MAX_ARCHIVE_UNPACKED_BYTES:
+                    raise UpdateError("Pacote FFmpeg excede o limite de conteúdo permitido.")
+                for member in members:
+                    try:
+                        safe_archive_member_path(extract_dir, member.filename)
+                    except ValueError as exc:
+                        raise UpdateError("Pacote FFmpeg contém caminho inseguro.") from exc
+                    if member.flag_bits & 0x1:
+                        raise UpdateError("Pacote FFmpeg criptografado não é aceito.")
+                    mode = (member.external_attr >> 16) & 0xFFFF
+                    file_type = stat.S_IFMT(mode)
+                    if file_type == stat.S_IFLNK or (file_type and file_type not in {stat.S_IFREG, stat.S_IFDIR}):
+                        raise UpdateError("Pacote FFmpeg contém um link ou arquivo especial inseguro.")
                 zf.extractall(extract_dir)
         elif archive.name.endswith(".tar.xz"):
             with tarfile.open(archive, "r:xz") as tf:
-                for member in tf.getmembers():
-                    target_path = (extract_dir / member.name).resolve()
-                    if not str(target_path).startswith(str(extract_dir.resolve()) + os.sep):
-                        raise UpdateError("Pacote FFmpeg contém caminho inseguro.")
+                members = tf.getmembers()
+                total_unpacked = sum(member.size for member in members if member.isreg())
+                if len(members) > MAX_ARCHIVE_MEMBERS or total_unpacked > MAX_ARCHIVE_UNPACKED_BYTES:
+                    raise UpdateError("Pacote FFmpeg excede o limite de conteúdo permitido.")
+                for member in members:
+                    try:
+                        safe_archive_member_path(extract_dir, member.name)
+                    except ValueError as exc:
+                        raise UpdateError("Pacote FFmpeg contém caminho inseguro.") from exc
+                    if not (member.isdir() or member.isreg()):
+                        raise UpdateError("Pacote FFmpeg contém um link ou arquivo especial inseguro.")
                 tf.extractall(extract_dir)
         else:
             raise UpdateError(f"Arquivo FFmpeg não suportado: {archive.name}")
