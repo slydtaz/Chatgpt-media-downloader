@@ -79,9 +79,6 @@ class PreviewUrlSafetyTests(unittest.TestCase):
         self.assertEqual(preview.thumbnail_bytes, b"png")
 
 
-if __await__:
-    pass
-
 
 if __name__ == "__main__":
     unittest.main()
