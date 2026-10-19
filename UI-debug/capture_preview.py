@@ -66,7 +66,7 @@ def make_contact_sheet(items, target: Path):
         "#080D19",
     )
     draw = ImageDraw.Draw(canvas)
-    draw.text((margin, 16), "UI-debug 0.1.0-dev.1  —  prévia da interface espacial", font=_font(24), fill="#F3F6FF")
+    draw.text((margin, 16), "UI-debug 0.1.0-dev.2  —  prévia da interface espacial", font=_font(24), fill="#F3F6FF")
     for index, (label, image) in enumerate(items):
         col, row = index % columns, index // columns
         x = margin + col * (thumb_w + gap)
@@ -98,7 +98,7 @@ def main() -> int:
     root = tk.Tk()
     captures = []
     try:
-        root.title("UI-debug 0.1.0-dev.1 — prévia")
+        root.title("UI-debug 0.1.0-dev.2 — prévia")
         screen_w, screen_h = root.winfo_screenwidth(), root.winfo_screenheight()
         desktop_w, desktop_h = ImageGrab.grab().size
         width = max(960, min(1200, screen_w - 40, desktop_w - 32))
