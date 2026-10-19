@@ -58,7 +58,25 @@ jobs:
         shell: pwsh
         run: |
           $archive = "ui-debug-app-0.1.0-dev.3.zip"
-          Compress-Archive -Path "UI-debug/*" -DestinationPath $archive -Force
+          $packageRoot = Join-Path $env:RUNNER_TEMP "ui-debug-package"
+          New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
+          $files = @(
+            "ui_debug.py",
+            "version.json",
+            "README.md",
+            "run_ui_debug.bat",
+            "run_ui_debug.sh",
+            "capture_preview.py",
+            "tests/test_ui_debug.py"
+          )
+          foreach ($file in $files) {
+            $source = Join-Path "UI-debug" $file
+            $destination = Join-Path $packageRoot $file
+            $parent = Split-Path -Parent $destination
+            New-Item -ItemType Directory -Force -Path $parent | Out-Null
+            Copy-Item -LiteralPath $source -Destination $destination
+          }
+          Compress-Archive -Path (Join-Path $packageRoot "*") -DestinationPath $archive -Force
           if (!(Test-Path -LiteralPath $archive)) { throw "The standalone UI-debug archive was not created." }
       - name: Upload standalone UI-debug package (not a release)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
