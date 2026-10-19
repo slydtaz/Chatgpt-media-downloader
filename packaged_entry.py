@@ -112,6 +112,8 @@ def _run_gui_smoke_test() -> int:
     update_check_original = None
     root = None
     failure: str | None = None
+    visited: list[str] = []
+    drawn_items = 0
     try:
         # Keep this smoke test completely isolated from the user's settings and tools.
         with tempfile.TemporaryDirectory(prefix="cgmd-gui-smoke-") as isolated_data:
@@ -142,7 +144,6 @@ def _run_gui_smoke_test() -> int:
                     f"A animação do painel inicial desenhou apenas {drawn_items} elementos; esperado pelo menos 12."
                 )
 
-            visited: list[str] = []
             for page_name in ("playlist", "settings", "dependencies", "updates", "help", "developer", "home"):
                 app.show_page(page_name)
                 deadline = time.monotonic() + 0.19
@@ -178,6 +179,23 @@ def _run_gui_smoke_test() -> int:
             os.environ.pop("LOCALAPPDATA", None)
         else:
             os.environ["LOCALAPPDATA"] = original_local_app_data
+
+    smoke_report = (
+        "GUI SMOKE TEST FALHOU\\n" + failure
+        if failure
+        else "GUI SMOKE TEST OK\\n"
+        + f"Elementos desenhados na animação: {drawn_items}\\n"
+        + "Páginas percorridas: " + ", ".join(visited)
+        + "\\nSem downloads de mídia nem verificações de atualização.\\n"
+    )
+    smoke_path = os.environ.get("CGMD_SMOKE_LOG", "").strip()
+    if smoke_path:
+        try:
+            output_path = Path(smoke_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(smoke_report, encoding="utf-8")
+        except OSError as exc:
+            _write_startup_log(f"Não foi possível gravar o relatório do smoke test: {exc}")
 
     if failure:
         _write_startup_log("GUI SMOKE TEST FALHOU.\\n" + failure)

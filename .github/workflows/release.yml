@@ -73,8 +73,11 @@ jobs:
       - name: Smoke-test packaged GUI (no downloads or update checks)
         shell: pwsh
         run: |
-          & '.\dist\ChatGPTMediaDownloader.exe' --smoke-test-gui
-          if ($LASTEXITCODE -ne 0) { throw "GUI smoke test failed with exit code $LASTEXITCODE." }
+          $env:CGMD_SMOKE_LOG = Join-Path (Get-Location).Path 'dist\gui-smoke.log'
+          $process = Start-Process -FilePath '.\dist\ChatGPTMediaDownloader.exe' -ArgumentList '--smoke-test-gui' -PassThru -Wait
+          if (Test-Path $env:CGMD_SMOKE_LOG) { Get-Content -LiteralPath $env:CGMD_SMOKE_LOG | Write-Host }
+          if ($process.ExitCode -ne 0) { throw "GUI smoke test failed with exit code $($process.ExitCode)." }
+          if (!(Test-Path $env:CGMD_SMOKE_LOG)) { throw 'GUI smoke test did not write its report.' }
       - name: Build standalone emergency uninstaller
         shell: cmd
         run: |
