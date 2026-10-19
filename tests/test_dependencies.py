@@ -3,6 +3,7 @@ import stat
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 from pathlib import Path
 
@@ -55,6 +56,17 @@ class DependencyTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 extract_archive(archive, root / "tools")
             self.assertFalse((root / "outside.txt").exists())
+
+
+    def test_extract_archive_rejects_excessive_unpacked_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "oversized.zip"
+            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr("release/ffmpeg.exe", b"x" * 20)
+            with patch("app.dependencies.MAX_ARCHIVE_UNPACKED_BYTES", 10):
+                with self.assertRaises(ValueError):
+                    extract_archive(archive, root / "tools")
 
     def test_extract_archive_rejects_tar_links(self):
         with tempfile.TemporaryDirectory() as tmp:
