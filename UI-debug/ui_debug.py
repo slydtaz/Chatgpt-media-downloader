@@ -506,16 +506,8 @@ class RoundedButton(tk.Canvas):
             local_y = round((index+0.5)*inner_h/self._gradient_rows)
             span_l,span_r = rounded_span(local_y,round(inner_w),round(inner_h),round(radius))
             self.coords(item,left+span_l,y,left+max(span_l+0.1,span_r),y)
-            self.itemconfigure(item,width=max(1.8,inner_h/self._gradient_rows+0.5))
         self.coords(self._outline_id,*rounded_points(left,top,left+inner_w,top+inner_h,radius,steps=18))
         self.coords(self._text_id,self.widget_width/2,self.widget_height/2)
-        self.itemconfigure(self._outline_id,width=1.8)
-        # Reuse the same font and canvas item; only a tiny hover emphasis is applied.
-        self.font.configure(size=max(8,round(self.font_size*(1.03 if scale>1.01 else 1.0))))
-        try:
-            self._refresh_colors()
-        except tk.TclError:
-            pass
 
     def _animate_to(self, scale):
         self._target_scale = scale
@@ -762,8 +754,9 @@ class OrbitalAtom(tk.Canvas):
             self.create_line(*[coord for p in points for coord in p],fill=start,width=1.9,
                 smooth=True,splinesteps=18,capstyle=tk.ROUND,joinstyle=tk.ROUND,tags="atom-track")
             # A short accent segment gives each orbit a clean, distinct color cue.
-            p1,p2=points[7],points[18]
-            self.create_line(*p1,*p2,fill=end,width=2.2,capstyle=tk.ROUND,tags="atom-track-accent")
+            accent_points=points[7:20]
+            self.create_line(*[coord for point in accent_points for coord in point],
+                fill=end,width=2.4,smooth=True,splinesteps=12,capstyle=tk.ROUND,tags="atom-track-accent")
 
     def start_animation(self):
         if self._animation_id is None:
@@ -843,7 +836,7 @@ class CosmicSplash:
         self.message_index = 0
         self._add_status(self.messages[0])
         self.window.bind("<Escape>", lambda _event: "break", add="+")
-        self._animation_after = self.window.after(30, self._animate)
+        self._animation_after = self.window.after(42, self._animate)
         self._message_after = self.window.after(690, self._advance_message)
         try:
             self.window.lift()
@@ -853,15 +846,15 @@ class CosmicSplash:
 
     def _draw_scene(self):
         c, w, h = self.canvas, self.width, self.height
-        for i in range(160):
-            x0, x1 = w * i / 160, w * (i + 1) / 160 + 1
+        for i in range(120):
+            x0, x1 = w * i / 120, w * (i + 1) / 120 + 1
             c.create_rectangle(x0, 0, x1, h, fill=blend_hex(SPLASH_BACKGROUND, "#20113B", .05 + .20*i/159), outline="")
         for cx, cy, tint in ((0, 0, "#D946EF"), (w, 0, "#7C3AED"), (0, h, "#BE185D"), (w, h, "#6D28D9")):
-            for level in range(38):
-                t = level / 37
+            for level in range(24):
+                t = level / 23
                 rx, ry = w * (.58 - .34*t), h * (.82 - .48*t)
                 c.create_oval(cx-rx, cy-ry, cx+rx, cy+ry,
-                    fill=blend_hex(SPLASH_BACKGROUND, tint, .012 + .20*t**1.7), outline="")
+                    fill=blend_hex(SPLASH_BACKGROUND, tint, .010 + .15*t**1.65), outline="")
         rng = random.Random(119 + w + h)
         for _ in range(38):
             x, y = rng.random()*w, rng.random()*h
