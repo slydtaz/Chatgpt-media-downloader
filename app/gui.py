@@ -63,7 +63,7 @@ def _contrast_text(value: str) -> str:
 class Tooltip:
     _instances = weakref.WeakSet()
 
-    def __init__(self, widget: tk.Widget, text: str, delay_ms: int = 2000):
+    def __init__(self, widget: tk.Widget, text: str, delay_ms: int = 2000, click_to_pin: bool = True):
         self.widget = widget
         self._instances.add(self)
         self.text = text
@@ -73,7 +73,8 @@ class Tooltip:
         self._pinned = False
         widget.bind("<Enter>", self._enter, add="+")
         widget.bind("<Leave>", self._leave, add="+")
-        widget.bind("<Button-1>", self._toggle, add="+")
+        if click_to_pin:
+            widget.bind("<Button-1>", self._toggle, add="+")
 
     @classmethod
     def dismiss_all(cls):
@@ -525,13 +526,13 @@ class MediaDownloaderApp:
             button=IconNavButton(sidebar,self,key,glyph,lambda k=key:self.show_page(k))
             button.pack(anchor="center",pady=3)
             self.nav_buttons[key]=button
-            Tooltip(button,f"{label}\n{tip}",delay_ms=450)
+            Tooltip(button,f"{label}\n{tip}",delay_ms=450,click_to_pin=False)
         spacer=ttk.Frame(sidebar,style="Sidebar.TFrame")
         spacer.pack(fill="both",expand=True)
         ttk.Separator(sidebar).pack(fill="x",pady=(12,9))
         self.dep_badge=tk.Label(sidebar,text="●",bg=self.colors["panel2"],fg=self.colors["muted"],anchor="center",font=("Segoe UI",10,"bold"),padx=7,pady=7)
         self.dep_badge.pack(fill="x",pady=(0,5))
-        Tooltip(self.dep_badge,"Estado das dependências",delay_ms=450)
+        Tooltip(self.dep_badge,"Estado das dependências",delay_ms=450,click_to_pin=False)
         ttk.Label(sidebar,text=f"v{VERSION}",style="SidebarMuted.TLabel",anchor="center",font=("Segoe UI",7)).pack(fill="x")
         content_wrap=ttk.Frame(outer)
         content_wrap.pack(side="left",fill="both",expand=True)
@@ -1404,7 +1405,7 @@ class MediaDownloaderApp:
             ("Dependências", "yt-dlp, FFmpeg e FFprobe são detectados por caminho manual, área privada da instalação e PATH. Na primeira execução, o bootstrap tenta instalar versões compatíveis automaticamente."),
             ("Arquitetura", "Windows x86/x64/ARM64, Linux x86/x64/ARM64/ARMv7 e macOS Intel/Apple Silicon são identificados. A build compatível é priorizada."),
             ("Temas", "Claro, escuro ou Sistema. O tema escuro usa tons de azul espacial, violeta e rosa; Sistema consulta a preferência visual do Windows, macOS ou, quando disponível, do ambiente Linux."),
-            ("Erros", "A interface mostra uma explicação simples e mantém detalhes técnicos no painel de mensagens."),
+            ("Erros", "A interface mostra uma explicação simples. Para conferir a saída bruta de yt-dlp/FFmpeg, ative o Modo desenvolvedor nas Configurações."),
             ("Segurança e privacidade", "O app usa listas de argumentos, valida URLs HTTP/HTTPS, redige dados sensíveis nos logs e não tenta burlar DRM, paywall ou controles de acesso. Nenhum programa pode garantir 100% de segurança ou ausência de falsos positivos em antivírus. Baixe builds de fontes oficiais e verifique o hash do artefato distribuído."),
             ("Sites", "O suporte é o que o yt-dlp oferecer na versão instalada. O aplicativo não tenta burlar DRM, autenticação, paywall ou conteúdo privado."),
         ]
