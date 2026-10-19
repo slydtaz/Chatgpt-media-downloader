@@ -1218,7 +1218,6 @@ class SpaceUIPrototype:
 
     def _tint_nav_icon(self, nav, tag, color):
         """Tint each vector item by type so outlines remain outlines and strokes stay sharp."""
-        nav.itemconfigure(tag, fill=color)
         for item_tag, options in (
             ("nav-icon-line", {"fill": color, "width": 2.4}),
             ("nav-icon-text", {"fill": color}),
@@ -1802,7 +1801,7 @@ class SpaceUIPrototype:
                 active = key == self.current_page
                 nav.configure(bg=c["panel"])
                 nav.itemconfigure(shape, fill=blend_hex(c["accent"], c["accent2"], 0.20) if active else c["panel"], outline=c["border"] if active else "")
-                nav.itemconfigure(icon, fill=c["accent2"] if active else c["muted"], outline=c["accent2"] if active else c["muted"], width=2.2)
+                self._tint_nav_icon(nav, icon, c["accent2"] if active else c["muted"])
                 nav.itemconfigure(label_id, fill=c["fg"] if active else c["muted"])
         if hasattr(self, "accent_preview"):
             self._draw_accent_preview()
