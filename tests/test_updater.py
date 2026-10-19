@@ -79,7 +79,7 @@ class DependencyDownloadTrustTests(unittest.TestCase):
         response.geturl.return_value = "https://attacker.example/payload.exe"
         with TemporaryDirectory() as tmp:
             destination = Path(tmp) / "tool.exe"
-            with patch("app.updater.urllib.request.urlopen", return_value=response):
+            with patch("app.updater.trusted_urlopen", return_value=response):
                 with self.assertRaises(UpdateError):
                     _download("https://github.com/project/tool/releases/download/v1/tool.exe", destination)
             self.assertFalse(destination.exists())
