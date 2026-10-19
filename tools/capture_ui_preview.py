@@ -83,7 +83,7 @@ def _make_contact_sheet(items: list[tuple[str, Image.Image]], target: Path) -> N
     canvas = Image.new(
         "RGB",
         (margin * 2 + columns * thumb_w + gap * (columns - 1),
-         margin * 2 + rows * (thumb_h + label_h + gap)),
+         50 + margin + rows * (thumb_h + label_h + gap)),
         "#0A0F1B",
     )
     draw = ImageDraw.Draw(canvas)
@@ -127,7 +127,12 @@ def main() -> int:
 
         root = tk.Tk()
         root.title("ChatGPT Media Downloader 5.1.5 — prévia da interface")
-        root.geometry("1280x850+25+25")
+        # Fit the virtual desktop so ImageGrab does not crop the right/bottom edges.
+        screen_width = max(820, root.winfo_screenwidth())
+        screen_height = max(640, root.winfo_screenheight())
+        capture_width = min(1280, screen_width - 12)
+        capture_height = min(850, screen_height - 48)
+        root.geometry(f"{capture_width}x{capture_height}+4+4")
         app = MediaDownloaderApp(root)
         root.update_idletasks()
         root.deiconify()
