@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from app.platform import SystemInfo
 from app.updater import (
-    ReleaseAsset, _trusted_github_url, _verify_checksum,
+    ReleaseAsset, _trusted_github_api_url, _trusted_github_url, _verify_checksum,
     ff_asset_name, yt_asset_name,
 )
 
@@ -59,6 +59,18 @@ class DependencyDownloadTrustTests(unittest.TestCase):
         ):
             with self.subTest(url=url):
                 self.assertFalse(_trusted_github_url(url))
+
+
+    def test_release_metadata_is_limited_to_the_official_github_api(self):
+        self.assertTrue(_trusted_github_api_url("https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest"))
+        for url in (
+            "http://api.github.com/repos/yt-dlp/yt-dlp/releases/latest",
+            "https://api.github.com.attacker.example/repos/yt-dlp/yt-dlp/releases/latest",
+            "https://api.github.com:444/repos/yt-dlp/yt-dlp/releases/latest",
+            "https://user@api.github.com/repos/yt-dlp/yt-dlp/releases/latest",
+        ):
+            with self.subTest(url=url):
+                self.assertFalse(_trusted_github_api_url(url))
 
     def test_missing_upstream_checksum_manifest_fails_closed(self):
         asset = ReleaseAsset("tool.exe", "https://github.com/project/tool/releases/download/v1/tool.exe", 4)
