@@ -41,7 +41,7 @@ jobs:
       - name: Upload screenshots and animations
         uses: actions/upload-artifact@v4
         with:
-          name: chatgpt-media-downloader-ui-preview-5.1.5
+          name: chatgpt-media-downloader-ui-preview-5.2.0
           path: ui-preview-output/
           if-no-files-found: error
           retention-days: 14
