@@ -5,6 +5,13 @@ on:
   push:
     branches:
       - main
+      - "ui/**"
+    paths:
+      - ".github/workflows/ui-preview.yml"
+      - "tools/capture_ui_preview.py"
+      - "app/gui.py"
+      - "app/config.py"
+  pull_request:
     paths:
       - ".github/workflows/ui-preview.yml"
       - "tools/capture_ui_preview.py"
