@@ -57,7 +57,7 @@ jobs:
       - name: Upload visual review artifact (not a release)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ui-debug-preview-0.1.0-dev.1
+          name: ui-debug-preview-0.1.0-dev.2
           path: ui-debug-preview-output/
           if-no-files-found: error
           retention-days: 14
