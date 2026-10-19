@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -13,12 +14,12 @@ import urllib.request
 import uuid
 import zipfile
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import urlsplit
 
 from .config import APP_DATA, INSTALL_ID_PATH, INSTALL_ROOT, PRODUCT_ID, STARTUP_REPAIR_PENDING_PATH, VENDOR, VERSION
-from .security import trusted_urlopen
+from .security import safe_archive_member_path, trusted_urlopen
 
 OWNER = "slydtaz"
 REPOSITORY = "Chatgpt-media-downloader"
@@ -384,16 +385,24 @@ def _safe_extract_zip(archive: Path, destination: Path) -> Path:
             unpacked_size = sum(max(0, int(member.file_size)) for member in members)
             if unpacked_size > MAX_SOURCE_UNPACKED_BYTES:
                 raise AppUpdateError("O pacote de origem excede o limite de tamanho após extração.")
+            seen_paths: set[str] = set()
             for member in members:
-                pure = PurePosixPath(member.filename)
-                if pure.is_absolute() or ".." in pure.parts or "\\" in member.filename:
-                    raise AppUpdateError("O pacote de origem contém um caminho inseguro.")
-                target = (destination / Path(*pure.parts)).resolve()
-                if target != dest_resolved and dest_resolved not in target.parents:
-                    raise AppUpdateError("O pacote de origem tenta gravar fora da pasta temporária.")
-                mode = (member.external_attr >> 16) & 0o170000
-                if mode == 0o120000:
-                    raise AppUpdateError("O pacote de origem contém um link simbólico não permitido.")
+                try:
+                    target = safe_archive_member_path(destination, member.filename)
+                except ValueError as exc:
+                    raise AppUpdateError("O pacote de origem contém um caminho inseguro.") from exc
+
+                # Windows filesystems are commonly case-insensitive. Reject both
+                # exact duplicates and names that would collide after extraction.
+                relative_name = target.relative_to(dest_resolved).as_posix().casefold()
+                if relative_name in seen_paths:
+                    raise AppUpdateError("O pacote de origem contém caminhos duplicados ou ambíguos.")
+                seen_paths.add(relative_name)
+
+                mode = (member.external_attr >> 16) & 0xFFFF
+                file_type = stat.S_IFMT(mode)
+                if file_type and file_type not in {stat.S_IFREG, stat.S_IFDIR}:
+                    raise AppUpdateError("O pacote de origem contém um link ou arquivo especial não permitido.")
             zf.extractall(destination)
     except AppUpdateError:
         raise
