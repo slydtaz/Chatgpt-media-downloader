@@ -124,6 +124,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "theme": "dark",
     "accent_color": "#8B5CF6",
     "ui_density": "comfortable",
+    "developer_mode": False,
     "playlist_strategy": "sequential",
     "playlist_parallelism": 3,
     "concurrent_fragments": 4,
