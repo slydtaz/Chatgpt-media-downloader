@@ -113,7 +113,7 @@ def inspect_playlist(yt_dlp_path: Path | str, url: str, *, timeout: int = 180) -
         raise RuntimeError("Esta URL não retornou uma lista de itens. Verifique se é uma playlist válida.")
     if len(raw_entries) > MAX_PLAYLIST_ENTRIES:
         raise RuntimeError(
-            f"A playlist excede o limite seguro de {MAX_PLAYLIST_ENTRIES:,} itens por análise. "
+            f"A playlist excede o limite seguro de {MAX_PLAYLIST_ENTRIES} itens por análise. "
             "Divida a lista em partes menores e tente novamente."
         )
 
