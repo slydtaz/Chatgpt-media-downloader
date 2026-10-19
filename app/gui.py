@@ -186,7 +186,6 @@ class RoundedCard(ttk.Frame):
         self._canvas = tk.Canvas(self, highlightthickness=0, bd=0)
         self._canvas._rounded_card_background = True
         self._canvas.place(x=0, y=0, relwidth=1, relheight=1)
-        self._canvas.lower()
         self.bind("<Configure>", lambda _event: self.redraw(), add="+")
         self.app.rounded_cards.append(self)
         self.redraw()
