@@ -620,6 +620,7 @@ class SpaceUIPrototype:
         self.colors = dict(PALETTES.get(self.settings["theme"], PALETTES["dark"]))
         self.colors["accent"] = self.settings["accent_color"]
         self.colors["accent2"] = self.settings["accent_color_2"]
+        self._apply_scrollbar_style()
         self.cards: list[RoundedCard] = []
         self.buttons: list[RoundedButton] = []
         self.fields: list[RoundedField] = []
@@ -1237,6 +1238,30 @@ class SpaceUIPrototype:
         self.accent_preview.create_polygon(*rounded_points(1, 1, width - 1, 13, 6), fill="", outline=self.colors["border"])
         self.accent_preview.tag_raise("gradient")
 
+    def _apply_scrollbar_style(self):
+        """Use the same muted dark surface and accent as the rest of the prototype."""
+        c = self.colors
+        try:
+            self.style.configure(
+                "UI.Vertical.TScrollbar",
+                gripcount=0,
+                background=c["panel2"],
+                darkcolor=c["panel2"],
+                lightcolor=c["panel2"],
+                troughcolor=c["bg"],
+                bordercolor=c["border"],
+                arrowcolor=c["accent2"],
+                relief="flat",
+                width=9,
+            )
+            self.style.map(
+                "UI.Vertical.TScrollbar",
+                background=[("active", c["accent"]), ("!disabled", c["panel2"])],
+                arrowcolor=[("active", c["accent2"])],
+            )
+        except tk.TclError:
+            pass
+
     def apply_theme(self, refresh=True):
         old_colors = dict(self.colors or PALETTES["dark"])
         c = dict(PALETTES.get(self.settings.get("theme"), PALETTES["dark"]))
@@ -1263,6 +1288,7 @@ class SpaceUIPrototype:
         if hasattr(self, "shell"):
             recolor_tree(self.shell)
         self.colors = c
+        self._apply_scrollbar_style()
         self.root.configure(bg=c["bg"])
         if hasattr(self, "shell"):
             self.shell.configure(bg=c["bg"])
@@ -1419,7 +1445,10 @@ class ScrollPane(tk.Frame):
         super().__init__(master, bg=app.colors["bg"], bd=0, highlightthickness=0)
         self.app = app
         self.canvas = tk.Canvas(self, bg=app.colors["bg"], bd=0, highlightthickness=0)
-        self.scrollbar = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview, bg=app.colors["panel"], troughcolor=app.colors["bg"], activebackground=app.colors["accent"])
+        self.scrollbar = ttk.Scrollbar(
+            self, orient="vertical", command=self.canvas.yview,
+            style="UI.Vertical.TScrollbar",
+        )
         self.body = tk.Frame(self.canvas, bg=app.colors["bg"], bd=0, highlightthickness=0)
         self.window = self.canvas.create_window((0, 0), window=self.body, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
@@ -1471,7 +1500,6 @@ class ScrollPane(tk.Frame):
         self.configure(bg=self.app.colors["bg"])
         self.canvas.configure(bg=self.app.colors["bg"])
         self.body.configure(bg=self.app.colors["bg"])
-        self.scrollbar.configure(bg=self.app.colors["panel"], troughcolor=self.app.colors["bg"], activebackground=self.app.colors["accent"])
 
 
 def run():
