@@ -5,6 +5,8 @@ import os
 import re
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
+import urllib.error
+import urllib.request
 
 
 SENSITIVE_QUERY_KEYS = re.compile(
@@ -79,6 +81,50 @@ def redact_sensitive(text: str) -> str:
     value = re.sub(r"https?://[^\s]+", lambda m: redacted_url(m.group(0)), value)
     value = re.sub(r"(?i)(cookie|authorization|proxy-password|password)\s*[:=]\s*\S+", r"\1=<redigido>", value)
     return value
+
+
+
+def _is_trusted_https_url(url: str, allowed_hosts: set[str] | frozenset[str]) -> bool:
+    """Validate scheme, exact host, port and userinfo before opening an HTTPS URL."""
+    try:
+        parts = urlsplit(url)
+        host = (parts.hostname or "").lower()
+        port = parts.port
+    except (TypeError, ValueError):
+        return False
+    return (
+        parts.scheme.lower() == "https"
+        and bool(host)
+        and host in {item.lower() for item in allowed_hosts}
+        and parts.username is None
+        and parts.password is None
+        and port in {None, 443}
+    )
+
+
+class RestrictedHTTPSRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject redirect targets before making a request to the redirected host."""
+
+    def __init__(self, allowed_hosts: set[str] | frozenset[str]):
+        super().__init__()
+        self.allowed_hosts = frozenset(item.lower() for item in allowed_hosts)
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not _is_trusted_https_url(newurl, self.allowed_hosts):
+            raise urllib.error.HTTPError(
+                req.full_url, code, "Redirecionamento para endereço não autorizado bloqueado",
+                headers, fp,
+            )
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def trusted_urlopen(request, *, allowed_hosts: set[str] | frozenset[str], timeout: int = 30):
+    """Open an HTTPS URL while checking every redirect hop against an exact host allowlist."""
+    url = request.full_url if isinstance(request, urllib.request.Request) else str(request)
+    if not _is_trusted_https_url(url, allowed_hosts):
+        raise urllib.error.URLError("Endereço HTTPS fora da lista de hosts autorizados.")
+    opener = urllib.request.build_opener(RestrictedHTTPSRedirectHandler(allowed_hosts))
+    return opener.open(request, timeout=timeout)
 
 
 def safe_archive_member_path(root: Path, member_name: str) -> Path:
