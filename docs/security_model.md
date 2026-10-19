@@ -26,6 +26,14 @@ Nenhum teste de unidade, hash de arquivo ou verificação automática prova que 
 
 O SHA-256 do build, testes e proveniência de CI ajudam a rastrear o arquivo gerado. Eles não substituem uma auditoria independente nem uma assinatura Authenticode confiável.
 
+## Análise antimalware e vulnerabilidades
+
+A pipeline pode enviar os executáveis públicos da release ao VirusTotal quando o mantenedor configurar o secret `VIRUSTOTAL_API_KEY`. O relatório `VirusTotal-Status.txt` diferencia análise concluída, análise pendente, detecções que exigem revisão e ausência de credencial. Quando a análise é executada, a publicação é bloqueada se algum mecanismo reportar resultado malicioso/suspeito ou se a análise não terminar. Uma detecção isolada pode ser falso positivo; ela deve ser investigada com o fornecedor responsável, não contornada.
+
+O envio ao VirusTotal compartilha os arquivos enviados com o serviço e, conforme os termos do produto/API, com a comunidade de segurança. Por isso, o pipeline só envia binários de release destinados à distribuição pública — nunca configurações pessoais, logs, tokens ou arquivos privados. Sem o secret, não se deve interpretar a ausência de um alerta como uma análise limpa.
+
+A pipeline inclui análise estática CodeQL no código Python. Relatórios de CI e proveniência de build melhoram a rastreabilidade, mas não substituem testes, atualizações de dependências, revisão humana ou análise do binário final.
+
 ## Limite da assinatura do Windows
 
 O workflow aceita assinatura Authenticode real quando o mantenedor configura um certificado de assinatura de código válido nos secrets `WINDOWS_SIGNING_CERT_BASE64` e `WINDOWS_SIGNING_CERT_PASSWORD`. Sem esse certificado, o executável continua **sem assinatura Authenticode** e o relatório publicado deve informar isso. Não serão usados nomes de empresa inventados, certificados próprios não confiáveis, metadados falsos ou técnicas para contornar o SmartScreen.
