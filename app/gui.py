@@ -34,9 +34,9 @@ from .brand_assets import load_brand_images
 
 
 PALETTES = {
-    "dark": {"bg":"#090B18","panel":"#121629","panel2":"#191F38","field":"#0C1122","fg":"#F4F5FF","muted":"#A0A9C3","border":"#2B3150","accent":"#8B5CF6","accent2":"#D946EF","accent_fg":"#FFFFFF","good":"#34D399","warn":"#FBBF24","bad":"#FB7185","button":"#202744","button_hover":"#30385D","input_fg":"#F8FAFF","space":"#60A5FA","pink":"#F472B6"},
-    "light": {"bg":"#F3F5FA","panel":"#FFFFFF","panel2":"#E8EDF6","field":"#F8FAFD","fg":"#12182A","muted":"#63718A","border":"#D7DFEB","accent":"#6D5DFB","accent2":"#EC4899","accent_fg":"#FFFFFF","good":"#047857","warn":"#B45309","bad":"#BE123C","button":"#E8EDF6","button_hover":"#D7DFEB","input_fg":"#12182A","space":"#3B82F6","pink":"#DB2777"},
-    "oled": {"bg":"#000000","panel":"#08090D","panel2":"#111318","field":"#050608","fg":"#F5F7FA","muted":"#9AA1AD","border":"#24262D","accent":"#8B5CF6","accent2":"#D946EF","accent_fg":"#FFFFFF","good":"#34D399","warn":"#FBBF24","bad":"#FB7185","button":"#191B21","button_hover":"#252831","input_fg":"#FFFFFF","space":"#60A5FA","pink":"#F472B6"},
+    "dark": {"bg":"#111827","panel":"#1F2937","panel2":"#263448","field":"#111827","fg":"#F9FAFB","muted":"#A7B0C0","border":"#374151","accent":"#2563EB","accent2":"#3B82F6","accent_fg":"#FFFFFF","good":"#22C55E","warn":"#F59E0B","bad":"#EF4444","button":"#273449","button_hover":"#334155","input_fg":"#F9FAFB","space":"#60A5FA","pink":"#2563EB"},
+    "light": {"bg":"#F3F6FA","panel":"#FFFFFF","panel2":"#E8EEF6","field":"#FFFFFF","fg":"#1E293B","muted":"#64748B","border":"#D8E0EA","accent":"#1D4ED8","accent2":"#3B82F6","accent_fg":"#FFFFFF","good":"#15803D","warn":"#B45309","bad":"#B91C1C","button":"#E9EEF5","button_hover":"#DCE5F0","input_fg":"#172033","space":"#1D4ED8","pink":"#1D4ED8"},
+    "oled": {"bg":"#000000","panel":"#090D14","panel2":"#111827","field":"#05080D","fg":"#F9FAFB","muted":"#9CA3AF","border":"#252D3A","accent":"#3B82F6","accent2":"#60A5FA","accent_fg":"#FFFFFF","good":"#22C55E","warn":"#FBBF24","bad":"#EF4444","button":"#111827","button_hover":"#1F2937","input_fg":"#F9FAFB","space":"#60A5FA","pink":"#3B82F6"},
 }
 
 
@@ -317,7 +317,7 @@ class IconNavButton(tk.Canvas):
 
 
 class RoundedGlowButton(tk.Canvas):
-    """A real clickable Canvas button with rounded pink-violet styling and native keyboard support."""
+    """A real clickable rounded button with restrained product styling and keyboard support."""
 
     def __init__(self, parent, **kwargs):
         self.app = getattr(parent.winfo_toplevel(), "_media_downloader_app", None)
@@ -415,37 +415,33 @@ class RoundedGlowButton(tk.Canvas):
     def _palette(self):
         c = self.app.colors
         if self.style_name == "Accent.TButton":
-            edge = _blend_hex(c.get("pink", "#F472B6"), "#FFFFFF", 0.16)
-            top = _blend_hex(c.get("pink", "#F472B6"), c["accent"], 0.26)
-            bottom = _blend_hex(c["accent"], c.get("accent2", "#D946EF"), 0.32)
-            text_color = "#FFFFFF"
+            edge = _blend_hex(c["accent"], "#000000", 0.12)
+            top = c["accent"]
+            bottom = _blend_hex(c["accent"], "#000000", 0.06)
+            text_color = c.get("accent_fg", "#FFFFFF")
         elif self.style_name == "Danger.TButton":
-            edge = _blend_hex(c["bad"], "#FFFFFF", 0.20)
-            top = _blend_hex(c["bad"], "#F43F5E", 0.35)
-            bottom = _blend_hex(c["bad"], c["accent"], 0.24)
+            edge = _blend_hex(c["bad"], "#000000", 0.12)
+            top = c["bad"]
+            bottom = _blend_hex(c["bad"], "#000000", 0.06)
             text_color = "#FFFFFF"
         elif self.style_name == "Help.TButton":
-            edge = c.get("accent2", c["accent"])
-            top = _blend_hex(c["accent"], c["panel2"], 0.18)
-            bottom = _blend_hex(c["accent"], c["panel"], 0.40)
-            text_color = "#FFFFFF"
+            edge = c["border"]
+            top = c["button_hover"] if self._hovered or self._focused else c["button"]
+            bottom = top
+            text_color = c["fg"]
         else:
-            edge = _blend_hex(c.get("pink", "#F472B6"), c["accent"], 0.20)
-            top = _blend_hex(c["pink"] if "pink" in c else "#F472B6", c["accent"], 0.54)
-            bottom = _blend_hex(c["accent"], c["panel2"], 0.20)
-            text_color = "#FFFFFF"
+            edge = c["border"] if not (self._hovered or self._focused) else c["accent"]
+            top = c["button_hover"] if self._hovered or self._focused else c["button"]
+            bottom = top
+            text_color = c["fg"]
         if self._state == "disabled":
             edge = _blend_hex(edge, c["muted"], 0.56)
             top = _blend_hex(top, c["panel2"], 0.60)
             bottom = _blend_hex(bottom, c["panel2"], 0.64)
             text_color = _blend_hex(c["fg"], c["panel2"], 0.42)
         elif self._pressed:
-            top = _blend_hex(top, "#000000", 0.16)
-            bottom = _blend_hex(bottom, "#000000", 0.20)
-        elif self._hovered or self._focused:
-            edge = _blend_hex(edge, "#FFFFFF", 0.28)
-            top = _blend_hex(top, "#FFFFFF", 0.12)
-            bottom = _blend_hex(bottom, "#D8B4FE", 0.12)
+            top = _blend_hex(top, "#000000", 0.12)
+            bottom = top
         return edge, top, bottom, text_color
 
     def _draw(self):
@@ -608,7 +604,7 @@ class MediaDownloaderApp:
         self.logger = setup_logging(LOG_DIR)
         self.logger.info("Inicialização: %s", self.system.architecture_label)
 
-        self.root.title(f"ChatGPT Media Downloader v{VERSION}")
+        self.root.title(f"Media Downloader | v{VERSION}")
         self.root.geometry("1220x820")
         self.root.minsize(1000, 680)
 
@@ -638,7 +634,7 @@ class MediaDownloaderApp:
         self.log_history: list[tuple[str, bool]] = []
         self._developer_mode_active = bool(self.config.get("developer_mode", False))
         self.developer_mode_var = tk.BooleanVar(value=self._developer_mode_active)
-        self.animations_enabled_var = tk.BooleanVar(value=bool(self.config.get("animations_enabled", True)))
+        self.animations_enabled_var = tk.BooleanVar(value=bool(self.config.get("animations_enabled", False)))
         self.log_mode_var = tk.StringVar(value="CONSOLE TÉCNICO" if self._developer_mode_active else "RESUMO DE ATIVIDADE")
         self.dep_infos = {}
         self._dependencies_checked = False
@@ -710,13 +706,13 @@ class MediaDownloaderApp:
         self.config["theme"] = requested if requested in {"system","dark","light","oled"} else "dark"
         self.palette_name = self._resolve_theme(self.config["theme"])
         c = dict(PALETTES[self.palette_name])
-        accent = str(self.config.get("accent_color","#8B5CF6") or "#8B5CF6").strip()
+        accent = str(self.config.get("accent_color","#2563EB") or "#2563EB").strip()
         if _valid_hex_color(accent):
             c["accent"] = accent.upper()
             c["accent2"] = _blend_hex(accent.upper(),"#FFFFFF" if self.palette_name!="light" else "#000000",0.18)
             c["accent_fg"] = _contrast_text(accent.upper())
         else:
-            self.config["accent_color"] = "#8B5CF6"
+            self.config["accent_color"] = "#2563EB"
         self.colors = c
         compact = self.config.get("ui_density","comfortable") == "compact"
         nav_pad = (11,7) if compact else (14,10)
@@ -837,10 +833,10 @@ class MediaDownloaderApp:
         header.pack(fill="x",pady=(4,16))
         header_left=ttk.Frame(header,style="Topbar.TFrame")
         header_left.pack(side="left",fill="x",expand=True)
-        ttk.Label(header_left,text="MEDIA WORKSPACE  /  DOWNLOADS",style="Eyebrow.TLabel").pack(anchor="w",pady=(0,3))
+        ttk.Label(header_left,text="MEDIA DOWNLOADER  /  CENTRAL DE MÍDIA",style="Eyebrow.TLabel").pack(anchor="w",pady=(0,3))
         self.page_title_var=tk.StringVar(value="Início")
         ttk.Label(header_left,textvariable=self.page_title_var,style="PageTitle.TLabel").pack(anchor="w")
-        self.page_subtitle_var=tk.StringVar(value="Seu espaço para vídeos, músicas e playlists.")
+        self.page_subtitle_var=tk.StringVar(value="Gerencie vídeos, músicas e playlists em um só lugar.")
         ttk.Label(header_left,textvariable=self.page_subtitle_var,style="Muted.TLabel").pack(anchor="w",pady=(2,0))
         header_actions=ttk.Frame(header,style="Topbar.TFrame")
         header_actions.pack(side="right",anchor="n",padx=(10,0),pady=(9,0))
@@ -868,10 +864,10 @@ class MediaDownloaderApp:
         hero_body.pack(side="left",fill="both",expand=True)
         hero_top=ttk.Frame(hero_body,style="Hero.TFrame")
         hero_top.pack(fill="x")
-        ttk.Label(hero_top,text="DOWNLOAD WORKSPACE",style="HeroEyebrow.TLabel").pack(side="left")
+        ttk.Label(hero_top,text="CENTRAL DE DOWNLOADS",style="HeroEyebrow.TLabel").pack(side="left")
         ttk.Label(hero_top,text="VÍDEO  ·  ÁUDIO  ·  PLAYLISTS",style="HeroMuted.TLabel",font=("Segoe UI",8,"bold")).pack(side="right")
-        ttk.Label(hero_body,text="Sua mídia. Do seu jeito.",style="HeroTitle.TLabel").pack(anchor="w",pady=(7,2))
-        ttk.Label(hero_body,text="Cole um link, personalize a saída e acompanhe tudo em um só lugar.",style="HeroMuted.TLabel",wraplength=760).pack(anchor="w",pady=(0,15))
+        ttk.Label(hero_body,text="Downloads de mídia, com controle.",style="HeroTitle.TLabel").pack(anchor="w",pady=(7,2))
+        ttk.Label(hero_body,text="Cole um link, escolha o formato e acompanhe o progresso.",style="HeroMuted.TLabel",wraplength=760).pack(anchor="w",pady=(0,15))
         self.url_entry=ttk.Entry(hero_body,textvariable=self.url_var,font=("Segoe UI",12))
         self.url_entry.pack(fill="x")
         self.url_entry.focus_set()
@@ -1713,7 +1709,7 @@ class MediaDownloaderApp:
             ("Pastas", "As pastas de saída podem ser alteradas em Configurações. Elas ficam fora da área de instalação e são preservadas na desinstalação."),
             ("Dependências", "yt-dlp, FFmpeg e FFprobe são detectados por caminho manual, área privada da instalação e PATH. Na primeira execução, o bootstrap tenta instalar versões compatíveis automaticamente."),
             ("Arquitetura", "Windows x86/x64/ARM64, Linux x86/x64/ARM64/ARMv7 e macOS Intel/Apple Silicon são identificados. A build compatível é priorizada."),
-            ("Temas", "Claro, escuro ou Sistema. O tema escuro usa tons de azul espacial, violeta e rosa; Sistema consulta a preferência visual do Windows, macOS ou, quando disponível, do ambiente Linux."),
+            ("Temas", "Claro, escuro ou Sistema. A interface usa tons profissionais de azul e cinza, contraste consistente e animações discretas que podem ser desativadas nas Configurações; Sistema consulta a preferência visual do Windows, macOS ou, quando disponível, do ambiente Linux."),
             ("Erros", "A interface mostra uma explicação simples. Para conferir a saída bruta de yt-dlp/FFmpeg, ative o Modo desenvolvedor nas Configurações."),
             ("Segurança e privacidade", "O app usa listas de argumentos, valida URLs HTTP/HTTPS, redige dados sensíveis nos logs e não tenta burlar DRM, paywall ou controles de acesso. Nenhum programa pode garantir 100% de segurança ou ausência de falsos positivos em antivírus. Baixe builds de fontes oficiais e verifique o hash do artefato distribuído."),
             ("Sites", "O suporte é o que o yt-dlp oferecer na versão instalada. O aplicativo não tenta burlar DRM, autenticação, paywall ou conteúdo privado."),
