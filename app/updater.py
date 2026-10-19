@@ -21,7 +21,7 @@ from .config import APP_DATA, TOOLS_DIR, VERSION
 from .locking import CrossProcessFileLock
 from .dependencies import detect_binary_arch
 from .platform import SystemInfo
-from .security import safe_archive_member_path
+from .security import safe_archive_member_path, trusted_urlopen
 from .dependencies import MAX_ARCHIVE_MEMBERS, MAX_ARCHIVE_UNPACKED_BYTES
 from .process_utils import hidden_subprocess_kwargs
 
@@ -31,6 +31,10 @@ FF_API = "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/latest"
 MAX_DEPENDENCY_BYTES = 512 * 1024 * 1024
 MAX_CHECKSUM_BYTES = 16 * 1024 * 1024
 MAX_RELEASE_METADATA_BYTES = 5 * 1024 * 1024
+GITHUB_ASSET_HOSTS = frozenset({
+    "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com",
+    "raw.githubusercontent.com", "codeload.github.com",
+})
 
 
 @dataclass(frozen=True)
@@ -67,7 +71,7 @@ def _request_json(url: str) -> dict:
         url,
         headers={"User-Agent": f"ChatGPT-Media-Downloader/{VERSION}", "Accept": "application/vnd.github+json"},
     )
-    with urllib.request.urlopen(request, timeout=20) as response:
+    with trusted_urlopen(request, allowed_hosts={"api.github.com"}, timeout=20) as response:
         if not _trusted_github_api_url(response.geturl()):
             raise UpdateError("O GitHub redirecionou os metadados para um domínio não autorizado.")
         payload = response.read(MAX_RELEASE_METADATA_BYTES + 1)
@@ -100,7 +104,7 @@ def _download(
         headers={"User-Agent": f"ChatGPT-Media-Downloader/{VERSION}", "Accept": "application/octet-stream"},
     )
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with trusted_urlopen(request, allowed_hosts=GITHUB_ASSET_HOSTS, timeout=60) as response:
             if not _trusted_github_url(response.geturl()):
                 raise UpdateError("O GitHub redirecionou o download para um domínio não autorizado.")
             total = int(response.headers.get("Content-Length", "0") or 0)
@@ -140,10 +144,7 @@ def _trusted_github_url(url: str) -> bool:
         return False
     if parts.username is not None or parts.password is not None or port not in {None, 443}:
         return False
-    return host in {
-        "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com",
-        "raw.githubusercontent.com", "codeload.github.com",
-    }
+    return host in GITHUB_ASSET_HOSTS
 
 def _asset(release: dict, name: str) -> Optional[ReleaseAsset]:
     for item in release.get("assets", []):
