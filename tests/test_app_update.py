@@ -7,6 +7,9 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import io
+import urllib.error
+import urllib.request
 import zipfile
 from pathlib import Path
 from unittest.mock import patch
@@ -27,6 +30,7 @@ from app.app_update import (
     version_key,
 )
 from app.config import PRODUCT_ID
+from app.security import RestrictedHTTPSRedirectHandler
 
 
 
@@ -43,6 +47,24 @@ class TrustedUpdateUrlTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertFalse(_trusted_url(value, metadata=True))
         self.assertFalse(_trusted_url("https://api.github.com/repos/owner/repo"))
+
+
+class UpdateRedirectSafetyTests(unittest.TestCase):
+    def test_redirect_handler_rejects_untrusted_host_and_http_downgrade(self):
+        handler = RestrictedHTTPSRedirectHandler({
+            "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com",
+        })
+        request = urllib.request.Request(
+            "https://github.com/slydtaz/Chatgpt-media-downloader/releases/download/v5.3.1/ChatGPTMediaDownloader.exe"
+        )
+        for target in (
+            "http://github.com/download.exe",
+            "https://attacker.example/download.exe",
+            "https://github.com.attacker.example/download.exe",
+        ):
+            with self.subTest(target=target):
+                with self.assertRaises(urllib.error.HTTPError):
+                    handler.redirect_request(request, io.BytesIO(b""), 302, "Found", {}, target)
 
 
 class VersionComparisonTests(unittest.TestCase):
