@@ -27,11 +27,11 @@ jobs:
       - name: Compile source (Windows cmd)
         if: runner.os == 'Windows'
         shell: cmd
-        run: python -c "from pathlib import Path; import py_compile; files = list(Path('app').glob('*.py')) + [Path('packaged_entry.py')]; [py_compile.compile(str(p), doraise=True) for p in files]"
+        run: python -c "from pathlib import Path; import py_compile; files = list(Path('app').glob('*.py')) + [Path('packaged_entry.py'), Path('emergency_uninstaller.py')]; [py_compile.compile(str(p), doraise=True) for p in files]"
       - name: Compile source (Unix)
         if: runner.os != 'Windows'
         shell: bash
-        run: python -c "from pathlib import Path; import py_compile; files = list(Path('app').glob('*.py')) + [Path('packaged_entry.py')]; [py_compile.compile(str(p), doraise=True) for p in files]"
+        run: python -c "from pathlib import Path; import py_compile; files = list(Path('app').glob('*.py')) + [Path('packaged_entry.py'), Path('emergency_uninstaller.py')]; [py_compile.compile(str(p), doraise=True) for p in files]"
       # Run Python without a console so child-process tests cannot interrupt cmd.exe.
       - name: Run unit tests (Windows)
         if: runner.os == 'Windows'
