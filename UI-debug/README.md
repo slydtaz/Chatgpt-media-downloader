@@ -1,6 +1,6 @@
 # UI-debug — Cosmic interface prototype
 
-**Version:** 0.1.0-dev.1  
+**Version:** 0.1.0-dev.2  
 **Channel:** development  
 **Status:** visual prototype — not a production downloader and not a GitHub Release.
 
