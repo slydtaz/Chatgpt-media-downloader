@@ -15,6 +15,10 @@ Fontes oficiais:
 - [Microsoft — opções de assinatura de código para Windows](https://github.com/MicrosoftDocs/windows-dev-docs/blob/docs/hub/apps/package-and-deploy/code-signing-options.md)
 - [PyInstaller — uso de recursos de versão](https://pyinstaller.org/en/stable/usage.html)
 
+## Melhorias na versão 5.3.0
+
+A versão 5.3.0 endurece a verificação de URL, redirecionamentos, tamanhos e hashes das dependências, e rejeita links simbólicos e caminhos perigosos em arquivos compactados. Essas verificações são medidas preventivas, não uma certificação do executável. A situação Authenticode continua indicada no `Windows-Signature-Status.txt` da release; sem certificado confiável configurado, o EXE continua sem assinatura.
+
 ## Como é habilitada uma assinatura real
 
 O workflow de publicação oferece assinatura Authenticode no runner Windows quando o mantenedor configura os secrets do repositório:
