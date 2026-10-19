@@ -58,6 +58,24 @@ class VersionAndGeometryTests(unittest.TestCase):
         self.assertNotEqual(path.parent.name.casefold(), "mediadownloader")
 
 
+class VisualConceptTests(unittest.TestCase):
+    def test_splash_has_coordinated_gradient_pairs_and_status_sequences(self):
+        self.assertGreaterEqual(len(ui_debug.SPLASH_PALETTES), 6)
+        for first, second in ui_debug.SPLASH_PALETTES:
+            with self.subTest(first=first, second=second):
+                self.assertRegex(first, r"^#[0-9A-Fa-f]{6}$")
+                self.assertRegex(second, r"^#[0-9A-Fa-f]{6}$")
+                self.assertNotEqual(first.lower(), second.lower())
+        self.assertGreaterEqual(len(ui_debug.STARTUP_MESSAGES), 6)
+        self.assertGreaterEqual(len(ui_debug.UPDATE_MESSAGES), 6)
+        self.assertIn("órbitas", " ".join(ui_debug.STARTUP_MESSAGES).lower())
+
+    def test_prototype_has_independent_development_version(self):
+        self.assertEqual(ui_debug.APP_VERSION, "0.1.0-dev.4")
+        self.assertEqual(ui_debug.CHANNEL, "development")
+        self.assertIn("ui-debug", ui_debug.UPDATE_BRANCH)
+
+
 class SelfUpdaterTests(unittest.TestCase):
     def version_manifest(self, version="0.1.1-dev.2"):
         return json.dumps({"version": version, "channel": "development"}).encode("utf-8")
