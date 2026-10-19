@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import math
+import io
 import queue
 import threading
 import time
@@ -31,12 +32,18 @@ from .app_update import (
 )
 from .uninstall import launch_uninstaller
 from .brand_assets import load_brand_images
+from .media_preview import fetch_thumbnail_bytes, inspect_media_preview
+
+try:
+    from PIL import Image, ImageDraw, ImageFont, ImageTk
+except ImportError:  # Source runs without Pillow; the stable Windows build bundles it.
+    Image = ImageDraw = ImageFont = ImageTk = None
 
 
 PALETTES = {
-    "dark": {"bg":"#111827","panel":"#1F2937","panel2":"#263448","field":"#111827","fg":"#F9FAFB","muted":"#A7B0C0","border":"#374151","accent":"#2563EB","accent2":"#3B82F6","accent_fg":"#FFFFFF","good":"#22C55E","warn":"#F59E0B","bad":"#EF4444","button":"#273449","button_hover":"#334155","input_fg":"#F9FAFB","space":"#60A5FA","pink":"#2563EB"},
-    "light": {"bg":"#F3F6FA","panel":"#FFFFFF","panel2":"#E8EEF6","field":"#FFFFFF","fg":"#1E293B","muted":"#64748B","border":"#D8E0EA","accent":"#1D4ED8","accent2":"#3B82F6","accent_fg":"#FFFFFF","good":"#15803D","warn":"#B45309","bad":"#B91C1C","button":"#E9EEF5","button_hover":"#DCE5F0","input_fg":"#172033","space":"#1D4ED8","pink":"#1D4ED8"},
-    "oled": {"bg":"#000000","panel":"#090D14","panel2":"#111827","field":"#05080D","fg":"#F9FAFB","muted":"#9CA3AF","border":"#252D3A","accent":"#3B82F6","accent2":"#60A5FA","accent_fg":"#FFFFFF","good":"#22C55E","warn":"#FBBF24","bad":"#EF4444","button":"#111827","button_hover":"#1F2937","input_fg":"#F9FAFB","space":"#60A5FA","pink":"#3B82F6"},
+    "dark": {"bg":"#090A18","panel":"#111226","panel2":"#18182F","field":"#0B0C1A","fg":"#F5F3FF","muted":"#9EA3C7","border":"#302A4E","accent":"#8B5CF6","accent2":"#A78BFA","accent_fg":"#FFFFFF","good":"#34D399","warn":"#FBBF24","bad":"#FB7185","button":"#211C3A","button_hover":"#30234F","input_fg":"#F5F3FF","space":"#22D3EE","pink":"#EC4899"},
+    "light": {"bg":"#F5F3FF","panel":"#FFFFFF","panel2":"#EEEBFF","field":"#FFFFFF","fg":"#21183D","muted":"#71688E","border":"#D9D1F2","accent":"#7C3AED","accent2":"#8B5CF6","accent_fg":"#FFFFFF","good":"#047857","warn":"#B45309","bad":"#BE123C","button":"#E9E3FA","button_hover":"#DCD2F7","input_fg":"#21183D","space":"#0891B2","pink":"#DB2777"},
+    "oled": {"bg":"#000000","panel":"#090814","panel2":"#111022","field":"#05040A","fg":"#F5F3FF","muted":"#A5A0C7","border":"#27213D","accent":"#8B5CF6","accent2":"#A78BFA","accent_fg":"#FFFFFF","good":"#34D399","warn":"#FBBF24","bad":"#FB7185","button":"#100D21","button_hover":"#21173A","input_fg":"#F5F3FF","space":"#22D3EE","pink":"#EC4899"},
 }
 
 
@@ -60,6 +67,96 @@ def _contrast_text(value: str) -> str:
         return "#11131A" if 0.2126*lin[0]+0.7152*lin[1]+0.0722*lin[2] > 0.42 else "#FFFFFF"
     except (ValueError, TypeError, IndexError):
         return "#FFFFFF"
+
+
+def _render_nav_icon(root, cache: dict, page_key: str, size: int, color: str):
+    """Render crisp 4× supersampled navigation artwork when Pillow is available."""
+    if Image is None or ImageDraw is None or ImageTk is None:
+        return None
+    key = (page_key, int(size), str(color))
+    if key in cache:
+        return cache[key]
+    scale = 4
+    icon_size = max(16, int(size))
+    extent = icon_size * scale
+    center = extent / 2
+    art = Image.new("RGBA", (extent, extent), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(art)
+    stroke = max(1, round(scale * 1.7))
+
+    def point(x, y):
+        return (round(center + x * scale), round(center + y * scale))
+
+    def line(points, width=stroke):
+        draw.line([point(x, y) for x, y in points], fill=color, width=width, joint="curve")
+
+    def circle(x, y, radius, fill=None, outline=color, width=stroke):
+        px, py = point(x, y)
+        r = radius * scale
+        draw.ellipse((round(px-r), round(py-r), round(px+r), round(py+r)),
+                     fill=fill, outline=outline, width=width if outline else 1)
+
+    def rect(left, top, right, bottom, radius=0, fill=None, outline=color, width=stroke):
+        box = (round(center + left*scale), round(center + top*scale),
+               round(center + right*scale), round(center + bottom*scale))
+        if radius:
+            draw.rounded_rectangle(box, radius=radius*scale, fill=fill, outline=outline, width=width)
+        else:
+            draw.rectangle(box, fill=fill, outline=outline, width=width)
+
+    if page_key == "home":
+        line([(-10, -1), (0, -10), (10, -1)])
+        line([(-7, -3), (-7, 9), (7, 9), (7, -3)])
+        line([(-2, 9), (-2, 2), (2, 2), (2, 9)])
+    elif page_key == "playlist":
+        for y in (-7, 0, 7):
+            circle(-8, y, 1.1, fill=color, outline=None, width=1)
+            line([(-4, y), (9, y)])
+    elif page_key == "settings":
+        circle(0, 0, 5.1, fill=None)
+        for angle in range(0, 360, 45):
+            radians = math.radians(angle)
+            line([(math.cos(radians)*6.9, math.sin(radians)*6.9),
+                  (math.cos(radians)*10.3, math.sin(radians)*10.3)])
+        circle(0, 0, 2.4, fill=None, width=max(1, scale*1.4))
+    elif page_key == "dependencies":
+        line([(0, -11), (10, 0), (0, 11), (-10, 0), (0, -11)])
+        line([(0, -5), (5, 0), (0, 5), (-5, 0), (0, -5)], width=max(1, scale*1.4))
+        circle(0, 0, 1.3, fill=color, outline=None, width=1)
+    elif page_key == "updates":
+        box = (round(center-9*scale), round(center-9*scale),
+               round(center+9*scale), round(center+9*scale))
+        draw.arc(box, start=42, end=218, fill=color, width=stroke)
+        draw.arc(box, start=222, end=398, fill=color, width=stroke)
+        draw.polygon([point(6.8, -8.5), point(11.5, -8.1), point(9.1, -4.0)], fill=color)
+        draw.polygon([point(-6.8, 8.5), point(-11.5, 8.1), point(-9.1, 4.0)], fill=color)
+    elif page_key == "help":
+        circle(0, 0, 10, fill=None)
+        font = None
+        if ImageFont is not None:
+            for candidate in ("segoeui.ttf", "arial.ttf", "C:/Windows/Fonts/arial.ttf"):
+                try:
+                    font = ImageFont.truetype(candidate, size=15*scale)
+                    break
+                except OSError:
+                    continue
+        if font is None:
+            font = ImageFont.load_default()
+        draw.text(point(0, 0), "?", font=font, fill=color, anchor="mm")
+    elif page_key == "developer":
+        rect(-10, -8, 10, 6, radius=2, fill=None)
+        line([(-5, 10), (5, 10)])
+        line([(0, 6), (0, 10)])
+        line([(-5, -3), (-2, 0), (-5, 3)])
+        line([(0, 3), (5, 3)])
+    else:
+        return None
+
+    resampling = getattr(Image, "Resampling", Image).LANCZOS
+    scaled = art.resize((icon_size, icon_size), resample=resampling)
+    photo = ImageTk.PhotoImage(scaled, master=root)
+    cache[key] = photo
+    return photo
 
 
 class Tooltip:
@@ -287,6 +384,55 @@ class IconNavButton(tk.Canvas):
         self._draw()
         self._scale_job = self.after(16, self._animate_scale)
 
+    def _draw_vector_icon(self, cx: float, cy: float, size: int, color: str):
+        """Vector fallback for installations without Pillow."""
+        width = max(1.5, size / 10)
+        def line(points):
+            flattened = [coordinate for point in points for coordinate in point]
+            self.create_line(*flattened, fill=color, width=width, capstyle=tk.ROUND, joinstyle=tk.ROUND)
+        def oval(x, y, radius, fill="", outline=color):
+            self.create_oval(cx+x-radius, cy+y-radius, cx+x+radius, cy+y+radius,
+                             fill=fill, outline=outline, width=width)
+        def rect(left, top, right, bottom, radius=2):
+            self.create_polygon(_rounded_polygon(cx+left, cy+top, cx+right, cy+bottom, radius),
+                                smooth=False, outline=color, fill="", width=width)
+        if self.page_key == "home":
+            line([(cx-size*.48,cy-size*.02),(cx,cy-size*.48),(cx+size*.48,cy-size*.02)])
+            line([(cx-size*.35,cy-size*.14),(cx-size*.35,cy+size*.40),(cx+size*.35,cy+size*.40),(cx+size*.35,cy-size*.14)])
+            line([(cx-size*.08,cy+size*.40),(cx-size*.08,cy+size*.08),(cx+size*.08,cy+size*.08),(cx+size*.08,cy+size*.40)])
+        elif self.page_key == "playlist":
+            for y in (-size*.30, 0, size*.30):
+                oval(-size*.38, y, max(1.2,size*.055), fill=color, outline=color)
+                line([(cx-size*.20,cy+y),(cx+size*.40,cy+y)])
+        elif self.page_key == "settings":
+            for angle in range(0,360,45):
+                a=math.radians(angle)
+                line([(cx+math.cos(a)*size*.30,cy+math.sin(a)*size*.30),
+                      (cx+math.cos(a)*size*.48,cy+math.sin(a)*size*.48)])
+            oval(0,0,size*.30,outline=color)
+            oval(0,0,size*.12,outline=color)
+        elif self.page_key == "dependencies":
+            line([(cx,cy-size*.50),(cx+size*.45,cy),(cx,cy+size*.50),(cx-size*.45,cy),(cx,cy-size*.50)])
+            line([(cx,cy-size*.22),(cx+size*.20,cy),(cx,cy+size*.22),(cx-size*.20,cy),(cx,cy-size*.22)])
+        elif self.page_key == "updates":
+            self.create_arc(cx-size*.42,cy-size*.42,cx+size*.42,cy+size*.42,start=35,extent=245,
+                            style=tk.ARC,outline=color,width=width)
+            self.create_polygon((cx+size*.28,cy-size*.46,cx+size*.55,cy-size*.43,cx+size*.39,cy-size*.19),
+                                fill=color,outline=color)
+            self.create_arc(cx-size*.42,cy-size*.42,cx+size*.42,cy+size*.42,start=215,extent=125,
+                            style=tk.ARC,outline=color,width=width)
+            self.create_polygon((cx-size*.28,cy+size*.46,cx-size*.55,cy+size*.43,cx-size*.39,cy+size*.19),
+                                fill=color,outline=color)
+        elif self.page_key == "help":
+            oval(0,0,size*.45,outline=color)
+            self.create_text(cx,cy,text="?",fill=color,font=("Segoe UI",max(10,int(size*.72)),"bold"))
+        elif self.page_key == "developer":
+            rect(-size*.46,-size*.34,size*.46,size*.26,radius=3)
+            line([(cx-size*.22,cy+size*.45),(cx+size*.22,cy+size*.45)])
+            line([(cx,cy+size*.26),(cx,cy+size*.45)])
+            line([(cx-size*.22,cy-size*.09),(cx-size*.08,cy),(cx-size*.22,cy+size*.09)])
+            line([(cx,cy+size*.09),(cx+size*.25,cy+size*.09)])
+
     def _draw(self):
         try:
             self.delete("all")
@@ -307,11 +453,13 @@ class IconNavButton(tk.Canvas):
                     fill=colors.get("pink", accent), outline="", smooth=False,
                 )
             icon_color = accent if self.active else (colors["fg"] if self.hovered else colors["muted"])
-            size = max(15, int(18 * self._scale))
-            self.create_text(
-                width / 2, height / 2, text=self.glyph,
-                fill=icon_color, font=("Segoe UI Symbol", size, "bold"),
-            )
+            size = max(19, int(21 * self._scale))
+            photo = _render_nav_icon(self.app.root, self.app._nav_icon_cache, self.page_key, size, icon_color)
+            if photo is not None:
+                self._icon_photo = photo
+                self.create_image(width / 2, height / 2, image=photo)
+            else:
+                self._draw_vector_icon(width / 2, height / 2, size, icon_color)
         except tk.TclError:
             pass
 
@@ -614,8 +762,18 @@ class MediaDownloaderApp:
         except tk.TclError:
             pass
         self.brand_images = load_brand_images(root)
-        self.palette_name = "light"
+        self.palette_name = "dark"
         self.colors: dict[str, str] = {}
+        self._nav_icon_cache: dict[tuple[str, int, str], object] = {}
+        self._media_preview_generation = 0
+        self._media_preview_after = None
+        self._media_preview_visible = False
+        self._playlist_thumbnail_cache: dict[str, object] = {}
+        self._playlist_thumbnail_requested: set[str] = set()
+        self._playlist_thumbnail_loaded: set[str] = set()
+        self._playlist_thumbnail_failed: set[str] = set()
+        self._thumbnail_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="cgmd-thumbnail")
+        self.media_preview_photo = None
         self._apply_theme(self.config.get("theme", "system"))
 
         self.ui_queue: queue.Queue = queue.Queue()
@@ -660,6 +818,9 @@ class MediaDownloaderApp:
         self.update_check_on_startup_var = tk.BooleanVar(value=bool(self.config.get("update_check_on_startup", True)))
 
         self.url_var = tk.StringVar()
+        self.media_preview_title_var = tk.StringVar(value="A prévia aparecerá aqui")
+        self.media_preview_meta_var = tk.StringVar(value="Cole um link de vídeo ou áudio")
+        self.media_preview_status_var = tk.StringVar(value="Prévia automática aguardando um link")
         self.mode_var = tk.StringVar(value="Automático — vídeo")
         self.quality_var = tk.StringVar(value=f"{self.config['auto_video_quality']}p")
         self.status_var = tk.StringVar(value="Pronto para baixar")
@@ -734,6 +895,8 @@ class MediaDownloaderApp:
         self.style.configure("HeroEyebrow.TLabel",background=c["panel2"],foreground=c["accent"],font=("Segoe UI",9,"bold"))
         self.style.configure("SidebarTitle.TLabel",background=c["panel2"],foreground=c["fg"],font=("Segoe UI",13,"bold"))
         self.style.configure("SidebarMuted.TLabel",background=c["panel2"],foreground=c["muted"],font=("Segoe UI",8,"bold"))
+        self.style.configure("BrandWordmark.TLabel",background=c["panel2"],foreground=c["fg"],font=("Segoe UI",8,"bold"))
+        self.style.configure("PreviewEyebrow.TLabel",background=c["panel"],foreground=c["accent"],font=("Segoe UI",9,"bold"))
         self.style.configure("Title.TLabel",background=c["bg"],foreground=c["fg"],font=("Segoe UI",25,"bold"))
         self.style.configure("PageTitle.TLabel",background=c["bg"],foreground=c["fg"],font=("Segoe UI",22,"bold"))
         self.style.configure("Subtitle.TLabel",background=c["bg"],foreground=c["muted"],font=("Segoe UI",9))
@@ -770,6 +933,17 @@ class MediaDownloaderApp:
             self.dep_badge.configure(bg=c["panel2"],fg=c["muted"])
         if hasattr(self,"playlist_warning"):
             self.playlist_warning.configure(bg=c["panel2"],fg=c["warn"])
+        if hasattr(self, "media_preview_poster"):
+            self.media_preview_poster.configure(bg=c["panel2"])
+        if hasattr(self, "brand_logo_canvas"):
+            self.brand_logo_canvas.configure(background=c["panel2"])
+            self._draw_brand_logo()
+        if hasattr(self, "media_preview_placeholder") and not self.media_preview_photo:
+            self.media_preview_placeholder = self._make_thumbnail_placeholder(220, 124)
+            self.media_preview_poster.configure(image=self.media_preview_placeholder)
+        if hasattr(self, "playlist_thumbnail_placeholder"):
+            self.playlist_thumbnail_placeholder = self._make_thumbnail_placeholder(76, 43)
+            self._render_playlist_rows()
         if hasattr(self,"hero_accent_bar"):
             self.hero_accent_bar.configure(bg=c["accent"])
         def tint(widget):
@@ -797,14 +971,20 @@ class MediaDownloaderApp:
         outer=ttk.Frame(self.root,padding=13)
         outer.pack(fill="both",expand=True)
         self.shell=outer
-        sidebar=ttk.Frame(outer,style="Sidebar.TFrame",padding=(8,13,8,12),width=76)
+        sidebar=ttk.Frame(outer,style="Sidebar.TFrame",padding=(8,13,8,12),width=92)
         sidebar.pack(side="left",fill="y",padx=(0,12))
         sidebar.pack_propagate(False)
         self.sidebar=sidebar
         brand=ttk.Frame(sidebar,style="Sidebar.TFrame")
-        brand.pack(fill="x",pady=(0,20))
-        mark=tk.Label(brand,image=self.brand_images["logo"],bg=self.colors["panel2"],bd=0,highlightthickness=0,padx=0,pady=0)
-        mark.pack(anchor="center")
+        brand.pack(fill="x",pady=(0,16))
+        self.brand_logo_canvas = tk.Canvas(
+            brand, width=76, height=62, bg=self.colors["panel2"],
+            bd=0, highlightthickness=0, relief="flat",
+        )
+        self.brand_logo_canvas._brand_logo_canvas = True
+        self.brand_logo_canvas.pack(anchor="center")
+        self._draw_brand_logo()
+        ttk.Label(brand, text="MEDIA LAB", style="BrandWordmark.TLabel", anchor="center").pack(fill="x", pady=(2, 0))
         ttk.Separator(sidebar).pack(fill="x",pady=(0,12))
         for key,glyph,label,tip in [
             ("home","⌂","Início","Baixe vídeo ou áudio, acompanhe o progresso e consulte o resumo da atividade."),
@@ -873,6 +1053,7 @@ class MediaDownloaderApp:
         self.url_entry.focus_set()
         self.url_entry.bind("<Return>",lambda _e:self.start_download())
         self.url_var.trace_add("write",self._update_playlist_warning)
+        self.url_var.trace_add("write", self._schedule_media_preview)
         self.playlist_warning=tk.Label(hero_body,text="⚠  Link de playlist detectado — analise os itens antes de baixar.",bg=self.colors["panel2"],fg=self.colors["warn"],anchor="w",font=("Segoe UI",9,"bold"),padx=3)
         self.playlist_warning.pack(fill="x",pady=(7,0))
         self.playlist_warning.pack_forget()
@@ -896,8 +1077,48 @@ class MediaDownloaderApp:
         self.download_btn.pack(side="right")
         self.analyze_playlist_btn=RoundedGlowButton(buttons,text="Analisar playlist",style="Secondary.TButton",command=self._start_playlist_analysis)
         self.analyze_playlist_btn.pack(side="right",padx=(0,8))
-        progress_card=self._card(frame,16)
-        progress_card.pack(fill="x",pady=(0,13))
+
+        self.media_preview_placeholder = self._make_thumbnail_placeholder(220, 124)
+        self.playlist_thumbnail_placeholder = self._make_thumbnail_placeholder(76, 43)
+        self.media_preview_card = RoundedCard(frame, self, padding=12, surface="panel")
+        preview_header = ttk.Frame(self.media_preview_card, style="Card.TFrame")
+        preview_header.pack(fill="x", pady=(0, 8))
+        ttk.Label(preview_header, text="PRÉVIA AUTOMÁTICA", style="PreviewEyebrow.TLabel").pack(side="left")
+        ttk.Label(
+            preview_header, textvariable=self.media_preview_status_var,
+            style="Muted.TLabel", anchor="e",
+        ).pack(side="left", fill="x", expand=True, padx=(10, 8))
+        RoundedGlowButton(
+            preview_header, text="Atualizar prévia", style="Secondary.TButton",
+            command=self._refresh_media_preview,
+        ).pack(side="right")
+        preview_body = ttk.Frame(self.media_preview_card, style="Card.TFrame")
+        preview_body.pack(fill="x")
+        self.media_preview_poster = tk.Label(
+            preview_body, image=self.media_preview_placeholder,
+            bg=self.colors["panel2"], bd=0, highlightthickness=0,
+            width=220, height=124, anchor="center",
+        )
+        self.media_preview_poster.pack(side="left", padx=(0, 14))
+        preview_details = ttk.Frame(preview_body, style="Card.TFrame")
+        preview_details.pack(side="left", fill="both", expand=True, anchor="n")
+        ttk.Label(
+            preview_details, textvariable=self.media_preview_title_var,
+            style="CardTitle.TLabel", wraplength=650, justify="left",
+        ).pack(anchor="w", pady=(4, 5))
+        ttk.Label(
+            preview_details, textvariable=self.media_preview_meta_var,
+            style="Muted.TLabel", wraplength=650, justify="left",
+        ).pack(anchor="w")
+        ttk.Label(
+            preview_details,
+            text="A prévia consulta metadados e a capa; não baixa o arquivo de mídia.",
+            style="Muted.TLabel", wraplength=650, justify="left",
+        ).pack(anchor="w", pady=(12, 0))
+        self.media_preview_card.pack_forget()
+        self.progress_card = self._card(frame,16)
+        self.progress_card.pack(fill="x",pady=(0,13))
+        progress_card = self.progress_card
         pr=ttk.Frame(progress_card,style="Card.TFrame")
         pr.pack(fill="x")
         ttk.Label(pr,text="Sessão atual",style="CardTitle.TLabel").pack(side="left")
