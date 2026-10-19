@@ -108,13 +108,12 @@ def main() -> int:
         root.geometry("%sx%s+4+4" % (width, height))
         root.update_idletasks()
 
-        # Capture the exact fullscreen loader with the app's root hidden below it.
+        # Capture the fullscreen loader immediately, before building the main UI.
         root.withdraw()
         splash = ui_debug.CosmicSplash(root, mode="startup", looping=False)
-        app = ui_debug.SpaceUIPrototype(root, show_splash=False)
         root.update_idletasks()
         root.update()
-        time.sleep(0.25)
+        time.sleep(0.18)
         root.update()
         splash.window.lift()
         splash.window.attributes("-topmost", True)
@@ -127,12 +126,15 @@ def main() -> int:
         splash.close()
         root.deiconify()
         root.geometry("%sx%s+4+4" % (width, height))
+        root.update_idletasks()
+        app = ui_debug.SpaceUIPrototype(root, show_splash=False)
+        root.geometry("%sx%s+4+4" % (width, height))
+        root.deiconify()
         root.lift()
         try:
             root.focus_force()
         except tk.TclError:
             pass
-        root.update_idletasks()
         root.update()
         time.sleep(0.12)
         root.update()
