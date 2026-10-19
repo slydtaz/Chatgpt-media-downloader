@@ -1,3 +1,12 @@
+## 5.3.2 - stable
+
+- Replaces the blue-gray default interface with a cosmic violet/magenta/cyan palette and a larger, locally drawn Media Lab orbital mark.
+- Renders navigation icons from 4× supersampled vector artwork when Pillow is available; keeps a native Tk vector fallback.
+- Adds a debounced automatic media preview on supported public media URLs. yt-dlp reads metadata with skip-download enabled; the preview never downloads video/audio.
+- Displays thumbnail previews in playlist entries and loads image data asynchronously with size limits, HTTPS requirements, public-host checks, and validated redirects.
+- Bundles Pillow into the Windows EXE build and automatically captures a preview of the new panel during the UI screenshot workflow. The capture uses a local offline demo and starts no media downloads.
+- Migrates the built-in accent color to violet while preserving user-defined accent colors and other preferences.
+
 ## 5.3.1 - stable
 
 - Valida cada destino HTTPS de redirecionamento antes de enviar a próxima requisição nos downloads de atualizações e dependências; bloqueia downgrade para HTTP, userinfo, portas não padrão e hosts fora da lista permitida.
