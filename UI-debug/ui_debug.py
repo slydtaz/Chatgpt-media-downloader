@@ -857,7 +857,7 @@ class CosmicSplash:
         self._status_serial += 1
         tag = "splash-status-%d" % self._status_serial
         palette = self._next_palette()
-        font = tkfont.Font(master=self.window, family="Segoe UI",
+        font = tkfont.Font(root=self.window, family="Segoe UI",
                            size=max(15, int(min(self.width,self.height)*.018)), weight="bold")
         widths = [font.measure(ch) for ch in text]
         x, start_y = (self.width-sum(widths))/2, self.height*.695
