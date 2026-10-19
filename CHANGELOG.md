@@ -1,3 +1,10 @@
+## 5.1.4 - stable (hotfix-4)
+
+- Adiciona diagnóstico de reserva no ponto de entrada do EXE para registrar falhas que ocorrem antes do logger principal e mostrar uma mensagem nativa do Windows em exceções inesperadas.
+- Salva os diagnósticos em `startup-fallback.log` no diretório de dados do usuário, com fallback para TEMP quando necessário.
+- Adiciona testes para inicialização bem-sucedida, exceções inesperadas e fallback do arquivo de log.
+- Não presume a causa exata do encerramento observado: o objetivo é tornar o erro visível e capturável para uma correção direcionada.
+
 ## 5.1.3 - stable (hotfix-3)
 
 - Corrige a janela azul-escura vazia durante o início: a janela Tk fica oculta enquanto todos os componentes são construídos e só aparece após a interface estar pronta.
