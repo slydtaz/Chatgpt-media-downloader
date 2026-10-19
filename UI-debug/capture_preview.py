@@ -101,8 +101,10 @@ def main() -> int:
         root.title("UI-debug 0.1.0-dev.1 — prévia")
         screen_w, screen_h = root.winfo_screenwidth(), root.winfo_screenheight()
         desktop_w, desktop_h = ImageGrab.grab().size
-        width = max(1000, min(1280, screen_w - 16, desktop_w - 16))
-        height = max(700, min(830, screen_h - 70, desktop_h - 70))
+        width = max(960, min(1200, screen_w - 40, desktop_w - 32))
+        # Leave room for the Windows title bar and taskbar; the full client area
+        # still fits the prototype's minimum size on the hosted screenshot runner.
+        height = max(620, min(700, screen_h - 120, desktop_h - 120))
         root.geometry("%sx%s+4+4" % (width, height))
         root.update_idletasks()
 
