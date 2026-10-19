@@ -341,6 +341,44 @@ class SafeArchiveTests(unittest.TestCase):
             with self.assertRaisesRegex(AppUpdateError, "conflito entre arquivo e diretório"):
                 _safe_extract_zip(archive, root / "extract")
 
+    def test_windows_incompatible_archive_names_are_rejected_before_extraction(self):
+        unsafe_names = (
+            "CON", "con.txt", "PRN", "AUX.log", "NUL", "COM1.txt", "LPT9",
+            "file.txt:alternate", "trailing.", "trailing ", "bad<name>", "bad\x01name",
+        )
+        for name in unsafe_names:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                archive = root / "windows-name.zip"
+                with zipfile.ZipFile(archive, "w") as zf:
+                    zf.writestr(f"project/{name}", "unsafe")
+                extracted = root / "extract"
+                with self.assertRaisesRegex(AppUpdateError, "Windows"):
+                    _safe_extract_zip(archive, extracted)
+                self.assertEqual(list(extracted.iterdir()), [])
+
+    def test_unicode_normalization_collisions_are_rejected_before_extraction(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            archive = root / "unicode-collision.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("project/caf\u00e9.txt", "one")
+                zf.writestr("project/cafe\u0301.txt", "two")
+            extracted = root / "extract"
+            with self.assertRaisesRegex(AppUpdateError, "duplicados|Unicode"):
+                _safe_extract_zip(archive, extracted)
+            self.assertEqual(list(extracted.iterdir()), [])
+
+    def test_file_directory_collision_is_rejected_when_child_comes_first(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            archive = root / "reverse-file-directory-collision.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("project/app/main.py", "pass")
+                zf.writestr("project/app", "not a directory")
+            with self.assertRaisesRegex(AppUpdateError, "conflito entre arquivo e diretório"):
+                _safe_extract_zip(archive, root / "extract")
+
     def test_parent_traversal_is_rejected(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
