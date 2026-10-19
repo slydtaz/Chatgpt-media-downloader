@@ -38,6 +38,19 @@ class VersionAndGeometryTests(unittest.TestCase):
         self.assertGreaterEqual(min(ys), 3)
         self.assertLessEqual(max(ys), 63)
 
+    def test_adaptive_scale_supports_1440p_and_small_displays(self):
+        self.assertEqual(ui_debug.adaptive_ui_scale(2560, 1440), 1.25)
+        self.assertEqual(ui_debug.adaptive_ui_scale(1920, 1080), 1.0)
+        self.assertEqual(ui_debug.adaptive_ui_scale(1366, 768), 0.82)
+        self.assertEqual(ui_debug.adaptive_ui_scale(0, 0), 1.0)
+
+    def test_splash_trails_use_reusable_smooth_lines(self):
+        source = (ROOT / "ui_debug.py").read_text(encoding="utf-8")
+        self.assertIn('"trail_glow"', source)
+        self.assertIn('self.canvas.itemconfigure(particle["trail"], state=tk.HIDDEN)', source)
+        self.assertIn("smooth=True, splinesteps=16", source)
+        self.assertNotIn('for _ in range(9)]', source)
+
     def test_updater_url_allowlist_requires_https_and_official_hosts(self):
         self.assertTrue(ui_debug.validate_update_url("https://raw.githubusercontent.com/owner/repo/ui-debug/version.json"))
         self.assertTrue(ui_debug.validate_update_url("https://github.com/owner/repo/archive/refs/heads/ui-debug.zip"))
@@ -71,11 +84,15 @@ class VisualConceptTests(unittest.TestCase):
         self.assertIn("órbitas", " ".join(ui_debug.STARTUP_MESSAGES).lower())
 
     def test_prototype_has_independent_development_version(self):
-        self.assertEqual(ui_debug.APP_VERSION, "0.1.0-dev.5")
+        self.assertEqual(ui_debug.APP_VERSION, "0.1.0-dev.6")
         self.assertEqual(ui_debug.CHANNEL, "development")
         self.assertIn("ui-debug", ui_debug.UPDATE_BRANCH)
         self.assertNotIn("draw_orbit_icon", (ROOT / "ui_debug.py").read_text(encoding="utf-8"))
-        self.assertIn("def draw_section_icon", (ROOT / "ui_debug.py").read_text(encoding="utf-8"))
+        source = (ROOT / "ui_debug.py").read_text(encoding="utf-8")
+        self.assertIn("def draw_section_icon", source)
+        self.assertIn("def adaptive_ui_scale", source)
+        self.assertIn('self.backdrop.tk.call("lower", self.backdrop._w)', source)
+        self.assertNotIn('self.root.geometry("1280x830")', source)
 
 
 class SelfUpdaterTests(unittest.TestCase):
