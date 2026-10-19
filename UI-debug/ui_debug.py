@@ -799,6 +799,10 @@ class SpaceUIPrototype:
         )
         widget._ui_fg_key = fg_key
         widget._ui_bg_key = bg_key
+        # Cap requested text wrapping for small windows. Long labels must not
+        # widen a card beyond the visible scroll area on a 960px-wide display.
+        if wraplength:
+            widget.configure(wraplength=min(int(wraplength), 650))
         self.labels.append((widget, fg_key, bg_key, ("Segoe UI", size, weight)))
         return widget
 
@@ -880,8 +884,19 @@ class SpaceUIPrototype:
         self.label(header, "28%", "accent2", "panel", 11, "bold").pack(side="right")
         meter_bg = tk.Canvas(progress.body, height=10, bg=self.colors["panel"], highlightthickness=0, bd=0)
         meter_bg.pack(fill="x", pady=(12, 14))
-        meter_bg.create_polygon(*rounded_points(0, 0, 840, 10, 5), fill=self.colors["surface"], outline="")
-        meter_bg.create_polygon(*rounded_points(0, 0, 270, 10, 5), fill=self.colors["accent"], outline="")
+        def draw_demo_meter(_event=None):
+            width = max(1, meter_bg.winfo_width())
+            meter_bg.delete("all")
+            meter_bg.create_polygon(
+                *rounded_points(0, 0, width, 10, 5),
+                fill=self.colors["surface"], outline="",
+            )
+            meter_bg.create_polygon(
+                *rounded_points(0, 0, width * 0.28, 10, 5),
+                fill=self.colors["accent"], outline="",
+            )
+        meter_bg.bind("<Configure>", draw_demo_meter, add="+")
+        meter_bg.after_idle(draw_demo_meter)
         self.label(progress.body, "STATUS", "muted", "panel", 8, "bold").pack(anchor="w")
         stats = self.frame(progress.body, "panel")
         stats.pack(fill="x", pady=(8, 0))
