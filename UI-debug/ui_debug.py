@@ -29,7 +29,7 @@ import tkinter.font as tkfont
 
 
 APP_NAME = "ChatGPT Media Downloader — UI-debug"
-APP_VERSION = "0.1.0-dev.5"
+APP_VERSION = "0.1.0-dev.6"
 CHANNEL = "development"
 REPO_OWNER = "slydtaz"
 REPO_NAME = "Chatgpt-media-downloader"
@@ -66,11 +66,11 @@ DEFAULT_SETTINGS = {
 
 PALETTES = {
     "dark": {
-        "bg": "#090D1B", "panel": "#11182D", "panel2": "#151F39",
-        "surface": "#192540", "field": "#0D1427", "fg": "#F3F6FF",
-        "muted": "#9BA9C8", "border": "#2A385A", "accent": "#7C5CFF",
-        "accent2": "#20D8E7", "good": "#51D6A5", "warn": "#F6C66A",
-        "bad": "#FF7C97", "button": "#1B2947", "input_fg": "#F3F6FF",
+        "bg": "#080711", "panel": "#100E20", "panel2": "#17132A",
+        "surface": "#201A36", "field": "#0C0B19", "fg": "#F4F2FF",
+        "muted": "#A6A0C3", "border": "#44345F", "accent": "#A064FF",
+        "accent2": "#58E8D8", "good": "#5BF0A5", "warn": "#F6C66A",
+        "bad": "#FF7C97", "button": "#1B1730", "input_fg": "#F4F2FF",
     },
     "light": {
         "bg": "#F2F5FF", "panel": "#FFFFFF", "panel2": "#E7EDFF",
@@ -206,6 +206,13 @@ def rounded_span(y: int, width: int, height: int, radius: int) -> tuple[int, int
     depth = abs(y - center_y) - (height / 2 - r)
     inset = r - (max(0.0, r * r - depth * depth) ** 0.5) if depth > 0 else 0
     return max(0, int(inset)), min(width, int(width - inset))
+
+
+def adaptive_ui_scale(screen_width: int, screen_height: int) -> float:
+    """Scale interface metrics for the display, capped at 125% on 1440p+ monitors."""
+    if screen_width <= 0 or screen_height <= 0:
+        return 1.0
+    return round(min(1.25, max(.82, min(screen_width / 1920.0, screen_height / 1080.0))), 2)
 
 
 def version_key(value: str) -> tuple:
@@ -421,16 +428,16 @@ class RoundedCard(tk.Frame):
         super().__init__(master, bg=app.colors[self.backdrop_key], bd=0, highlightthickness=0)
         self.app = app
         self.background_key = background_key
-        self.padding = padding
-        self.radius = radius
-        self.canvas = tk.Canvas(self, bg=app.colors[self.backdrop_key], bd=0, highlightthickness=0)
-        self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
-        self.body = tk.Frame(self, bg=app.colors[background_key], bd=0, highlightthickness=0)
         if isinstance(padding, tuple):
             px, py = padding
         else:
             px = py = padding
-        self.body.pack(fill="both", expand=True, padx=max(2, int(px)), pady=max(2, int(py)))
+        self.padding = (app.scale_px(px), app.scale_px(py))
+        self.radius = app.scale_px(radius)
+        self.canvas = tk.Canvas(self, bg=app.colors[self.backdrop_key], bd=0, highlightthickness=0)
+        self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
+        self.body = tk.Frame(self, bg=app.colors[background_key], bd=0, highlightthickness=0)
+        self.body.pack(fill="both", expand=True, padx=max(2,self.padding[0]), pady=max(2,self.padding[1]))
         self._shape = self.canvas.create_polygon(
             *rounded_points(1, 1, 4, 4, radius), smooth=True, splinesteps=20,
             fill=app.colors[background_key], outline=app.colors["border"], width=1.8,
@@ -463,15 +470,13 @@ class RoundedButton(tk.Canvas):
     """Fixed-layout vector button: only its drawing scales, never its widget geometry."""
     def __init__(self, master, app, text, command=None, *, variant="secondary", width=None, height=40):
         self.app, self.text, self.command, self.variant = app, text, command, variant
-        self.base_height = int(height)
-        self.font_size = 9 if height < 36 else 10
+        self.base_height = app.scale_px(height)
+        self.font_size = app.scale_px(9 if height < 36 else 10)
         self.font = tkfont.Font(family="Segoe UI", size=self.font_size,
                                 weight="bold" if variant == "primary" else "normal")
-        desired = self.font.measure(text) + (34 if variant == "primary" else 30)
-        self.base_width = int(width or max(82, min(300, desired)))
-        # A fixed transparent gutter gives the visual scale room without moving
-        # neighboring widgets, which was the source of the tearing/jumpiness.
-        self.gutter_x, self.gutter_y = 5, 4
+        desired = self.font.measure(text) + app.scale_px(34 if variant == "primary" else 30)
+        self.base_width = app.scale_px(width) if width is not None else max(app.scale_px(82), min(app.scale_px(300), desired))
+        self.gutter_x, self.gutter_y = app.scale_px(5), app.scale_px(4)
         self.widget_width = self.base_width + self.gutter_x * 2
         self.widget_height = self.base_height + self.gutter_y * 2
         self.width, self.height = self.widget_width, self.widget_height
@@ -483,13 +488,13 @@ class RoundedButton(tk.Canvas):
         self._gradient_ids = []
         self._gradient_rows = 24
         for row in range(self._gradient_rows):
-            item = self.create_line(0,0,0,0,fill=app.colors["button"],width=2.0,
+            item = self.create_line(0,0,0,0,fill=app.colors["button"],width=2.0 * app.ui_scale,
                 capstyle=tk.ROUND,tags=("button-shape","button-fill"))
             self._gradient_ids.append(item)
         self._outline_id = self.create_polygon(0,0,0,0, fill="", outline=app.colors["border"],
-            width=1.8, smooth=True, splinesteps=20, tags=("button-shape","button-outline"))
+            width=1.8 * app.ui_scale, smooth=True, splinesteps=20, tags=("button-shape","button-outline"))
         self._text_id = self.create_text(self.widget_width/2,self.widget_height/2,text=text,
-            fill=app.colors["fg"],font=self.font,width=self.base_width-18,tags="button-shape")
+            fill=app.colors["fg"],font=self.font,width=self.base_width-app.scale_px(18),tags="button-shape")
         self.bind("<Configure>", self._on_resize, add="+")
         self.bind("<Enter>", self._enter, add="+")
         self.bind("<Leave>", self._leave, add="+")
@@ -509,7 +514,7 @@ class RoundedButton(tk.Canvas):
         self.current_scale = scale
         inner_w, inner_h = self.base_width*scale, self.base_height*scale
         left, top = (self.widget_width-inner_w)/2, (self.widget_height-inner_h)/2
-        radius = min(12.0, inner_h*0.34)
+        radius = min(self.app.scale_px(12), inner_h*0.34)
         for index,item in enumerate(self._gradient_ids):
             y = top + (index+0.5)*inner_h/self._gradient_rows
             local_y = round((index+0.5)*inner_h/self._gradient_rows)
@@ -593,7 +598,7 @@ class RoundedButton(tk.Canvas):
             for item in self._gradient_ids:
                 self.itemconfigure(item,fill=c["button"])
             text_color,outline=c["fg"],c["border"]
-        self.itemconfigure(self._outline_id,outline=outline)
+        self.itemconfigure(self._outline_id,outline=outline,width=1.8 * self.app.ui_scale)
         self.itemconfigure(self._text_id,fill=text_color)
         self.configure(bg=c.get(self.bg_key,c["bg"]))
 
@@ -605,20 +610,20 @@ class RoundedField(tk.Frame):
     """Rounded border/background behind a flat native entry."""
     def __init__(self, master, app, *, textvariable=None, placeholder=None, width=None, readonly=False):
         self.bg_key = background_key_for(master, app, "bg")
-        super().__init__(master, bg=app.colors[self.bg_key], bd=0, highlightthickness=0, width=width or 260, height=42)
+        super().__init__(master, bg=app.colors[self.bg_key], bd=0, highlightthickness=0, width=app.scale_px(width or 260), height=app.scale_px(42))
         self.app = app
         self.placeholder = placeholder
         self.readonly = readonly
         self.canvas = tk.Canvas(self, bg=app.colors[self.bg_key], bd=0, highlightthickness=0)
         self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
-        self.shape = self.canvas.create_polygon(*rounded_points(1, 1, 4, 4, 12), fill=app.colors["field"], outline=app.colors["border"], width=1.8, smooth=True, splinesteps=18)
+        self.shape = self.canvas.create_polygon(*rounded_points(1, 1, 4, 4, app.scale_px(12)), fill=app.colors["field"], outline=app.colors["border"], width=1.8 * app.ui_scale, smooth=True, splinesteps=18)
         self.entry = tk.Entry(
             self, textvariable=textvariable, bg=app.colors["field"], fg=app.colors["input_fg"],
             insertbackground=app.colors["input_fg"], relief="flat", bd=0, highlightthickness=0,
-            font=("Segoe UI", 10), readonlybackground=app.colors["field"],
+            font=("Segoe UI", app.scale_px(10)), readonlybackground=app.colors["field"],
             disabledbackground=app.colors["field"], disabledforeground=app.colors["muted"],
         )
-        self.entry.place(x=12, y=1, relwidth=1, width=-24, relheight=1, height=-2)
+        self.entry.place(x=app.scale_px(12), y=app.scale_px(1), relwidth=1, width=-app.scale_px(24), relheight=1, height=-app.scale_px(2))
         if readonly:
             self.entry.configure(state="readonly")
         self.bind("<Configure>", self._resize, add="+")
@@ -628,7 +633,7 @@ class RoundedField(tk.Frame):
     def _resize(self, _event):
         try:
             width, height = max(4, self.winfo_width()), max(4, self.winfo_height())
-            self.canvas.coords(self.shape, *rounded_points(1, 1, width - 1, height - 1, min(12, height / 2)))
+            self.canvas.coords(self.shape, *rounded_points(1, 1, width - 1, height - 1, min(self.app.scale_px(12), height / 2)))
             self.canvas.itemconfigure(self.shape, fill=self.app.colors["field"], outline=self.app.colors["border"])
             self.canvas.configure(bg=self.app.colors[self.bg_key])
             self.configure(bg=self.app.colors[self.bg_key])
@@ -649,16 +654,17 @@ class Dropdown(tk.Frame):
     """Compact custom dropdown that visually fits the rounded field system."""
     def __init__(self, master, app, options, value, command=None, *, width=220):
         self.bg_key = background_key_for(master, app, "bg")
-        super().__init__(master, bg=app.colors[self.bg_key], width=width, height=42, bd=0, highlightthickness=0)
+        width, height = app.scale_px(width), app.scale_px(42)
+        super().__init__(master, bg=app.colors[self.bg_key], width=width, height=height, bd=0, highlightthickness=0)
         self.app = app
         self.options = list(options)
         self.value = tk.StringVar(value=value)
         self.command = command
-        self.canvas = tk.Canvas(self, bg=app.colors[self.bg_key], width=width, height=42, bd=0, highlightthickness=0, cursor="hand2")
+        self.canvas = tk.Canvas(self, bg=app.colors[self.bg_key], width=width, height=height, bd=0, highlightthickness=0, cursor="hand2")
         self.canvas.pack(fill="both", expand=True)
-        self.shape = self.canvas.create_polygon(*rounded_points(1, 1, width - 1, 41, 12), fill=app.colors["field"], outline=app.colors["border"], width=1.5)
-        self.label_id = self.canvas.create_text(14, 21, text=value, anchor="w", fill=app.colors["input_fg"], font=("Segoe UI", 10))
-        self.chevron_id = self.canvas.create_text(width - 18, 21, text="⌄", fill=app.colors["accent2"], font=("Segoe UI", 13, "bold"))
+        self.shape = self.canvas.create_polygon(*rounded_points(1, 1, width - 1, height - 1, app.scale_px(12)), fill=app.colors["field"], outline=app.colors["border"], width=1.5 * app.ui_scale)
+        self.label_id = self.canvas.create_text(app.scale_px(14), height / 2, text=value, anchor="w", fill=app.colors["input_fg"], font=("Segoe UI", app.scale_px(10)))
+        self.chevron_id = self.canvas.create_text(width - app.scale_px(18), height / 2, text="⌄", fill=app.colors["accent2"], font=("Segoe UI", app.scale_px(13), "bold"))
         self.canvas.bind("<Button-1>", self._open)
         self.canvas.bind("<Enter>", self._hover)
         self.canvas.bind("<Leave>", self._unhover)
@@ -701,6 +707,7 @@ class Dropdown(tk.Frame):
 
 class ToggleSwitch(tk.Canvas):
     def __init__(self, master, app, variable, command=None, *, width=48, height=26):
+        width, height = app.scale_px(width), app.scale_px(height)
         super().__init__(master, width=width, height=height, bg=app.colors["panel"], bd=0, highlightthickness=0, cursor="hand2")
         self.app = app
         self.variable = variable
@@ -708,7 +715,8 @@ class ToggleSwitch(tk.Canvas):
         self.width = width
         self.height = height
         self.track = self.create_polygon(*rounded_points(1, 1, width - 1, height - 1, height / 2), fill=app.colors["border"], outline="")
-        self.knob = self.create_oval(4, 4, 22, 22, fill="#FFFFFF", outline="")
+        inset, knob_size = app.scale_px(4), app.scale_px(18)
+        self.knob = self.create_oval(inset, inset, inset + knob_size, inset + knob_size, fill="#FFFFFF", outline="")
         self.bind("<Button-1>", self._toggle)
         self.refresh_theme()
 
@@ -722,9 +730,10 @@ class ToggleSwitch(tk.Canvas):
         active = bool(self.variable.get())
         c = self.app.colors
         track = blend_hex(c["accent"], c["accent2"], 0.45) if active else c["border"]
-        left = self.width - 23 if active else 4
+        inset, knob_size = self.app.scale_px(4), self.app.scale_px(18)
+        left = self.width - self.app.scale_px(23) if active else inset
         self.itemconfigure(self.track, fill=track)
-        self.coords(self.knob, left, 4, left + 18, 22)
+        self.coords(self.knob, left, inset, left + knob_size, inset + knob_size)
         self.itemconfigure(self.knob, fill="#FFFFFF")
         self.configure(bg=c["panel"])
 
@@ -825,6 +834,7 @@ class CosmicSplash:
         self._closed = False
         self.width = max(800, int(root.winfo_screenwidth()))
         self.height = max(600, int(root.winfo_screenheight()))
+        self.scale = adaptive_ui_scale(self.width, self.height)
         self.window = tk.Toplevel(root)
         self.window.overrideredirect(True)
         try:
@@ -845,7 +855,7 @@ class CosmicSplash:
         self.message_index = 0
         self._add_status(self.messages[0])
         self.window.bind("<Escape>", lambda _event: "break", add="+")
-        self._animation_after = self.window.after(42, self._animate)
+        self._animation_after = self.window.after(34, self._animate)
         self._message_after = self.window.after(690, self._advance_message)
         try:
             self.window.lift()
@@ -855,15 +865,15 @@ class CosmicSplash:
 
     def _draw_scene(self):
         c, w, h = self.canvas, self.width, self.height
-        for i in range(120):
-            x0, x1 = w * i / 120, w * (i + 1) / 120 + 1
-            c.create_rectangle(x0, 0, x1, h, fill=blend_hex(SPLASH_BACKGROUND, "#20113B", .05 + .20*i/159), outline="")
+        for i in range(112):
+            x0, x1 = w * i / 112, w * (i + 1) / 112 + 1
+            c.create_rectangle(x0, 0, x1, h, fill=blend_hex(SPLASH_BACKGROUND, "#20113B", .05 + .20*i/111), outline="")
         for cx, cy, tint in ((0, 0, "#D946EF"), (w, 0, "#7C3AED"), (0, h, "#BE185D"), (w, h, "#6D28D9")):
-            for level in range(24):
-                t = level / 23
+            for level in range(18):
+                t = level / 17
                 rx, ry = w * (.58 - .34*t), h * (.82 - .48*t)
                 c.create_oval(cx-rx, cy-ry, cx+rx, cy+ry,
-                    fill=blend_hex(SPLASH_BACKGROUND, tint, .010 + .15*t**1.65), outline="")
+                    fill=blend_hex(SPLASH_BACKGROUND, tint, .010 + .14*t**1.65), outline="")
         rng = random.Random(119 + w + h)
         for _ in range(38):
             x, y = rng.random()*w, rng.random()*h
@@ -872,26 +882,53 @@ class CosmicSplash:
                 fill=blend_hex(SPLASH_BACKGROUND, tint, .55), outline="")
 
     def _draw_orbit_loader(self):
-        cx, cy = self.width/2, self.height*.315
-        rx, ry = min(180, self.width*.145), min(88, self.height*.092)
-        self.track_specs = ((0.0, rx, ry, ("#E879F9", "#A78BFA")),
-            (math.pi/3, rx*.93, ry*.88, ("#C084FC", "#67E8F9")),
-            (-math.pi/3, rx*.72, ry*1.22, ("#F472B6", "#A78BFA")))
+        """Use a single smooth polyline for each particle trail; no old pixels are left behind."""
+        self.scale = adaptive_ui_scale(self.width, self.height)
+        cx, cy = self.width / 2, self.height * .315
+        rx, ry = min(180 * self.scale, self.width * .145), min(88 * self.scale, self.height * .092)
+        self.track_specs = (
+            (0.0, rx, ry, ("#E879F9", "#A78BFA")),
+            (math.pi / 3, rx * .93, ry * .88, ("#C084FC", "#67E8F9")),
+            (-math.pi / 3, rx * .72, ry * 1.22, ("#F472B6", "#A78BFA")),
+        )
         for rotation, orbit_rx, orbit_ry, palette in self.track_specs:
-            points = [ellipse_point(cx, cy, orbit_rx, orbit_ry, 2*math.pi*i/84, rotation) for i in range(85)]
-            for i in range(84):
-                self.canvas.create_line(*points[i], *points[i+1], fill=blend_hex(palette[0], palette[1], i/83),
-                                        width=2.4, tags="splash-orbit-track")
+            points = [ellipse_point(cx, cy, orbit_rx, orbit_ry, 2 * math.pi * i / 96, rotation) for i in range(97)]
+            flat_points = [coord for point in points for coord in point]
+            self.canvas.create_line(*flat_points, fill=blend_hex(palette[0], palette[1], .42),
+                width=2.1 * self.scale, smooth=True, splinesteps=18,
+                capstyle=tk.ROUND, joinstyle=tk.ROUND, tags="splash-orbit-track")
+            accent_points = points[8:27]
+            self.canvas.create_line(*[coord for point in accent_points for coord in point],
+                fill=palette[1], width=2.8 * self.scale, smooth=True, splinesteps=16,
+                capstyle=tk.ROUND, joinstyle=tk.ROUND, tags="splash-orbit-accent")
         self.particles = []
-        for orbit, angle, speed, color in ((0, .7, .055, "#F9A8D4"), (1, 2.6, .047, "#A78BFA"), (2, 4.2, -.052, "#67E8F9")):
-            trail = [self.canvas.create_line(0,0,0,0,fill=SPLASH_BACKGROUND,width=1.5,
-                     capstyle=tk.ROUND,tags="splash-trail") for _ in range(9)]
-            glows = [(self.canvas.create_oval(0,0,0,0,
-                     fill=blend_hex(SPLASH_BACKGROUND,color,strength),outline="",tags="splash-particle"),radius,strength)
-                     for radius,strength in ((12,.20),(7,.42),(3.6,.94))]
-            self.particles.append({"orbit": orbit, "angle": angle, "speed": speed, "color": color, "trail": trail, "glows": glows, "history": []})
-        self.canvas.create_oval(cx-4, cy-4, cx+4, cy+4, fill="#F5D0FE", outline="")
-        self.canvas.create_oval(cx-12, cy-12, cx+12, cy+12, fill=blend_hex(SPLASH_BACKGROUND, "#C084FC", .55), outline="")
+        for orbit, angle, speed, color in (
+            (0, .7, .055, "#F9A8D4"), (1, 2.6, .047, "#A78BFA"), (2, 4.2, -.052, "#67E8F9")
+        ):
+            trail_glow = self.canvas.create_line(0, 0, 0, 0,
+                fill=blend_hex(SPLASH_BACKGROUND, color, .28), width=6 * self.scale,
+                capstyle=tk.ROUND, joinstyle=tk.ROUND, smooth=True, splinesteps=16,
+                state=tk.HIDDEN, tags=("splash-trail", "splash-trail-glow"))
+            trail = self.canvas.create_line(0, 0, 0, 0,
+                fill=blend_hex(SPLASH_BACKGROUND, color, .82), width=2.2 * self.scale,
+                capstyle=tk.ROUND, joinstyle=tk.ROUND, smooth=True, splinesteps=16,
+                state=tk.HIDDEN, tags=("splash-trail", "splash-trail-core"))
+            glows = [
+                (self.canvas.create_oval(0, 0, 0, 0,
+                    fill=blend_hex(SPLASH_BACKGROUND, color, strength), outline="",
+                    tags="splash-particle"), radius * self.scale, strength)
+                for radius, strength in ((12, .20), (7, .42), (3.6, .94))
+            ]
+            self.particles.append({
+                "orbit": orbit, "angle": angle, "speed": speed, "color": color,
+                "trail_glow": trail_glow, "trail": trail, "glows": glows, "history": [],
+            })
+        self.canvas.create_oval(cx - 12*self.scale, cy - 12*self.scale,
+            cx + 12*self.scale, cy + 12*self.scale,
+            fill=blend_hex(SPLASH_BACKGROUND, "#C084FC", .55), outline="", tags="splash-nucleus-glow")
+        self.canvas.create_oval(cx - 4*self.scale, cy - 4*self.scale,
+            cx + 4*self.scale, cy + 4*self.scale,
+            fill="#F5D0FE", outline="", tags="splash-nucleus")
 
     def _draw_brand(self):
         self.canvas.create_text(self.width/2, self.height*.135, text="CHATGPT MEDIA DOWNLOADER",
@@ -948,27 +985,32 @@ class CosmicSplash:
                 self._finish_after = self.window.after(950, self.close)
 
     def _animate(self):
-        if self._closed: return
-        self.phase += .055
-        for p in self.particles:
-            rotation, orbit_rx, orbit_ry, _palette = self.track_specs[p["orbit"]]
-            p["angle"] += p["speed"]
-            point = ellipse_point(self.width/2, self.height*.315, orbit_rx, orbit_ry, p["angle"], rotation)
-            history = p["history"]; history.insert(0, point); del history[9:]
-            for i, line in enumerate(p["trail"]):
-                if i+1 < len(history):
-                    a,b = history[i],history[i+1]
-                    self.canvas.coords(line,a[0],a[1],b[0],b[1])
-                    strength = .82*(1-i/len(p["trail"]))+.10
-                    self.canvas.itemconfigure(line,fill=blend_hex(SPLASH_BACKGROUND,p["color"],strength),width=max(1.4,3.0-i*.20))
-                else: self.canvas.coords(line,-5,-5,-5,-5)
-            x,y = point
-            for glow,radius,strength in p["glows"]:
-                r = radius*(1+.045*math.sin(self.phase*2+radius))
-                self.canvas.coords(glow,x-r,y-r,x+r,y+r)
-                self.canvas.itemconfigure(glow,fill=blend_hex(SPLASH_BACKGROUND,p["color"],strength))
+        if self._closed:
+            return
+        self.phase += .06
+        for particle in self.particles:
+            rotation, orbit_rx, orbit_ry, _palette = self.track_specs[particle["orbit"]]
+            particle["angle"] += particle["speed"]
+            point = ellipse_point(self.width/2, self.height*.315, orbit_rx, orbit_ry, particle["angle"], rotation)
+            history = particle["history"]
+            history.insert(0, point)
+            del history[9:]
+            if len(history) >= 2:
+                coords = [value for trail_point in history for value in trail_point]
+                for trail_id in (particle["trail_glow"], particle["trail"]):
+                    self.canvas.coords(trail_id, *coords)
+                    self.canvas.itemconfigure(trail_id, state=tk.NORMAL)
+                self.canvas.itemconfigure(particle["trail_glow"], width=max(1.5*self.scale, 6*self.scale*len(history)/9))
+                self.canvas.itemconfigure(particle["trail"], width=max(1.0*self.scale, 2.2*self.scale*len(history)/9))
+            else:
+                self.canvas.itemconfigure(particle["trail_glow"], state=tk.HIDDEN)
+                self.canvas.itemconfigure(particle["trail"], state=tk.HIDDEN)
+            x, y = point
+            for glow, radius, _strength in particle["glows"]:
+                r = radius * (1 + .045 * math.sin(self.phase*2 + radius))
+                self.canvas.coords(glow, x-r, y-r, x+r, y+r)
         for m in list(self.active_texts):
-            m["age"] += 42; age = m["age"]
+            m["age"] += 34; age = m["age"]
             y = m["start_y"] - self.height*.105*min(1,age/760)
             fade = max(0,min(1,(age-520)/300))
             appear = .10+.90*min(1,age/250)
@@ -978,7 +1020,7 @@ class CosmicSplash:
             if age > 1080:
                 self.canvas.delete(m["tag"]); self.active_texts.remove(m)
                 m.pop("font", None)
-        try: self._animation_after = self.window.after(42,self._animate)
+        try: self._animation_after = self.window.after(34,self._animate)
         except tk.TclError: self.close()
 
     def finish(self, final_message, callback=None, *, hold_ms=1450):
@@ -1014,12 +1056,22 @@ class CosmicSplash:
 class SpaceUIPrototype:
     def __init__(self, root: tk.Tk, *, show_splash=True):
         self.root = root
+        screen_width = max(800, int(root.winfo_screenwidth()))
+        screen_height = max(600, int(root.winfo_screenheight()))
+        self.ui_scale = adaptive_ui_scale(screen_width, screen_height)
         self.root.title(APP_NAME + "  •  v" + APP_VERSION)
-        self.root.geometry("1280x830")
-        self.root.minsize(960, 620)
+        start_width, start_height = min(screen_width - 32, self.scale_px(1280)), min(screen_height - 80, self.scale_px(830))
+        self.root.geometry("%dx%d+%d+%d" % (start_width, start_height,
+            max(0, (screen_width-start_width)//2), max(0, (screen_height-start_height)//2)))
+        self.root.minsize(min(screen_width, self.scale_px(960)), min(screen_height, self.scale_px(620)))
         self.root.configure(bg=PALETTES["dark"]["bg"])
-        # Keep the native root hidden behind the immersive Toplevel until the
-        # startup sequence ends; otherwise Windows can lift the root over it.
+        # Respect the actual monitor area instead of rendering at a fixed 1280x830.
+        try:
+            self.root.state("zoomed")
+        except tk.TclError:
+            width = max(min(screen_width, self.scale_px(960)), int(screen_width*.94))
+            height = max(min(screen_height, self.scale_px(620)), int(screen_height*.92))
+            self.root.geometry("%dx%d+%d+%d" % (width,height,max(0,(screen_width-width)//2),max(0,(screen_height-height)//2)))
         if show_splash:
             self.root.withdraw()
         self.root.option_add("*tearOff", False)
@@ -1028,7 +1080,6 @@ class SpaceUIPrototype:
             self.style.theme_use("clam")
         except tk.TclError:
             pass
-
         self.app_dir = Path(__file__).resolve().parent
         self.settings_path = self._settings_path()
         self.settings = self._load_settings()
@@ -1043,21 +1094,19 @@ class SpaceUIPrototype:
         self.toggles: list[ToggleSwitch] = []
         self.scroll_panes: list[ScrollPane] = []
         self.labels: list[tuple[tk.Widget, str, str, tuple]] = []
-        self.nav_items: dict[str, tuple[tk.Canvas, str, str, str]] = {}
+        self.nav_items: dict[str, tuple] = {}
+        self.mini_graphs: list[tuple[tk.Canvas, object]] = []
         self.current_page = "home"
         self.toast_after = None
         self.update_info: dict | None = None
         self._update_busy = False
         self._stop = threading.Event()
-
         self.orbital_marks: list[OrbitalAtom] = []
         self.splash: CosmicSplash | None = None
         self.shell = tk.Frame(root, bg=self.colors["bg"], bd=0, highlightthickness=0)
         self.shell.place(x=0, y=0, relwidth=1, relheight=1)
         self._build_shell()
         self._build_pages()
-        # One global wheel router replaces three bindings per page. The old
-        # pattern stacked callbacks from every hidden scroll pane.
         self.root.bind_all("<MouseWheel>", self._route_wheel, add="+")
         self.root.bind_all("<Button-4>", self._route_wheel, add="+")
         self.root.bind_all("<Button-5>", self._route_wheel, add="+")
@@ -1071,6 +1120,9 @@ class SpaceUIPrototype:
                 mark.start_animation()
             if self.settings.get("update_check_on_startup", True):
                 self.root.after(1800, self.check_update_async)
+
+    def scale_px(self, value: float) -> int:
+        return max(1, int(round(float(value) * self.ui_scale)))
 
     def _settings_path(self) -> Path:
         if os.name == "nt":
@@ -1124,77 +1176,87 @@ class SpaceUIPrototype:
         self.toast("Preferências de demonstração restauradas.")
 
     def _build_shell(self):
-        outer = tk.Frame(self.shell, bg=self.colors["bg"], padx=18, pady=16)
+        outer = tk.Frame(self.shell, bg=self.colors["bg"], padx=self.scale_px(18), pady=self.scale_px(16))
         outer.pack(fill="both", expand=True)
         self.backdrop = GradientBackdrop(outer, self)
         self.backdrop.place(x=0, y=0, relwidth=1, relheight=1)
-        self.sidebar = tk.Frame(outer, bg=self.colors["panel"], width=220, bd=0, highlightthickness=0)
-        self.sidebar.pack(side="left", fill="y", padx=(0, 16))
+        # Force the decorative canvas behind real controls to prevent the odd
+        # purple seam appearing just to the right of the sidebar navigation.
+        try:
+            self.backdrop.tk.call("lower", self.backdrop._w)
+        except tk.TclError:
+            pass
+        self.sidebar = tk.Frame(outer, bg=self.colors["panel"], width=self.scale_px(220),
+                                bd=0, highlightthickness=1, highlightbackground=self.colors["border"])
+        self.sidebar.pack(side="left", fill="y", padx=(0,self.scale_px(16)))
         self.sidebar.pack_propagate(False)
-
-        brand = tk.Frame(self.sidebar, bg=self.colors["panel"], padx=18, pady=20)
+        brand = tk.Frame(self.sidebar, bg=self.colors["panel"], padx=self.scale_px(18), pady=self.scale_px(20))
         brand.pack(fill="x")
-        mark = OrbitalAtom(brand, self, size=42)
-        mark.pack(side="left", padx=(0, 11))
+        mark = OrbitalAtom(brand, self, size=self.scale_px(42))
+        mark.pack(side="left", padx=(0,self.scale_px(11)))
         titlebox = tk.Frame(brand, bg=self.colors["panel"])
         titlebox.pack(side="left", fill="x", expand=True)
         self.label(titlebox, "MEDIA LAB", "fg", "panel", 10, "bold").pack(anchor="w")
-        self.label(titlebox, "UI-debug  /  DEV", "muted", "panel", 8, "normal").pack(anchor="w", pady=(3, 0))
+        self.label(titlebox, "UI-debug  /  DEV", "muted", "panel", 8, "normal").pack(anchor="w", pady=(self.scale_px(3),0))
         self._divider(self.sidebar, "panel")
-        self.label(self.sidebar, "WORKSPACE", "muted", "panel", 8, "bold").pack(anchor="w", padx=20, pady=(16, 8))
-
+        self.label(self.sidebar, "WORKSPACE", "muted", "panel", 8, "bold").pack(anchor="w", padx=self.scale_px(20), pady=(self.scale_px(16),self.scale_px(8)))
         navigation = [
-            ("home", "⌂", "Início"),
-            ("playlist", "≋", "Playlists"),
-            ("settings", "⚙", "Aparência"),
-            ("dependencies", "◈", "Dependências"),
-            ("updates", "↻", "Atualizações"),
-            ("help", "?", "Ajuda"),
-            ("diagnostics", "⌘", "Diagnóstico"),
+            ("home", "Início"), ("playlist", "Playlists"), ("settings", "Aparência"),
+            ("dependencies", "Dependências"), ("updates", "Atualizações"),
+            ("help", "Ajuda"), ("diagnostics", "Diagnóstico"),
         ]
         self.nav_container = tk.Frame(self.sidebar, bg=self.colors["panel"])
-        self.nav_container.pack(fill="x", padx=10)
-        for nav_index, (key, glyph, text) in enumerate(navigation):
-            nav = tk.Canvas(self.nav_container, width=194, height=43, bg=self.colors["panel"], bd=0, highlightthickness=0, cursor="hand2")
-            nav.pack(fill="x", pady=2)
-            shape = nav.create_polygon(*rounded_points(1, 1, 192, 42, 12, steps=14), fill=self.colors["panel"], outline="")
-            icon = draw_section_icon(nav, 24, 21, key, self.colors["muted"], self.colors["accent2"])
-            label = nav.create_text(48, 21, text=text, anchor="w", fill=self.colors["muted"], font=("Segoe UI", 10))
-            nav.bind("<Button-1>", lambda _event, name=key: self.show_page(name))
-            nav.bind("<Enter>", lambda _event, name=key: self._nav_hover(name, True))
-            nav.bind("<Leave>", lambda _event, name=key: self._nav_hover(name, False))
-            self.nav_items[key] = (nav, shape, icon, label)
-
+        self.nav_container.pack(fill="x", padx=self.scale_px(10))
+        nav_width, nav_height = self.scale_px(194), self.scale_px(43)
+        for key, text in navigation:
+            nav = tk.Canvas(self.nav_container, width=nav_width, height=nav_height,
+                            bg=self.colors["panel"], bd=0, highlightthickness=0, cursor="hand2")
+            nav.pack(fill="x", pady=(0,self.scale_px(4)))
+            shape = nav.create_polygon(*rounded_points(1,1,nav_width-2,nav_height-2,self.scale_px(10),steps=18),
+                fill=self.colors["panel2"], outline=self.colors["border"], width=max(1.0,self.ui_scale),
+                smooth=True, splinesteps=18, tags="nav-surface")
+            plate = nav.create_polygon(*rounded_points(self.scale_px(8),self.scale_px(7),self.scale_px(40),
+                nav_height-self.scale_px(7),self.scale_px(9),steps=14),
+                fill=self.colors["panel"], outline="", smooth=True, splinesteps=16, tags="nav-icon-plate")
+            icon = draw_section_icon(nav,self.scale_px(24),nav_height/2,key,self.colors["muted"],self.colors["accent2"])
+            label_id = nav.create_text(self.scale_px(48),nav_height/2,text=text,anchor="w",
+                fill=self.colors["muted"],font=("Segoe UI",self.scale_px(10)))
+            indicator = nav.create_line(self.scale_px(5),self.scale_px(12),self.scale_px(5),nav_height-self.scale_px(12),
+                fill=self.colors["accent"],width=self.scale_px(3),capstyle=tk.ROUND,state=tk.HIDDEN,tags="nav-active-indicator")
+            nav.bind("<Button-1>",lambda _event,name=key:self.show_page(name))
+            nav.bind("<Enter>",lambda _event,name=key:self._nav_hover(name,True))
+            nav.bind("<Leave>",lambda _event,name=key:self._nav_hover(name,False))
+            self.nav_items[key]=(nav,shape,icon,label_id,indicator,plate)
         spacer = tk.Frame(self.sidebar, bg=self.colors["panel"])
         spacer.pack(fill="both", expand=True)
         self._divider(self.sidebar, "panel")
-        version_card = tk.Frame(self.sidebar, bg=self.colors["panel"], padx=17, pady=14)
+        version_card = tk.Frame(self.sidebar,bg=self.colors["panel"],padx=self.scale_px(17),pady=self.scale_px(14))
         version_card.pack(fill="x")
-        self.label(version_card, "CANAL DE DESENVOLVIMENTO", "muted", "panel", 7, "bold").pack(anchor="w")
-        version_row = tk.Frame(version_card, bg=self.colors["panel"])
-        version_row.pack(fill="x", pady=(6, 0))
-        self.label(version_row, APP_VERSION, "accent2", "panel", 9, "bold").pack(side="left")
-        self.label(version_row, "sem release", "muted", "panel", 8, "normal").pack(side="right")
+        self.label(version_card,"CANAL DE DESENVOLVIMENTO","muted","panel",7,"bold").pack(anchor="w")
+        version_row=tk.Frame(version_card,bg=self.colors["panel"])
+        version_row.pack(fill="x",pady=(self.scale_px(6),0))
+        self.label(version_row,APP_VERSION,"accent2","panel",9,"bold").pack(side="left")
+        self.label(version_row,"sem release","muted","panel",8,"normal").pack(side="right")
 
-        self.main = tk.Frame(outer, bg=self.colors["bg"], bd=0, highlightthickness=0)
-        self.main.pack(side="left", fill="both", expand=True)
-        topbar = tk.Frame(self.main, bg=self.colors["bg"], height=74)
-        topbar.pack(fill="x", pady=(1, 14))
-        top_left = tk.Frame(topbar, bg=self.colors["bg"])
-        top_left.pack(side="left", fill="x", expand=True)
-        self.label(top_left, "CHATGPT MEDIA DOWNLOADER  /  ESPAÇO DE TESTES", "muted", "bg", 8, "bold").pack(anchor="w", pady=(3, 4))
-        self.page_title_label = self.label(top_left, "Início", "fg", "bg", 22, "bold")
+        self.main=tk.Frame(outer,bg=self.colors["bg"],bd=0,highlightthickness=0)
+        self.main.pack(side="left",fill="both",expand=True)
+        topbar=tk.Frame(self.main,bg=self.colors["bg"],height=self.scale_px(74))
+        topbar.pack(fill="x",pady=(self.scale_px(1),self.scale_px(14)))
+        top_left=tk.Frame(topbar,bg=self.colors["bg"])
+        top_left.pack(side="left",fill="x",expand=True)
+        self.label(top_left,"CHATGPT MEDIA DOWNLOADER  /  ESPAÇO DE TESTES","muted","bg",8,"bold").pack(anchor="w",pady=(self.scale_px(3),self.scale_px(4)))
+        self.page_title_label=self.label(top_left,"Início","fg","bg",22,"bold")
         self.page_title_label.pack(anchor="w")
-        actions = tk.Frame(topbar, bg=self.colors["bg"])
-        actions.pack(side="right", anchor="n", pady=(8, 0))
-        self.status_label = self.label(actions, "●  UI DEMO", "good", "bg", 9, "bold")
-        self.status_label.pack(side="left", padx=(0, 12))
-        RoundedButton(actions, self, "Atualizar UI-debug", lambda: self.check_update_async(user_initiated=True), variant="secondary", width=145, height=38).pack(side="left")
-
-        self.toast_label = self.label(self.main, "", "accent2", "bg", 9, "normal")
-        self.toast_label.pack(anchor="w", pady=(0, 6))
-        self.pages_area = tk.Frame(self.main, bg=self.colors["bg"], bd=0, highlightthickness=0)
-        self.pages_area.pack(fill="both", expand=True)
+        actions=tk.Frame(topbar,bg=self.colors["bg"])
+        actions.pack(side="right",anchor="n",pady=(self.scale_px(8),0))
+        self.status_label=self.label(actions,"●  DEMO LOCAL","good","bg",9,"bold")
+        self.status_label.pack(side="left",padx=(0,self.scale_px(12)))
+        RoundedButton(actions,self,"Atualizar UI-debug",lambda:self.check_update_async(user_initiated=True),
+                      variant="secondary",width=145,height=38).pack(side="left")
+        self.toast_label=self.label(self.main,"","accent2","bg",9,"normal")
+        self.toast_label.pack(anchor="w",pady=(0,self.scale_px(6)))
+        self.pages_area=tk.Frame(self.main,bg=self.colors["bg"],bd=0,highlightthickness=0)
+        self.pages_area.pack(fill="both",expand=True)
 
     def _build_pages(self):
         self.page_frames: dict[str, tk.Frame] = {}
@@ -1255,9 +1317,10 @@ class SpaceUIPrototype:
             except tk.TclError: pass
 
     def label(self, parent, text, fg_key="fg", bg_key="panel", size=10, weight="normal", wraplength=None, **kwargs):
+        scaled_size = self.scale_px(size)
         widget = tk.Label(
             parent, text=text, bg=self.colors[bg_key], fg=self.colors[fg_key],
-            font=("Segoe UI", size, weight), anchor=kwargs.pop("anchor", "w"),
+            font=("Segoe UI", scaled_size, weight), anchor=kwargs.pop("anchor", "w"),
             justify=kwargs.pop("justify", "left"), bd=0, highlightthickness=0,
             wraplength=wraplength or 0, **kwargs,
         )
@@ -1266,8 +1329,9 @@ class SpaceUIPrototype:
         # Cap requested text wrapping for small windows. Long labels must not
         # widen a card beyond the visible scroll area on a 960px-wide display.
         if wraplength:
-            widget.configure(wraplength=min(int(wraplength), 650))
-        self.labels.append((widget, fg_key, bg_key, ("Segoe UI", size, weight)))
+            adaptive_cap = max(self.scale_px(650), int(self.root.winfo_screenwidth() * .56))
+            widget.configure(wraplength=min(self.scale_px(wraplength), adaptive_cap))
+        self.labels.append((widget, fg_key, bg_key, ("Segoe UI", scaled_size, weight)))
         return widget
 
     def frame(self, parent, bg_key="panel", **kwargs):
@@ -1282,8 +1346,8 @@ class SpaceUIPrototype:
         return RoundedButton(parent, self, text, command, variant=variant, width=width)
 
     def _divider(self, parent, bg_key):
-        widget = tk.Frame(parent, bg=self.colors["border"], height=2)
-        widget.pack(fill="x", padx=16)
+        widget = tk.Frame(parent, bg=self.colors["border"], height=self.scale_px(2))
+        widget.pack(fill="x", padx=self.scale_px(16))
         widget._ui_bg_key = "border"
         return widget
 
@@ -1346,6 +1410,25 @@ class SpaceUIPrototype:
         header.pack(fill="x")
         self.label(header, "Sessão de demonstração", "fg", "panel", 12, "bold").pack(side="left")
         self.label(header, "28%", "accent2", "panel", 11, "bold").pack(side="right")
+        signal = tk.Canvas(header, width=self.scale_px(132), height=self.scale_px(24),
+                           bg=self.colors["panel"], bd=0, highlightthickness=0)
+        signal.pack(side="right", padx=(self.scale_px(12),self.scale_px(8)))
+        signal._ui_bg_key = "panel"
+        def draw_demo_signal(_event=None):
+            signal.delete("signal-line")
+            width, height = max(24,signal.winfo_width()), max(12,signal.winfo_height())
+            levels = (.64,.62,.70,.48,.62,.28,.44,.80,.38,.53,.30,.66,.58,.24,.48,.63)
+            coords = []
+            for index, level in enumerate(levels):
+                coords.extend((4+(width-8)*index/(len(levels)-1), height*level))
+            signal.create_line(*coords, fill=blend_hex(self.colors["accent"],self.colors["accent2"],.45),
+                width=max(2.2,2.8*self.ui_scale), smooth=True, splinesteps=12,
+                capstyle=tk.ROUND, joinstyle=tk.ROUND, tags="signal-line")
+            signal.create_line(*coords, fill=self.colors["accent2"], width=max(1.0,1.2*self.ui_scale),
+                smooth=True, splinesteps=12, capstyle=tk.ROUND, joinstyle=tk.ROUND, tags="signal-line")
+        signal.bind("<Configure>",draw_demo_signal,add="+")
+        signal.after_idle(draw_demo_signal)
+        self.mini_graphs.append((signal,draw_demo_signal))
         meter_bg = tk.Canvas(progress.body, height=10, bg=self.colors["panel"], highlightthickness=0, bd=0)
         meter_bg.pack(fill="x", pady=(12, 14))
         def draw_demo_meter(_event=None):
@@ -1629,12 +1712,17 @@ class SpaceUIPrototype:
         }
         title, subtitle = names[name]
         self.page_title_label.configure(text=title)
-        for key, (nav, shape, icon, label_id) in self.nav_items.items():
+        for key, (nav, shape, icon, label_id, indicator, plate) in self.nav_items.items():
             active = key == name
             c = self.colors
-            nav.itemconfigure(shape, fill=blend_hex(c["accent"], c["accent2"], 0.20) if active else c["panel"], outline=c["border"] if active else "")
+            nav.itemconfigure(shape, fill=blend_hex(c["panel2"], c["accent"], .13) if active else c["panel2"],
+                              outline=c["accent"] if active else c["border"],
+                              width=(1.5 if active else 1.0) * self.ui_scale)
+            nav.itemconfigure(plate, fill=blend_hex(c["panel"], c["accent"], .14) if active else c["panel"])
+            nav.itemconfigure(indicator, state=tk.NORMAL if active else tk.HIDDEN, fill=c["accent2"])
             self._tint_nav_icon(nav, icon, c["accent2"] if active else c["muted"])
-            nav.itemconfigure(label_id, fill=c["fg"] if active else c["muted"], font=("Segoe UI", 10, "bold" if active else "normal"))
+            nav.itemconfigure(label_id, fill=c["fg"] if active else c["muted"],
+                              font=("Segoe UI", self.scale_px(10), "bold" if active else "normal"))
         if name == "settings":
             self._sync_settings_controls()
         self.toast_label.configure(text=subtitle)
@@ -1642,9 +1730,13 @@ class SpaceUIPrototype:
     def _nav_hover(self, name, hovered):
         if name == self.current_page:
             return
-        nav, shape, icon, _label = self.nav_items[name]
-        color = self.colors["surface"] if hovered else self.colors["panel"]
-        nav.itemconfigure(shape, fill=color)
+        nav, shape, icon, label_id, _indicator, plate = self.nav_items[name]
+        c = self.colors
+        nav.itemconfigure(shape, fill=c["surface"] if hovered else c["panel2"],
+                          outline=blend_hex(c["border"], c["accent"], .35) if hovered else c["border"])
+        nav.itemconfigure(plate, fill=blend_hex(c["panel"], c["surface"], .7) if hovered else c["panel"])
+        self._tint_nav_icon(nav, icon, c["accent2"] if hovered else c["muted"])
+        nav.itemconfigure(label_id, fill=c["fg"] if hovered else c["muted"])
 
     def _set_theme(self, theme):
         if theme not in PALETTES:
@@ -1724,6 +1816,7 @@ class SpaceUIPrototype:
             self.style.configure(
                 "UI.Vertical.TScrollbar",
                 gripcount=0,
+                arrowsize=0,
                 background=c["panel2"],
                 darkcolor=c["panel2"],
                 lightcolor=c["panel2"],
@@ -1731,7 +1824,7 @@ class SpaceUIPrototype:
                 bordercolor=c["border"],
                 arrowcolor=c["accent2"],
                 relief="flat",
-                width=9,
+                width=self.scale_px(8),
             )
             self.style.map(
                 "UI.Vertical.TScrollbar",
@@ -1792,17 +1885,28 @@ class SpaceUIPrototype:
             mark.refresh_theme()
         for pane in self.scroll_panes:
             pane.refresh_theme()
+        for graph, redraw in self.mini_graphs:
+            try:
+                graph.configure(bg=c["panel"])
+                redraw()
+            except tk.TclError:
+                pass
         try:
             self.backdrop._resize(None)
         except (AttributeError, tk.TclError):
             pass
         if hasattr(self, "nav_items"):
-            for key, (nav, shape, icon, label_id) in self.nav_items.items():
+            for key, (nav, shape, icon, label_id, indicator, plate) in self.nav_items.items():
                 active = key == self.current_page
                 nav.configure(bg=c["panel"])
-                nav.itemconfigure(shape, fill=blend_hex(c["accent"], c["accent2"], 0.20) if active else c["panel"], outline=c["border"] if active else "")
+                nav.itemconfigure(shape, fill=blend_hex(c["panel2"], c["accent"], .13) if active else c["panel2"],
+                                  outline=c["accent"] if active else c["border"],
+                                  width=(1.5 if active else 1.0) * self.ui_scale)
+                nav.itemconfigure(plate, fill=blend_hex(c["panel"], c["accent"], .14) if active else c["panel"])
+                nav.itemconfigure(indicator, state=tk.NORMAL if active else tk.HIDDEN, fill=c["accent2"])
                 self._tint_nav_icon(nav, icon, c["accent2"] if active else c["muted"])
-                nav.itemconfigure(label_id, fill=c["fg"] if active else c["muted"])
+                nav.itemconfigure(label_id, fill=c["fg"] if active else c["muted"],
+                                  font=("Segoe UI", self.scale_px(10), "bold" if active else "normal"))
         if hasattr(self, "accent_preview"):
             self._draw_accent_preview()
         self.style.configure("TCombobox", fieldbackground=c["field"], background=c["panel"], foreground=c["fg"], arrowcolor=c["accent2"])
