@@ -34,6 +34,25 @@ class DependencyTests(unittest.TestCase):
             extract_archive(archive, destination)
             self.assertEqual((destination / "ffmpeg.exe").read_bytes(), b"test-tool")
 
+    @unittest.skipIf(__import__("os").name == "nt", "Symlink creation may require elevated privileges on Windows.")
+    def test_extract_archive_does_not_follow_existing_destination_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "tools.zip"
+            outside = root / "outside.txt"
+            outside.write_text("preserve", encoding="utf-8")
+            destination = root / "tools"
+            destination.mkdir()
+            try:
+                (destination / "ffmpeg.exe").symlink_to(outside)
+            except OSError:
+                self.skipTest("Symlinks are not available in this environment.")
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("release/ffmpeg.exe", b"replacement")
+            with self.assertRaises(ValueError):
+                extract_archive(archive, destination)
+            self.assertEqual(outside.read_text(encoding="utf-8"), "preserve")
+
     def test_extract_archive_rejects_zip_path_traversal(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
