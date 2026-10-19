@@ -11,6 +11,9 @@ on:
       - "tools/capture_ui_preview.py"
       - "app/gui.py"
       - "app/config.py"
+      - "app/media_preview.py"
+      - "app/playlist.py"
+      - "ChatGPTMediaDownloader.spec"
   pull_request:
     paths:
       - ".github/workflows/ui-preview.yml"
@@ -37,13 +40,13 @@ jobs:
       - name: Install screenshot capture dependency
         shell: pwsh
         run: python -m pip install Pillow==13.0.0
-      - name: Capture actual UI tabs and animations
+      - name: Capture actual UI tabs, automatic media preview panel, and animations
         shell: pwsh
         run: python tools/capture_ui_preview.py --output ui-preview-output
       - name: Upload screenshots and animations
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: chatgpt-media-downloader-ui-preview-5.3.0
+          name: chatgpt-media-downloader-ui-preview-5.3.2
           path: ui-preview-output/
           if-no-files-found: error
           retention-days: 14
