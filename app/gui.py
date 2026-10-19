@@ -952,6 +952,9 @@ class MediaDownloaderApp:
                     try:
                         if getattr(child, "_rounded_card_background", False):
                             child.master.redraw()
+                        elif getattr(child, "_brand_logo_canvas", False):
+                            child.configure(background=c["panel2"])
+                            self._draw_brand_logo()
                         elif hasattr(child, "refresh_theme"):
                             child.refresh_theme()
                         elif child is getattr(self, "hero_visual", None):
