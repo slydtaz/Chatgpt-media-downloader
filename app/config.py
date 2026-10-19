@@ -13,7 +13,7 @@ from typing import Any
 APP_NAME = "ChatGPT Media Downloader"
 PRODUCT_ID = "com.chatgpt.mediadownloader"
 VENDOR = "ChatGPT"
-VERSION = "5.1.4"
+VERSION = "5.1.5"
 
 
 def _windows_local_appdata() -> Path:
