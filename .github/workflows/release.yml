@@ -250,6 +250,27 @@ jobs:
           $hash = (Get-FileHash 'dist/ChatGPTMediaDownloader.exe' -Algorithm SHA256).Hash.ToLower()
           $uninstallerHash = (Get-FileHash 'dist/GPT-Media-Uninstaller.exe' -Algorithm SHA256).Hash.ToLower()
           @("$hash  ChatGPTMediaDownloader.exe", "$uninstallerHash  GPT-Media-Uninstaller.exe") | Out-File -Encoding ascii 'dist/SHA256SUMS.txt'
+      - name: Enforce release trust requirements
+        shell: pwsh
+        run: |
+          $signaturePath = 'dist/Windows-Signature-Status.txt'
+          $scanPath = 'dist/VirusTotal-Status.txt'
+          if (!(Test-Path -LiteralPath $signaturePath)) { throw 'Missing Authenticode status; refusing to publish release.' }
+          if (!(Test-Path -LiteralPath $scanPath)) { throw 'Missing VirusTotal status; refusing to publish release.' }
+          $signature = Get-Content -LiteralPath $signaturePath -Raw
+          if ($signature -notmatch '(?m)^Authenticode: SIGNED;') {
+            throw 'Release blocked: provide a valid trusted Authenticode code-signing certificate before publishing.'
+          }
+          $scan = Get-Content -LiteralPath $scanPath
+          if ($scan -match 'NOT SCANNED|SCAN ERROR|ANALYSIS PENDING|REVIEW REQUIRED') {
+            throw 'Release blocked: VirusTotal scan is absent, incomplete or requires review.'
+          }
+          $results = @($scan | Where-Object { $_ -match '^(ChatGPTMediaDownloader\.exe|GPT-Media-Uninstaller\.exe): malicious=' })
+          if ($results.Count -ne 2) { throw 'Release blocked: VirusTotal status does not contain results for both executables.' }
+          foreach ($row in $results) {
+            if ($row -notmatch 'malicious=0; suspicious=0') { throw "Release blocked by antivirus results: $row" }
+          }
+          Write-Host 'Trust gates passed: Authenticode verified and both VirusTotal analyses completed with zero malicious/suspicious detections.'
       - name: Generate GitHub build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -259,6 +280,7 @@ jobs:
             dist/*-source.zip
             dist/SHA256SUMS.txt
             dist/Windows-Signature-Status.txt
+            dist/VirusTotal-Status.txt
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
@@ -273,6 +295,7 @@ jobs:
             Recommended for users: download ChatGPTMediaDownloader.exe.
             SHA256SUMS.txt contains the SHA-256 checksum of the same build.
             Windows-Signature-Status.txt records whether Authenticode signing was configured and verified.
+            VirusTotal-Status.txt records analysis results; releases are published only after Authenticode and VirusTotal gates pass.
             GPT-Media-Uninstaller.exe is a standalone emergency cleanup tool; downloaded media are preserved by default.
             The attached source ZIP is intended for developers, auditing and compilation.
           make_latest: true
