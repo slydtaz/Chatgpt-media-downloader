@@ -54,6 +54,42 @@ class DependencyTests(unittest.TestCase):
                 extract_archive(archive, destination)
             self.assertEqual(outside.read_text(encoding="utf-8"), "preserve")
 
+    @unittest.skipIf(os.name == "nt", "Symlink creation may require elevated privileges on Windows.")
+    def test_extract_archive_isolated_from_stale_extracting_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "tools.zip"
+            outside = root / "outside"
+            outside.mkdir()
+            destination = root / "tools"
+            destination.mkdir()
+            (destination / ".extracting").symlink_to(outside, target_is_directory=True)
+            (outside / "sentinel.txt").write_text("preserve", encoding="utf-8")
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("release/ffmpeg.exe", b"tool")
+            extract_archive(archive, destination)
+            self.assertEqual((outside / "sentinel.txt").read_text(encoding="utf-8"), "preserve")
+            self.assertEqual((destination / "ffmpeg.exe").read_bytes(), b"tool")
+
+    def test_extract_archive_rejects_duplicate_member_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "duplicate.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("release/ffmpeg.exe", b"first")
+                zf.writestr("release/ffmpeg.exe", b"second")
+            with self.assertRaises(ValueError):
+                extract_archive(archive, root / "tools")
+
+    def test_extract_archive_rejects_missing_or_unrecognized_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "empty-tool.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("release/readme.txt", "not a tool")
+            with self.assertRaises(ValueError):
+                extract_archive(archive, root / "tools")
+
     def test_extract_archive_rejects_zip_path_traversal(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
