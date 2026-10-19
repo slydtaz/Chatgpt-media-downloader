@@ -28,7 +28,7 @@ class ConfigTests(unittest.TestCase):
                 loaded = config.load_config()
                 self.assertEqual(loaded["auto_video_quality"], 1080)
                 self.assertEqual(loaded["audio_bitrate"], 192)
-                self.assertEqual(loaded["accent_color"], "#2563EB")
+                self.assertEqual(loaded["accent_color"], "#8B5CF6")
                 self.assertFalse(loaded["animations_enabled"])
 
 
@@ -52,7 +52,7 @@ class ConfigTests(unittest.TestCase):
                 config.save_config(chosen)
                 loaded = config.load_config()
                 self.assertEqual(loaded["theme"], "dark")
-                self.assertEqual(loaded["accent_color"], "#2563EB")
+                self.assertEqual(loaded["accent_color"], "#8B5CF6")
                 self.assertEqual(loaded["ui_density"], "comfortable")
 
 
@@ -66,12 +66,13 @@ class ConfigTests(unittest.TestCase):
                  patch.object(config, "CONFIG_PATH", base / "config" / "config.json"):
                 config.CONFIG_PATH.parent.mkdir(parents=True)
                 config.CONFIG_PATH.write_text(json.dumps({
-                    "theme": "dark", "accent_color": "#8B5CF6",
+                    "theme": "dark", "accent_color": "#2563EB",
+                    "settings_schema_version": 2,
                     "animations_enabled": True
                 }), encoding="utf-8")
                 migrated = config.load_config()
-                self.assertEqual(migrated["accent_color"], "#2563EB")
-                self.assertEqual(migrated["settings_schema_version"], 2)
+                self.assertEqual(migrated["accent_color"], "#8B5CF6")
+                self.assertEqual(migrated["settings_schema_version"], 3)
                 self.assertTrue(migrated["animations_enabled"])
 
                 config.CONFIG_PATH.write_text(json.dumps({

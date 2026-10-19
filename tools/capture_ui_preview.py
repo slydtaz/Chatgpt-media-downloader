@@ -89,7 +89,7 @@ def _make_contact_sheet(items: list[tuple[str, Image.Image]], target: Path) -> N
     draw = ImageDraw.Draw(canvas)
     title_font = _font(25)
     label_font = _font(17)
-    draw.text((margin, 10), "ChatGPT Media Downloader 5.1.5 — prévia real da interface", font=title_font, fill="#F3F6FC")
+    draw.text((margin, 10), "ChatGPT Media Downloader 5.3.2 — prévia real da interface", font=title_font, fill="#F3F6FC")
     top_offset = 50
     for index, (label, image) in enumerate(items):
         col, row = index % columns, index // columns
@@ -126,7 +126,7 @@ def main() -> int:
         import tkinter as tk
 
         root = tk.Tk()
-        root.title("ChatGPT Media Downloader 5.1.5 — prévia da interface")
+        root.title("ChatGPT Media Downloader 5.3.2 — prévia da interface")
         # Tk may report logical dimensions that differ from the actual captured desktop
         # on the hosted runner. Use ImageGrab's physical desktop size to avoid clipping.
         desktop_width, desktop_height = ImageGrab.grab().size
@@ -149,6 +149,19 @@ def main() -> int:
         root.update()
         time.sleep(0.6)
         root.update()
+
+        # Capture the actual preview widget with an offline fixture: no URLs are
+        # submitted, no external host is contacted, and no media is downloaded.
+        app._show_media_preview_card()
+        app.media_preview_title_var.set("Big Buck Bunny — prévia demonstrativa")
+        app.media_preview_meta_var.set("Blender Foundation  •  9:56  •  exemplo local")
+        app.media_preview_status_var.set("DEMONSTRAÇÃO OFFLINE · sem acessar a internet")
+        demo_image = _capture_window(root)
+        demo_file = "00-preview-automatica.png"
+        demo_image.save(output_dir / demo_file, format="PNG", optimize=True)
+        captured.append(("Prévia automática (demonstração offline)", demo_image))
+        print(f"CAPTURED {demo_file} {demo_image.width}x{demo_image.height}", flush=True)
+        app._hide_media_preview_card()
 
         for page_name, filename, label in PAGES:
             _wait_for_page(root, app, page_name)
@@ -197,7 +210,9 @@ def main() -> int:
         _make_contact_sheet(captured, output_dir / "visao-geral.png")
 
         report = {
-            "application_version": "5.1.5",
+            "application_version": "5.3.2",
+            "media_preview_demo_file": "00-preview-automatica.png",
+            "media_preview_demo_network_requests": 0,
             "capture_method": "Pillow ImageGrab from a real Tk window on a Windows GitHub Actions runner",
             "pages": [{"key": key, "file": filename, "label": label} for key, filename, label in PAGES],
             "animation_frames": len(animation_frames),

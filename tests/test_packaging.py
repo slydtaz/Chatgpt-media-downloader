@@ -11,6 +11,7 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("packaged_entry.py", spec)
         self.assertIn("console=False", spec)
         self.assertIn('name="ChatGPTMediaDownloader"', spec)
+        self.assertIn('"PIL.ImageTk"', spec)
         self.assertIn("EXE(", spec)
 
     def test_windows_build_script_outputs_one_exe(self):

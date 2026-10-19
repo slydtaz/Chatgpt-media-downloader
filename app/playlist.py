@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 
 from .process_utils import hidden_subprocess_kwargs
 from .security import redact_sensitive, validate_url
+from .media_preview import choose_thumbnail_url
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,7 @@ class PlaylistEntry:
     duration: float | None = None
     available: bool = True
     note: str = ""
+    thumbnail_url: str = ""
 
 
 @dataclass(frozen=True)
@@ -121,6 +123,7 @@ def inspect_playlist(yt_dlp_path: Path | str, url: str, *, timeout: int = 180) -
         except (ValueError, TypeError):
             index = ordinal
         entry_url = _absolute_entry_url(item, url)
+        thumbnail_url = choose_thumbnail_url(item, entry_url or url)
         availability = str(item.get("availability") or "").strip().lower()
         is_available = bool(entry_url) and availability not in {"private", "needs_auth", "premium_only"}
         note = "" if is_available else "URL não disponível nos metadados; não será baixado."
@@ -139,6 +142,7 @@ def inspect_playlist(yt_dlp_path: Path | str, url: str, *, timeout: int = 180) -
             duration=duration,
             available=is_available,
             note=note,
+            thumbnail_url=thumbnail_url,
         ))
     return PlaylistInfo(title=title, entries=tuple(entries), unavailable_count=unavailable, extractor=extractor)
 
