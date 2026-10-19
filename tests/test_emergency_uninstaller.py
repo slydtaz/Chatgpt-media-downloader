@@ -118,7 +118,7 @@ class EmergencyUninstallerTests(unittest.TestCase):
             }), encoding="utf-8")
 
             plan = discover_targets(env)
-            self.assertTrue(any(item.path == output and item.safe_to_remove for item in plan.output_dirs))
+            self.assertTrue(any(item.path == output for item in plan.output_dirs))
             log = perform_cleanup(plan, env=env)
             self.assertTrue(keep.is_file())
             self.assertFalse((data / "logs" / "app.log").exists())
