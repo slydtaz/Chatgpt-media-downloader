@@ -18,6 +18,7 @@ from typing import Callable, Optional
 from urllib.parse import urlsplit
 
 from .config import APP_DATA, INSTALL_ID_PATH, INSTALL_ROOT, PRODUCT_ID, STARTUP_REPAIR_PENDING_PATH, VENDOR, VERSION
+from .security import trusted_urlopen
 
 OWNER = "slydtaz"
 REPOSITORY = "Chatgpt-media-downloader"
@@ -28,6 +29,8 @@ USER_AGENT = f"ChatGPT-Media-Downloader/{VERSION}"
 INSTALL_MARKER = ".chatgpt-media-downloader-install.json"
 MAX_DOWNLOAD_BYTES = 250 * 1024 * 1024
 MAX_SOURCE_UNPACKED_BYTES = 512 * 1024 * 1024
+TRUSTED_UPDATE_HOSTS = frozenset({"github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com", "codeload.github.com", "api.github.com", "raw.githubusercontent.com"})
+TRUSTED_ASSET_HOSTS = frozenset({"github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com", "codeload.github.com"})
 
 
 class AppUpdateError(RuntimeError):
@@ -100,7 +103,7 @@ def _request_bytes(url: str, *, timeout: int = 20, maximum: int = MAX_DOWNLOAD_B
         headers={"User-Agent": USER_AGENT, "Accept": "application/vnd.github+json"},
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with trusted_urlopen(request, allowed_hosts=TRUSTED_UPDATE_HOSTS, timeout=timeout) as response:
             final_url = response.geturl()
             if not _trusted_url(final_url, metadata=True):
                 raise AppUpdateError("O GitHub redirecionou para um endereço não autorizado.")
@@ -315,7 +318,7 @@ def _download_file(url: str, destination: Path, progress: Optional[Callable[[int
     digest = hashlib.sha256()
     done = 0
     try:
-        with urllib.request.urlopen(request, timeout=60) as response, destination.open("wb") as out:
+        with trusted_urlopen(request, allowed_hosts=TRUSTED_ASSET_HOSTS, timeout=60) as response, destination.open("wb") as out:
             final_url = response.geturl()
             if not _trusted_url(final_url):
                 raise AppUpdateError("O GitHub redirecionou o download para um domínio não autorizado.")
