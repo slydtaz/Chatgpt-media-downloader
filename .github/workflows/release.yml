@@ -152,6 +152,95 @@ jobs:
           $archiveRef = if ($listedTag -eq $env:RELEASE_TAG) { $env:RELEASE_TAG } else { $env:GITHUB_SHA }
           git archive --format=zip --output=$sourceZip $archiveRef
           if ($LASTEXITCODE -ne 0 -or !(Test-Path $sourceZip)) { throw 'Source ZIP was not created' }
+      - name: Scan executables with VirusTotal
+        id: virustotal
+        shell: pwsh
+        env:
+          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+        run: |
+          $statusFile = 'dist/VirusTotal-Status.txt'
+          $targets = @('dist/ChatGPTMediaDownloader.exe', 'dist/GPT-Media-Uninstaller.exe')
+          if ([string]::IsNullOrWhiteSpace($env:VIRUSTOTAL_API_KEY)) {
+            @(
+              'VirusTotal: NOT SCANNED'
+              'Reason: the repository secret VIRUSTOTAL_API_KEY is not configured.'
+              'No antivirus verdict is claimed for this build.'
+              'Configure the secret and rerun the release workflow to submit the public release executables.'
+            ) | Set-Content -LiteralPath $statusFile -Encoding utf8
+            Write-Warning 'VirusTotal scan skipped because VIRUSTOTAL_API_KEY is not configured.'
+            exit 0
+          }
+
+          $submissions = @()
+          $reportLines = @('VirusTotal analysis report', "UTC started: $([DateTime]::UtcNow.ToString('o'))")
+          $detectionsFound = $false
+          try {
+            foreach ($path in $targets) {
+              if (!(Test-Path -LiteralPath $path)) { throw "Expected executable not found: $path" }
+              $item = Get-Item -LiteralPath $path
+              if ($item.Length -gt 32MB) {
+                throw "$($item.Name) exceeds 32 MiB; use VirusTotal's large-file upload URL flow."
+              }
+              $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLower()
+              $upload = Invoke-RestMethod -Method Post -Uri 'https://www.virustotal.com/api/v3/files' -Headers @{ 'x-apikey' = $env:VIRUSTOTAL_API_KEY; 'accept' = 'application/json' } -Form @{ file = $item }
+              $analysisId = [string]$upload.data.id
+              if ([string]::IsNullOrWhiteSpace($analysisId)) { throw "VirusTotal did not return an analysis ID for $($item.Name)." }
+              $submissions += [pscustomobject]@{
+                Path = $path; Name = $item.Name; Hash = $hash; AnalysisId = $analysisId; Complete = $false
+              }
+              $reportLines += "$($item.Name): SHA256 $hash; analysis $analysisId"
+            }
+
+            # The public API has strict rate limits. Poll no more frequently than once per minute.
+            for ($attempt = 0; $attempt -lt 5; $attempt++) {
+              Start-Sleep -Seconds 60
+              foreach ($submission in $submissions | Where-Object { -not $_.Complete }) {
+                $analysis = Invoke-RestMethod -Method Get -Uri "https://www.virustotal.com/api/v3/analyses/$($submission.AnalysisId)" -Headers @{ 'x-apikey' = $env:VIRUSTOTAL_API_KEY; 'accept' = 'application/json' }
+                if ([string]$analysis.data.attributes.status -ne 'completed') { continue }
+                $stats = $analysis.data.attributes.stats
+                $malicious = [int]($stats.malicious)
+                $suspicious = [int]($stats.suspicious)
+                $undetected = [int]($stats.undetected)
+                $harmless = [int]($stats.harmless)
+                $submission.Complete = $true
+                $reportLines += "$($submission.Name): malicious=$malicious; suspicious=$suspicious; undetected=$undetected; harmless=$harmless"
+                $reportLines += "Report: https://www.virustotal.com/gui/file/$($submission.Hash)/detection"
+                if ($malicious -gt 0 -or $suspicious -gt 0) { $detectionsFound = $true }
+              }
+              if (@($submissions | Where-Object { -not $_.Complete }).Count -eq 0) { break }
+            }
+
+            $pending = @($submissions | Where-Object { -not $_.Complete })
+            if ($pending.Count -gt 0) {
+              $reportLines += 'Result: ANALYSIS PENDING — release blocked because not all reports completed.'
+              $reportLines += ($pending | ForEach-Object { "$($_.Name): https://www.virustotal.com/gui/file/$($_.Hash)/detection" })
+              $reportLines | Set-Content -LiteralPath $statusFile -Encoding utf8
+              throw 'VirusTotal did not finish analysis within five minutes; inspect the report and rerun the release workflow.'
+            }
+            if ($detectionsFound) {
+              $reportLines += 'Result: REVIEW REQUIRED — at least one engine reported malicious or suspicious.'
+              $reportLines += 'Release publication is blocked; investigate each detection and request vendor review for confirmed false positives.'
+            } else {
+              $reportLines += 'Result: no malicious or suspicious detections were returned at scan time. This is not a guarantee of safety.'
+            }
+            $reportLines | Set-Content -LiteralPath $statusFile -Encoding utf8
+            if ($detectionsFound) {
+              throw 'VirusTotal reported at least one malicious or suspicious detection; release publication is blocked for review.'
+            }
+          } catch {
+            if (!(Test-Path -LiteralPath $statusFile)) {
+              @('VirusTotal: SCAN ERROR', $_.Exception.Message, 'Review workflow logs; do not treat this build as scanned.') | Set-Content -LiteralPath $statusFile -Encoding utf8
+            }
+            throw
+          }
+      - name: Preserve VirusTotal report for inspection
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: virustotal-report-${{ github.run_id }}
+          path: dist/VirusTotal-Status.txt
+          if-no-files-found: warn
+          retention-days: 30
       - name: Validate output and create checksum
         shell: pwsh
         run: |
@@ -193,6 +282,7 @@ jobs:
             dist/GPT-Media-Uninstaller.exe
             dist/SHA256SUMS.txt
             dist/Windows-Signature-Status.txt
+            dist/VirusTotal-Status.txt
             dist/*-source.zip
 ) {
               throw "Release tag '$refName' is not a semantic version tag."
