@@ -23,6 +23,8 @@ jobs:
           || (github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release: publish ChatGPT Media Downloader')) }}
     permissions:
       contents: write
+      attestations: write
+      id-token: write
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -159,6 +161,15 @@ jobs:
           $hash = (Get-FileHash 'dist/ChatGPTMediaDownloader.exe' -Algorithm SHA256).Hash.ToLower()
           $uninstallerHash = (Get-FileHash 'dist/GPT-Media-Uninstaller.exe' -Algorithm SHA256).Hash.ToLower()
           @("$hash  ChatGPTMediaDownloader.exe", "$uninstallerHash  GPT-Media-Uninstaller.exe") | Out-File -Encoding ascii 'dist/SHA256SUMS.txt'
+      - name: Generate GitHub build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/ChatGPTMediaDownloader.exe
+            dist/GPT-Media-Uninstaller.exe
+            dist/*-source.zip
+            dist/SHA256SUMS.txt
+            dist/Windows-Signature-Status.txt
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
