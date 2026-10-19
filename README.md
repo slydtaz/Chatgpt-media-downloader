@@ -9,7 +9,7 @@
 [Sugerir uma melhoria](https://github.com/slydtaz/chatgpt-media-downloader/issues/new?template=feature_request.yml)
 
 ![Sistema: Windows](https://img.shields.io/badge/SO-Windows-0078D6)
-![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.3.1-blue)
+![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.3.2-blue)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green)
 
 </div>
@@ -18,11 +18,13 @@
 
 > **Aviso de nome:** “ChatGPT” no nome é apenas parte do identificador do projeto. Este software é independente e **não é afiliado, patrocinado, certificado ou distribuído pela OpenAI**.
 
-> **Interface 5.3.1:** usa uma identidade visual profissional em azul e cinza, navegação compacta, cartões discretos e botões sólidos. Novas instalações iniciam sem animações; as preferências e cores personalizadas existentes são preservadas. A versão acrescenta validações de URLs, extração segura de arquivos compactados, validação mais rígida dos downloads de dependências e testes de segurança.
+> **Interface 5.3.2:** adota uma identidade cósmica com gradientes violeta, magenta e ciano, a marca Media Lab redesenhada e ícones maiores com antialiasing. Ao colar um link de vídeo/áudio, o app consulta automaticamente título, canal, duração e miniatura sem baixar a mídia; playlists recebem miniaturas por item. A cor de destaque padrão migra para violeta, mas uma cor personalizada escolhida por você é preservada.
 
 ## 🎨 Aparência e personalização
 
-A interface usa navegação lateral compacta, painéis organizados e botões com cores sólidas. Personalize o tema **Escuro**, **Claro** ou **Preto OLED**, escolha uma cor de destaque, altere o espaçamento entre **Confortável** e **Compacto**, e ative/desative animações nas Configurações. O **Modo desenvolvedor** mostra a saída técnica dos comandos; por padrão, o painel exibe um resumo da atividade. A paleta azul e cinza prioriza legibilidade, estados claros e aparência discreta.
+A interface usa uma identidade cósmica com fundos escuros, realces violeta, gradientes magenta/ciano e ícones vetoriais renderizados com antialiasing. Personalize o tema **Escuro**, **Claro** ou **Preto OLED**, escolha outra cor de destaque, altere o espaçamento entre **Confortável** e **Compacto**, e ative/desative animações nas Configurações. O **Modo desenvolvedor** mostra a saída técnica dos comandos; por padrão, o painel exibe um resumo da atividade.
+
+Ao colar uma URL pública de vídeo ou áudio, a prévia aparece automaticamente após uma breve pausa e mostra capa, título, canal e duração quando disponíveis. Essa etapa consulta somente metadados com `yt-dlp` e busca apenas a imagem da capa, nunca o arquivo de vídeo/áudio. O gerenciador de playlists também exibe miniaturas nos itens. Se o site bloquear metadados ou não fornecer capa, o app mantém um painel de fallback e informa a indisponibilidade sem interromper o download.
 
 ## 🛡️ Proteção de downloads e análise de segurança
 
