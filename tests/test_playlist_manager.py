@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.playlist import PlaylistEntry, PlaylistInfo, format_duration, inspect_playlist
+from app.playlist import MAX_PLAYLIST_ENTRIES, PlaylistEntry, PlaylistInfo, format_duration, inspect_playlist
 from app.downloader import build_video_command
 from app import config
 
@@ -30,9 +30,23 @@ class PlaylistMetadataTests(unittest.TestCase):
         self.assertEqual(info.entries[0].url, "https://www.youtube.com/watch?v=abcdefghijk")
         self.assertFalse(info.entries[2].available)
         command = run.call_args.args[0]
+        self.assertIn("--ignore-config", command)
         self.assertIn("--flat-playlist", command)
+        end_index = command.index("--playlist-end")
+        self.assertEqual(command[end_index + 1], str(MAX_PLAYLIST_ENTRIES + 1))
         self.assertIn("--dump-single-json", command)
         self.assertNotIn("--download-archive", command)
+
+    def test_oversized_playlists_fail_with_clear_message_and_bounded_query(self):
+        payload = {"title": "Very large playlist", "entries": [None] * (MAX_PLAYLIST_ENTRIES + 1)}
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout=json.dumps(payload), stderr="")
+        with patch("app.playlist.subprocess.run", return_value=completed) as run:
+            with self.assertRaisesRegex(RuntimeError, str(MAX_PLAYLIST_ENTRIES)):
+                inspect_playlist("yt-dlp", "https://www.youtube.com/playlist?list=PLlarge")
+        command = run.call_args.args[0]
+        end_index = command.index("--playlist-end")
+        self.assertEqual(command[end_index + 1], str(MAX_PLAYLIST_ENTRIES + 1))
+        self.assertIn("--ignore-config", command)
 
     def test_rejects_invalid_url_without_launching_process(self):
         with patch("app.playlist.subprocess.run") as run:

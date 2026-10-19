@@ -12,6 +12,9 @@ from .security import redact_sensitive, validate_url
 from .media_preview import choose_thumbnail_url
 
 
+MAX_PLAYLIST_ENTRIES = 5_000
+
+
 @dataclass(frozen=True)
 class PlaylistEntry:
     index: int
@@ -70,8 +73,9 @@ def inspect_playlist(yt_dlp_path: Path | str, url: str, *, timeout: int = 180) -
     if not valid:
         raise ValueError(message)
     command = [
-        str(yt_dlp_path), "--flat-playlist", "--dump-single-json", "--skip-download",
-        "--yes-playlist", "--ignore-errors", "--no-warnings", "--no-progress", url,
+        str(yt_dlp_path), "--ignore-config", "--flat-playlist", "--dump-single-json", "--skip-download",
+        "--yes-playlist", "--playlist-end", str(MAX_PLAYLIST_ENTRIES + 1),
+        "--ignore-errors", "--no-warnings", "--no-progress", url,
     ]
     completed = subprocess.run(
         command, capture_output=True, text=True, encoding="utf-8", errors="replace",
@@ -107,6 +111,11 @@ def inspect_playlist(yt_dlp_path: Path | str, url: str, *, timeout: int = 180) -
     if not isinstance(raw_entries, list):
         # For a video URL, make analysis fail clearly instead of treating it as a one-item playlist.
         raise RuntimeError("Esta URL não retornou uma lista de itens. Verifique se é uma playlist válida.")
+    if len(raw_entries) > MAX_PLAYLIST_ENTRIES:
+        raise RuntimeError(
+            f"A playlist excede o limite seguro de {MAX_PLAYLIST_ENTRIES:,} itens por análise. "
+            "Divida a lista em partes menores e tente novamente."
+        )
 
     title = str(payload.get("title") or payload.get("playlist_title") or "Playlist sem título").strip()
     extractor = str(payload.get("extractor_key") or payload.get("extractor") or "")

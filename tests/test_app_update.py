@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import os
 import json
+import stat
+import warnings
 import shutil
 import subprocess
 import tempfile
@@ -289,6 +291,55 @@ class SafeArchiveTests(unittest.TestCase):
             with patch("app.app_update.MAX_SOURCE_UNPACKED_BYTES", 10):
                 with self.assertRaises(AppUpdateError):
                     _safe_extract_zip(archive, root / "extract")
+
+    def test_case_insensitive_duplicate_paths_are_rejected_before_extraction(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            archive = root / "case-collision.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("project/PROJECT_ID", PRODUCT_ID)
+                zf.writestr("project/project_id", "different")
+                zf.writestr("project/app/main.py", "pass")
+                zf.writestr("project/app/bootstrap.py", "pass")
+            extracted = root / "extract"
+            extracted.mkdir()
+            with self.assertRaisesRegex(AppUpdateError, "duplicados|maiúsculas"):
+                _safe_extract_zip(archive, extracted)
+            self.assertEqual(list(extracted.iterdir()), [])
+
+    def test_exact_duplicate_paths_are_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            archive = root / "duplicate.zip"
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                with zipfile.ZipFile(archive, "w") as zf:
+                    zf.writestr("project/PROJECT_ID", PRODUCT_ID)
+                    zf.writestr("project/PROJECT_ID", "different")
+            with self.assertRaisesRegex(AppUpdateError, "duplicados|maiúsculas"):
+                _safe_extract_zip(archive, root / "extract")
+
+    def test_symlink_and_special_zip_entries_are_rejected(self):
+        for special_type in (stat.S_IFLNK, stat.S_IFIFO):
+            with self.subTest(special_type=special_type), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                archive = root / "special.zip"
+                info = zipfile.ZipInfo("project/unsafe-entry")
+                info.external_attr = (special_type | 0o600) << 16
+                with zipfile.ZipFile(archive, "w") as zf:
+                    zf.writestr(info, "target")
+                with self.assertRaisesRegex(AppUpdateError, "link ou arquivo especial"):
+                    _safe_extract_zip(archive, root / "extract")
+
+    def test_archive_file_directory_collisions_are_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            archive = root / "file-directory-collision.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("project/app", "not a directory")
+                zf.writestr("project/app/main.py", "pass")
+            with self.assertRaisesRegex(AppUpdateError, "conflito entre arquivo e diretório"):
+                _safe_extract_zip(archive, root / "extract")
 
     def test_parent_traversal_is_rejected(self):
         with tempfile.TemporaryDirectory() as td:
