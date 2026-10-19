@@ -151,15 +151,52 @@ class ScrollableFrame(ttk.Frame):
         self.scrollbar.pack(side="right", fill="y")
         self.body.bind("<Configure>", lambda _e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfigure(self.window_id, width=e.width))
+        # Wheel events must be global because ttk children receive the pointer,
+        # but each ScrollableFrame only handles events from its own content.
         self.canvas.bind_all("<MouseWheel>", self._wheel, add="+")
-        self.canvas.bind_all("<Button-4>", lambda _e: self.canvas.yview_scroll(-1, "units"), add="+")
-        self.canvas.bind_all("<Button-5>", lambda _e: self.canvas.yview_scroll(1, "units"), add="+")
+        self.canvas.bind_all("<Button-4>", self._wheel_linux, add="+")
+        self.canvas.bind_all("<Button-5>", self._wheel_linux, add="+")
+
+    def _event_belongs_to_frame(self, event) -> bool:
+        """Return whether a global wheel event originated in this scrollable area."""
+        widget = getattr(event, "widget", None)
+        while widget is not None:
+            if widget is self.body or widget is self.canvas or widget is self.scrollbar:
+                return True
+            widget = getattr(widget, "master", None)
+        return False
 
     def _wheel(self, event):
+        if not self._event_belongs_to_frame(event):
+            return None
         try:
-            self.canvas.yview_scroll(int(-event.delta / 120), "units")
-        except (tk.TclError, ZeroDivisionError):
-            pass
+            delta = int(getattr(event, "delta", 0))
+            if delta == 0:
+                return None
+            units = int(-delta / 120)
+            # Trackpads can send non-zero deltas smaller than one wheel notch.
+            if units == 0:
+                units = -1 if delta > 0 else 1
+            self.canvas.yview_scroll(units, "units")
+            return "break"
+        except (tk.TclError, TypeError, ValueError, OverflowError):
+            return None
+
+    def _wheel_linux(self, event):
+        if not self._event_belongs_to_frame(event):
+            return None
+        button = getattr(event, "num", None)
+        if button == 4:
+            units = -1
+        elif button == 5:
+            units = 1
+        else:
+            return None
+        try:
+            self.canvas.yview_scroll(units, "units")
+            return "break"
+        except tk.TclError:
+            return None
 
 
 def _rounded_polygon(x1: float, y1: float, x2: float, y2: float, radius: float) -> list[float]:
