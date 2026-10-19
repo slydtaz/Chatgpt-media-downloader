@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import math
 import queue
 import threading
 import time
@@ -186,6 +187,10 @@ class MediaDownloaderApp:
         self.downloader: Downloader | None = None
         self.install_thread: threading.Thread | None = None
         self.current_page = "home"
+        self._visible_page: str | None = None
+        self._page_animation_job = None
+        self._page_animation_target: str | None = None
+        self._hero_visual_phase = 0.0
         self.page_frames: dict[str, ttk.Frame] = {}
         self.settings_vars: dict[str, tk.StringVar] = {}
         self.nav_buttons: dict[str, ttk.Button] = {}
@@ -245,6 +250,8 @@ class MediaDownloaderApp:
         self._refresh_dependencies()
         self.root.report_callback_exception = self._report_callback_exception
         self._poll_queue()
+        # Small GPU-free Canvas animation inspired by SKlauncher 4.0's cosmic theme.
+        self.root.after(180, self._animate_hero_visual)
         self.root.after(2200, self._maybe_start_update_check)
 
     # ---------- Theme ----------
@@ -402,6 +409,11 @@ class MediaDownloaderApp:
         hero.pack(fill="x",pady=(0,13))
         self.hero_accent_bar=tk.Frame(hero,bg=self.colors["accent"],width=4,bd=0,highlightthickness=0)
         self.hero_accent_bar.pack(side="left",fill="y",padx=(0,18))
+        self.hero_visual = tk.Canvas(
+            hero, width=108, height=112, bg=self.colors["panel2"],
+            highlightthickness=0, bd=0,
+        )
+        self.hero_visual.pack(side="right", fill="y", padx=(12, 0))
         hero_body=ttk.Frame(hero,style="Hero.TFrame")
         hero_body.pack(side="left",fill="both",expand=True)
         hero_top=ttk.Frame(hero_body,style="Hero.TFrame")
@@ -1287,27 +1299,152 @@ class MediaDownloaderApp:
         # The cleanup helper waits for this process before removing the installed EXE.
         self.root.after(100, self.root.destroy)
 
-    # ---------- Page navigation ----------
-    def show_page(self,name: str):
+    def _animate_hero_visual(self):
+        """Draw a lightweight, GPU-free purple orbit animation in the home hero."""
+        canvas = getattr(self, "hero_visual", None)
+        if canvas is None:
+            return
+        try:
+            if not self.root.winfo_exists() or not canvas.winfo_exists():
+                return
+            canvas.delete("all")
+            width = max(canvas.winfo_width(), 108)
+            height = max(canvas.winfo_height(), 112)
+            cx, cy = width / 2.0, height / 2.0
+            phase = self._hero_visual_phase
+            accent = self.colors.get("accent", "#8B5CF6")
+            glow = _blend_hex(accent, self.colors.get("panel2", "#1A2540"), 0.38)
+            faint = _blend_hex(accent, self.colors.get("panel2", "#1A2540"), 0.68)
+
+            # Concentric rings and drifting particles form a subtle, launcher-like motif.
+            for index, base_radius in enumerate((21, 30, 39)):
+                radius = base_radius + math.sin(phase + index * 0.7) * 1.6
+                canvas.create_oval(
+                    cx - radius, cy - radius, cx + radius, cy + radius,
+                    outline=(accent if index == 0 else glow if index == 1 else faint),
+                    width=(2 if index == 0 else 1),
+                )
+            for index in range(8):
+                angle = phase + index * (math.tau / 8.0)
+                radius = 36 + 3 * math.sin(phase * 1.4 + index)
+                x = cx + math.cos(angle) * radius
+                y = cy + math.sin(angle) * radius
+                size = 1.5 if index % 3 else 2.5
+                color = accent if index % 3 == 0 else glow
+                canvas.create_oval(x-size, y-size, x+size, y+size, fill=color, outline="")
+            # Keep the central glyph clear and legible instead of using a large image.
+            canvas.create_text(
+                cx, cy, text="↓", fill=self.colors.get("fg", "#F3F6FC"),
+                font=("Segoe UI", 28, "bold"),
+            )
+            self._hero_visual_phase = (phase + 0.16) % math.tau
+            self.root.after(90, self._animate_hero_visual)
+        except tk.TclError:
+            # Window shutdown cancels cosmetic animation quietly.
+            return
+
+    # ---------- Page navigation and transitions ----------
+    def _finish_page_animation(self):
+        """Normalize the current transition before another navigation request."""
+        if self._page_animation_job is not None:
+            try:
+                self.root.after_cancel(self._page_animation_job)
+            except tk.TclError:
+                pass
+            self._page_animation_job = None
+        target = self._page_animation_target
+        if target in self.page_frames:
+            for frame in self.page_frames.values():
+                try:
+                    frame.place_forget()
+                    frame.pack_forget()
+                except tk.TclError:
+                    pass
+            self.page_frames[target].pack(fill="both", expand=True)
+            self._visible_page = target
+            self.current_page = target
+        self._page_animation_target = None
+
+    def show_page(self, name: str):
         if name not in self.page_frames:
             return
+        if self._page_animation_job is not None:
+            self._finish_page_animation()
+
         Tooltip.dismiss_all()
-        for frame in self.page_frames.values():
-            frame.pack_forget()
-        self.page_frames[name].pack(fill="both",expand=True)
-        self.current_page=name
-        title={"home":"Início","playlist":"Playlists","settings":"Aparência e ajustes","dependencies":"Dependências","updates":"Atualizações","help":"Central de ajuda","developer":"Diagnóstico"}[name]
-        subtitle={"home":"Seu espaço para vídeos, músicas e playlists.","playlist":"Escolha exatamente o que baixar e defina opções por item.","settings":"Personalize o visual e ajuste o comportamento do downloader.","dependencies":"Ferramentas locais e estado da instalação.","updates":"Atualizações verificadas, reparação e recuperação da instalação.","help":"Orientações rápidas para tirar o melhor do aplicativo.","developer":"Informações úteis para diagnóstico técnico."}[name]
+        old_name = self._visible_page
+        new_frame = self.page_frames[name]
+        self.current_page = name
+        title = {
+            "home": "Início", "playlist": "Playlists", "settings": "Aparência e ajustes",
+            "dependencies": "Dependências", "updates": "Atualizações", "help": "Central de ajuda",
+            "developer": "Diagnóstico",
+        }[name]
+        subtitle = {
+            "home": "Seu espaço para vídeos, músicas e playlists.",
+            "playlist": "Escolha exatamente o que baixar e defina opções por item.",
+            "settings": "Personalize o visual e ajuste o comportamento do downloader.",
+            "dependencies": "Ferramentas locais e estado da instalação.",
+            "updates": "Atualizações verificadas, reparação e recuperação da instalação.",
+            "help": "Orientações rápidas para tirar o melhor do aplicativo.",
+            "developer": "Informações úteis para diagnóstico técnico.",
+        }[name]
         self.page_title_var.set(title)
         self.page_subtitle_var.set(subtitle)
-        for key,button in self.nav_buttons.items():
-            button.configure(style="Selected.Nav.TButton" if key==name else "Nav.TButton")
-        if name=="settings":
+        for key, button in self.nav_buttons.items():
+            button.configure(style="Selected.Nav.TButton" if key == name else "Nav.TButton")
+
+        if name == "settings":
             self._sync_settings_form()
-        elif name=="dependencies":
+        elif name == "dependencies":
             self._refresh_dependencies()
-        elif name=="developer":
+        elif name == "developer":
             self._update_developer_vars()
+
+        width = self.pages_area.winfo_width()
+        if old_name is None or old_name == name or width < 180:
+            for frame in self.page_frames.values():
+                frame.place_forget()
+                frame.pack_forget()
+            new_frame.pack(fill="both", expand=True)
+            self._visible_page = name
+            return
+
+        old_frame = self.page_frames[old_name]
+        for frame in self.page_frames.values():
+            frame.place_forget()
+            frame.pack_forget()
+        old_frame.place(x=0, y=0, relwidth=1, relheight=1)
+        new_frame.place(x=28, y=0, relwidth=1, relheight=1)
+        new_frame.lift()
+        self._page_animation_target = name
+
+        # Slide a short distance, keeping the previous page beneath the new one.
+        # Eight small steps avoid expensive alpha effects and remain smooth on older PCs.
+        def animate(step: int = 0):
+            if self._page_animation_target != name:
+                return
+            try:
+                if not self.root.winfo_exists():
+                    return
+                progress = min(1.0, step / 8.0)
+                new_frame.place_configure(x=round(28 * (1.0 - progress)))
+                old_frame.place_configure(x=-round(12 * progress))
+                if step >= 8:
+                    for frame in self.page_frames.values():
+                        frame.place_forget()
+                        frame.pack_forget()
+                    new_frame.pack(fill="both", expand=True)
+                    self._visible_page = name
+                    self._page_animation_target = None
+                    self._page_animation_job = None
+                    return
+                self._page_animation_job = self.root.after(16, lambda: animate(step + 1))
+            except tk.TclError:
+                self._page_animation_job = None
+                self._page_animation_target = None
+
+        self._page_animation_job = self.root.after(0, animate)
     def _sync_settings_form(self):
         for key,var in self.settings_vars.items():
             var.set(self._display_setting_value(key,self.config.get(key,DEFAULT_CONFIG.get(key,""))))
@@ -2024,14 +2161,42 @@ class MediaDownloaderApp:
 
 def run() -> None:
     root = tk.Tk()
-    app = MediaDownloaderApp(root)
-    # A startup repair is confirmed only after the complete main window was built.
-    # This lets the OS helper retain the old package until the new GUI is alive.
     try:
-        from .config import clear_startup_repair_pending
-        if not clear_startup_repair_pending():
-            app.logger.warning("Não foi possível limpar o marcador de reparo após abrir a interface.")
+        # Do not expose Tk's empty default window while the fairly large UI is built.
+        # If construction fails, destroy that hidden root and let bootstrap show recovery.
+        root.withdraw()
+        app = MediaDownloaderApp(root)
+        # The helper keeps the previous install until the actual GUI has been built.
+        try:
+            from .config import clear_startup_repair_pending
+            if not clear_startup_repair_pending():
+                app.logger.warning("Não foi possível limpar o marcador de reparo após abrir a interface.")
+        except Exception:
+            app.logger.warning("Falha ao confirmar a abertura após reparo.", exc_info=True)
+        root.protocol("WM_DELETE_WINDOW", root.destroy)
+        root.update_idletasks()
+        root.deiconify()
+        try:
+            root.lift()
+            root.focus_force()
+        except tk.TclError:
+            pass
+        root.mainloop()
     except Exception:
-        app.logger.warning("Falha ao confirmar a abertura após reparo.", exc_info=True)
-    root.protocol("WM_DELETE_WINDOW", root.destroy)
-    root.mainloop()
+        # Log the original GUI exception; a windowed EXE has no console to show it.
+        try:
+            from .config import LOG_DIR
+            from .logging_utils import setup_logging
+            setup_logging(LOG_DIR).exception("Falha grave ao construir ou executar a interface")
+        except Exception:
+            pass
+        try:
+            root.destroy()
+        except tk.TclError:
+            pass
+        raise
+    finally:
+        try:
+            root.destroy()
+        except tk.TclError:
+            pass
