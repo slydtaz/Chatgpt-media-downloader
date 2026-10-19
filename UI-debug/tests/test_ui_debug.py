@@ -92,6 +92,7 @@ class VisualConceptTests(unittest.TestCase):
         self.assertIn("def draw_section_icon", source)
         self.assertIn("def adaptive_ui_scale", source)
         self.assertIn('self.backdrop.tk.call("lower", self.backdrop._w)', source)
+        self.assertIn('self.nav_gap.pack(side="left", fill="y")', source)
         self.assertNotIn('self.root.geometry("1280x830")', source)
 
 
