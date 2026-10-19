@@ -147,6 +147,74 @@ def ellipse_line_points(cx: float, cy: float, rx: float, ry: float, rotation: fl
     return points
 
 
+def render_nav_icon_image(key: str, tint: str, accent: str, *, scale: float = 1.18, master=None):
+    """Supersample the tiny navigation icons and downsample with Lanczos for smooth edges."""
+    try:
+        from PIL import Image, ImageDraw, ImageTk
+    except ImportError:
+        return None
+    size = max(24, min(48, int(round(26 * scale))))
+    factor = 4
+    image = Image.new("RGBA", (size*factor, size*factor), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    center = size * factor / 2
+    unit = size * factor / 24.0
+    stroke = max(6, int(round(size * factor * .085)))
+    fine = max(4, int(round(stroke * .72)))
+    def point(x, y):
+        return (center + x * unit, center + y * unit)
+    def line(*coords, color=tint, width=stroke):
+        draw.line([point(x,y) for x,y in zip(coords[0::2],coords[1::2])],
+                  fill=color, width=width, joint="curve")
+    def outline_ellipse(x1,y1,x2,y2,color=tint,width=stroke):
+        a,b=point(x1,y1); c,d=point(x2,y2)
+        draw.ellipse((a,b,c,d),outline=color,width=width)
+    def filled_ellipse(x1,y1,x2,y2,color=accent):
+        a,b=point(x1,y1); c,d=point(x2,y2)
+        draw.ellipse((a,b,c,d),fill=color)
+    def polygon(*coords, color=accent):
+        draw.polygon([point(x,y) for x,y in zip(coords[0::2],coords[1::2])],fill=color)
+
+    if key == "home":
+        line(-9,-1,0,-9,9,-1)
+        line(-6.5,-2,-6.5,8,6.5,8,6.5,-2)
+        line(-1.5,8,-1.5,2,2.5,2,2.5,8,color=accent,width=fine)
+    elif key == "playlist":
+        for dy,length in ((-6,12),(0,15),(6,10)):
+            filled_ellipse(-9,dy-1.2,-6.6,dy+1.2)
+            line(-3,dy,-3+length,dy,width=stroke)
+    elif key == "settings":
+        for dy,knob_x in ((-6,-2.5),(0,3.5),(6,-5.0)):
+            line(-9,dy,9,dy,width=fine)
+            outline_ellipse(knob_x-2.8,dy-2.8,knob_x+2.8,dy+2.8,tint,width=fine)
+            filled_ellipse(knob_x-1.6,dy-1.6,knob_x+1.6,dy+1.6,accent)
+    elif key == "dependencies":
+        nodes=((0,-7.5),(-7.3,5.5),(7.3,5.5))
+        line(*nodes[0],*nodes[1],width=fine)
+        line(*nodes[0],*nodes[2],width=fine)
+        line(*nodes[1],*nodes[2],color=accent,width=fine)
+        for idx,(x,y) in enumerate(nodes):
+            radius=3.1 if idx==0 else 2.8
+            filled_ellipse(x-radius,y-radius,x+radius,y+radius,accent if idx==0 else tint)
+    elif key == "updates":
+        a,b=point(-9,-9); c,d=point(9,9)
+        draw.arc((a,b,c,d),start=35,end=320,fill=tint,width=stroke)
+        polygon(4,-9,10,-9,8.5,-3)
+        line(-3,0,4,0,color=accent,width=fine)
+    elif key == "help":
+        outline_ellipse(-9,-9,9,9,tint,width=fine)
+        line(-2,-3,-1,-5,2,-4,3,-2,1,0,-1,2,color=accent,width=fine)
+        filled_ellipse(-1,5,1,7,accent)
+    else:
+        line(-9,0,-5,0,-2,-6,1,6,4,-3,7,0,10,0,width=stroke)
+        line(-9,8,9,8,color=accent,width=fine)
+
+    resampling = getattr(Image, "Resampling", Image)
+    lanczos = getattr(resampling, "LANCZOS", 1)
+    image = image.resize((size, size), resample=lanczos)
+    return ImageTk.PhotoImage(image, master=master)
+
+
 def draw_section_icon(
     canvas: tk.Canvas, cx: float, cy: float, key: str, tint: str, accent: str, *, scale: float = 1.18
 ) -> str:
@@ -217,6 +285,17 @@ def draw_section_icon(
     else:
         line(cx-9,cy,cx-5,cy,cx-2,cy-6,cx+1,cy+6,cx+4,cy-3,cx+7,cy,cx+10,cy,weight=2.7)
         line(cx-9,cy+8,cx+9,cy+8,color=accent,weight=1.9)
+    # Use a 4x supersampled RGBA asset when Pillow is available. Keep the vector
+    # version as a dependency-free fallback.
+    photo = render_nav_icon_image(key, tint, accent, scale=scale, master=canvas)
+    if photo is not None:
+        canvas.itemconfigure(tag, state=tk.HIDDEN)
+        item_id = canvas.create_image(cx, cy, image=photo, tags=(tag, "nav-icon-raster"))
+        if not hasattr(canvas, "_nav_icon_specs"):
+            canvas._nav_icon_specs = {}
+            canvas._nav_icon_photos = {}
+        canvas._nav_icon_specs[tag] = (key, scale, item_id)
+        canvas._nav_icon_photos[tag] = photo
     return tag
 
 def rounded_span(y: int, width: int, height: int, radius: int) -> tuple[int, int]:
@@ -1441,7 +1520,7 @@ class SpaceUIPrototype:
             plate = nav.create_polygon(*rounded_points(self.scale_px(8),self.scale_px(7),self.scale_px(40),
                 nav_height-self.scale_px(7),self.scale_px(9),steps=14),
                 fill=self.colors["panel"], outline="", smooth=True, splinesteps=16, tags="nav-icon-plate")
-            icon = draw_section_icon(nav,self.scale_px(24),nav_height/2,key,self.colors["muted"],self.colors["accent2"])
+            icon = draw_section_icon(nav,self.scale_px(24),nav_height/2,key,self.colors["muted"],self.colors["accent2"],scale=1.18*self.ui_scale)
             label_id = nav.create_text(self.scale_px(48),nav_height/2,text=text,anchor="w",
                 fill=self.colors["muted"],font=("Segoe UI",self.scale_px(10)))
             indicator = nav.create_line(self.scale_px(5),self.scale_px(12),self.scale_px(5),nav_height-self.scale_px(12),
@@ -1502,7 +1581,15 @@ class SpaceUIPrototype:
             builder(pane.body)
 
     def _tint_nav_icon(self, nav, tag, color):
-        """Tint each vector item by type so outlines remain outlines and strokes stay sharp."""
+        """Retint supersampled icon images when available, otherwise retint vector strokes."""
+        spec = getattr(nav, "_nav_icon_specs", {}).get(tag)
+        if spec:
+            key, scale, item_id = spec
+            photo = render_nav_icon_image(key, color, self.colors["accent2"], scale=scale, master=nav)
+            if photo is not None:
+                nav.itemconfigure(item_id, image=photo)
+                nav._nav_icon_photos[tag] = photo
+                return
         for item_tag, options in (
             ("nav-icon-line", {"fill": color, "width": 2.9 * self.ui_scale}),
             ("nav-icon-text", {"fill": color}),
