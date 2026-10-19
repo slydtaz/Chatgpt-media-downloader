@@ -19,6 +19,12 @@ Fontes oficiais:
 
 A versão 5.3.0 endurece a verificação de URL, redirecionamentos, tamanhos e hashes das dependências, e rejeita links simbólicos e caminhos perigosos em arquivos compactados. Essas verificações são medidas preventivas, não uma certificação do executável. A situação Authenticode continua indicada no `Windows-Signature-Status.txt` da release; sem certificado confiável configurado, o EXE continua sem assinatura.
 
+## Requisitos de publicação da versão 5.3.1
+
+O workflow de release bloqueia a publicação de executáveis que não tenham uma assinatura Authenticode válida verificada pelo SignTool e dois resultados completos do VirusTotal sem classificações `malicious` ou `suspicious`. O fluxo depende de credenciais legítimas do mantenedor; ele não cria uma identidade de editor, não usa certificado autoassinado como substituto e não tenta ignorar o SmartScreen.
+
+Também é anexado `VirusTotal-Status.txt`. A ausência de um resultado não significa que o binário está limpo. A submissão ao VirusTotal é feita apenas para os dois executáveis destinados à distribuição pública e compartilha esses arquivos com o serviço.
+
 ## Como é habilitada uma assinatura real
 
 O workflow de publicação oferece assinatura Authenticode no runner Windows quando o mantenedor configura os secrets do repositório:
