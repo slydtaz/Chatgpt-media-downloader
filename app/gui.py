@@ -692,7 +692,7 @@ class MediaDownloaderApp:
         self._refresh_dependencies()
         self.root.report_callback_exception = self._report_callback_exception
         self._poll_queue()
-        # Small GPU-free Canvas animation inspired by SKlauncher 4.0's cosmic theme.
+        # Optional low-motion orbit animation drawn with Canvas; disabled for new profiles.
         self._hero_animation_job = self.root.after(180, self._animate_hero_visual)
         self.root.after(2200, self._maybe_start_update_check)
 
@@ -809,7 +809,7 @@ class MediaDownloaderApp:
         for key,glyph,label,tip in [
             ("home","⌂","Início","Baixe vídeo ou áudio, acompanhe o progresso e consulte o resumo da atividade."),
             ("playlist","▤","Playlists","Analise uma playlist, escolha itens e personalize formato e qualidade por mídia."),
-            ("settings","⚙","Aparência","Personalize as cores espaciais, o tema, as pastas e o desempenho."),
+            ("settings","⚙","Aparência","Personalize as cores de destaque, o tema, as pastas e o desempenho."),
             ("dependencies","◈","Dependências","Confira e configure yt-dlp, FFmpeg e FFprobe."),
             ("updates","⟳","Atualizações","Confira versões, atualize o aplicativo ou restaure arquivos oficiais."),
             ("help","?","Ajuda","Guias rápidos, opções de qualidade, playlists e segurança."),
@@ -1087,7 +1087,7 @@ class MediaDownloaderApp:
         presets=ttk.Frame(appearance,style="Card.TFrame")
         presets.pack(fill="x",pady=(10,0))
         ttk.Label(presets,text="PALETAS RÁPIDAS",style="Muted.TLabel",font=("Segoe UI",8,"bold")).pack(side="left",padx=(0,10))
-        for name,color in (("Violeta","#8B5CF6"),("Azul","#3B82F6"),("Ciano","#06B6D4"),("Verde","#10B981"),("Rosa","#EC4899"),("Âmbar","#F59E0B")):
+        for name,color in (("Azul","#2563EB"),("Marinho","#1D4ED8"),("Ciano","#0891B2"),("Verde","#15803D"),("Ardósia","#64748B"),("Âmbar","#B45309")):
             RoundedGlowButton(presets,text=name,style="Secondary.TButton",command=lambda c=color:self.settings_vars["accent_color"].set(c)).pack(side="left",padx=(0,5))
         dev_mode_row=ttk.Frame(appearance,style="Card.TFrame")
         dev_mode_row.pack(fill="x",pady=(14,0))
