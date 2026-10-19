@@ -201,7 +201,7 @@ class RoundedCard(ttk.Frame):
             self._canvas.delete("surface")
             if width > 8 and height > 8:
                 self._canvas.create_polygon(
-                    _rounded_polygon(1, 1, width - 2, height - 2, 22),
+                    _rounded_polygon(1, 1, width - 2, height - 2, 30),
                     smooth=True, splinesteps=14, fill=surface,
                     outline=colors.get("border", surface), width=1, tags="surface",
                 )
