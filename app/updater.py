@@ -22,6 +22,7 @@ from .locking import CrossProcessFileLock
 from .dependencies import detect_binary_arch
 from .platform import SystemInfo
 from .security import safe_archive_member_path
+from .dependencies import MAX_ARCHIVE_MEMBERS, MAX_ARCHIVE_UNPACKED_BYTES
 from .process_utils import hidden_subprocess_kwargs
 
 
@@ -291,11 +292,16 @@ def _install_tool_from_release_locked(
                 extract_dir = work / "extract"
                 extract_dir.mkdir()
                 with zipfile.ZipFile(archive) as zf:
-                    for member in zf.infolist():
+                    members = zf.infolist()
+                    if len(members) > MAX_ARCHIVE_MEMBERS or sum(max(0, item.file_size) for item in members) > MAX_ARCHIVE_UNPACKED_BYTES:
+                        raise UpdateError("Pacote yt-dlp excede o limite de conteúdo permitido.")
+                    for member in members:
                         try:
                             safe_archive_member_path(extract_dir, member.filename)
                         except ValueError as exc:
                             raise UpdateError("Pacote yt-dlp contém caminho inseguro.") from exc
+                        if member.flag_bits & 0x1:
+                            raise UpdateError("Pacote yt-dlp criptografado não é aceito.")
                         mode = (member.external_attr >> 16) & 0xFFFF
                         file_type = stat.S_IFMT(mode)
                         if file_type == stat.S_IFLNK or (file_type and file_type not in {stat.S_IFREG, stat.S_IFDIR}):
