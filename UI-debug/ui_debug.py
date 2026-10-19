@@ -1059,7 +1059,6 @@ class SpaceUIPrototype:
         outer.pack(fill="both", expand=True)
         self.backdrop = GradientBackdrop(outer, self)
         self.backdrop.place(x=0, y=0, relwidth=1, relheight=1)
-        self.backdrop.lower()
         self.sidebar = tk.Frame(outer, bg=self.colors["panel"], width=220, bd=0, highlightthickness=0)
         self.sidebar.pack(side="left", fill="y", padx=(0, 16))
         self.sidebar.pack_propagate(False)
