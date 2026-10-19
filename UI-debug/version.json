@@ -4,5 +4,5 @@
   "channel": "development",
   "update_branch": "ui-debug",
   "minimum_python": "3.10",
-  "description": "Standalone visual prototype with a larger Media Lab mark, smoother vector nav icons, on-demand metadata-only media previews and playlist thumbnail cards. File downloads remain mocked; not a GitHub Release."
+  "description": "Standalone visual prototype with an enlarged Media Lab mark, supersampled smooth nav icons, on-demand metadata-only media previews and playlist thumbnail cards. File downloads remain mocked; not a GitHub Release."
 }
