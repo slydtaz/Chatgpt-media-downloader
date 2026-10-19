@@ -357,6 +357,22 @@ class SafeArchiveTests(unittest.TestCase):
                     _safe_extract_zip(archive, extracted)
                 self.assertEqual(list(extracted.iterdir()), [])
 
+    def test_archive_rejects_excessive_path_depth_and_component_length(self):
+        unsafe_paths = (
+            "project/" + "/".join(["d"] * 129) + "/file.txt",
+            "project/" + ("x" * 256) + ".txt",
+        )
+        for index, member_name in enumerate(unsafe_paths):
+            with self.subTest(index=index), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                archive = root / "long-path.zip"
+                with zipfile.ZipFile(archive, "w") as zf:
+                    zf.writestr(member_name, "unsafe")
+                extracted = root / "extract"
+                with self.assertRaises(AppUpdateError):
+                    _safe_extract_zip(archive, extracted)
+                self.assertEqual(list(extracted.iterdir()), [])
+
     def test_unicode_normalization_collisions_are_rejected_before_extraction(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
