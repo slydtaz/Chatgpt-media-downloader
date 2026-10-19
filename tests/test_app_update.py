@@ -4,12 +4,14 @@ import hashlib
 import os
 import json
 import shutil
+import stat
 import subprocess
 import tempfile
 import unittest
 import io
 import urllib.error
 import urllib.request
+import warnings
 import zipfile
 from pathlib import Path
 from unittest.mock import patch
@@ -290,6 +292,42 @@ class SafeArchiveTests(unittest.TestCase):
                 with self.assertRaises(AppUpdateError):
                     _safe_extract_zip(archive, root / "extract")
 
+    def test_duplicate_or_case_colliding_archive_paths_are_rejected(self):
+        cases = (
+            ("project/README.md", "project/README.md"),
+            ("project/README.md", "project/readme.md"),
+        )
+        for first, second in cases:
+            with self.subTest(first=first, second=second), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                archive = root / "duplicate.zip"
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", UserWarning)
+                    with zipfile.ZipFile(archive, "w") as zf:
+                        zf.writestr(first, "first entry")
+                        zf.writestr(second, "second entry")
+                destination = root / "extract"
+                with self.assertRaises(AppUpdateError):
+                    _safe_extract_zip(archive, destination)
+                self.assertEqual(list(destination.iterdir()), [])
+
+    def test_symlink_and_special_archive_entries_are_rejected(self):
+        for label, file_type in (
+            ("symlink", stat.S_IFLNK),
+            ("fifo", stat.S_IFIFO),
+            ("socket", stat.S_IFSOCK),
+        ):
+            with self.subTest(entry_type=label), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                archive = root / f"{label}.zip"
+                info = zipfile.ZipInfo("project/payload")
+                info.create_system = 3
+                info.external_attr = (file_type | 0o600) << 16
+                with zipfile.ZipFile(archive, "w") as zf:
+                    zf.writestr(info, "payload")
+                with self.assertRaises(AppUpdateError):
+                    _safe_extract_zip(archive, root / "extract")
+
     def test_parent_traversal_is_rejected(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -299,6 +337,7 @@ class SafeArchiveTests(unittest.TestCase):
             with self.assertRaises(AppUpdateError):
                 _safe_extract_zip(archive, root / "extract")
             self.assertFalse((root / "outside.txt").exists())
+
 
 
 if __name__ == "__main__":
