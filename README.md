@@ -28,6 +28,8 @@ A interface usa navegação lateral compacta, painéis organizados e botões com
 
 Os builds de release incluem `SHA256SUMS.txt` e o relatório explícito de assinatura do Windows. A pipeline também gera uma atestação de proveniência da GitHub Actions para os artefatos publicados; desenvolvedores podem conferi-la com o GitHub CLI usando `gh attestation verify` e o repositório de origem. A atestação ajuda a vincular o artefato ao processo de build, mas **não equivale à assinatura Authenticode do executável** nem a uma auditoria independente.
 
+A página hospedada de downloads só é publicada quando GitHub Pages estiver habilitado em **Settings → Pages** e a variável de repositório `PUBLISH_GITHUB_PAGES` for definida como `true`. Até lá, use diretamente a página de Releases oficial.
+
 ## 📥 Download oficial para usuários
 
 **Aplicativo:** abra **[Releases estáveis — baixar](https://github.com/slydtaz/chatgpt-media-downloader/releases/latest)** e baixe `ChatGPTMediaDownloader.exe`. Confira o `SHA256SUMS.txt` da mesma Release. **Desinstalador emergencial:** baixe `GPT-Media-Uninstaller.exe` se precisar limpar instalações e configurações antigas. Ele é separado do aplicativo e não apaga músicas/vídeos por padrão.
