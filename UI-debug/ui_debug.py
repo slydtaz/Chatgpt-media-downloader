@@ -230,19 +230,23 @@ def install_self_update(app_dir: Path, archive_bytes: bytes) -> None:
                 if len(pure.parts) < 2 or pure.parts[-2] != "UI-debug":
                     continue
                 name = pure.parts[-1]
-                if name not in UPDATE_FILES:
+                canonical_name = next(
+                    (allowed for allowed in UPDATE_FILES if allowed.casefold() == name.casefold()),
+                    None,
+                )
+                if canonical_name is None:
                     continue
                 mode = (item.external_attr >> 16) & 0xFFFF
                 file_type = stat.S_IFMT(mode)
                 if file_type and file_type not in {stat.S_IFREG, stat.S_IFDIR}:
                     raise RuntimeError("O ZIP contém um link ou arquivo especial.")
-                key = name.casefold()
+                key = canonical_name.casefold()
                 if key in seen:
                     raise RuntimeError("O ZIP contém caminhos duplicados ou ambíguos.")
                 seen.add(key)
-                target = stage / name
+                target = stage / canonical_name
                 target.write_bytes(archive.read(item))
-                extracted_files[name] = target
+                extracted_files[canonical_name] = target
             if "ui_debug.py" not in extracted_files or "version.json" not in extracted_files:
                 raise RuntimeError("O ZIP não contém os arquivos essenciais do UI-debug.")
         version_data = json.loads(extracted_files["version.json"].read_text(encoding="utf-8"))
