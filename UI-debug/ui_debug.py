@@ -8,7 +8,9 @@ Only theme/preferences persistence and this prototype's own update checker work.
 """
 
 import json
+import math
 import os
+import random
 import platform
 import re
 import shutil
@@ -27,7 +29,7 @@ import tkinter.font as tkfont
 
 
 APP_NAME = "ChatGPT Media Downloader — UI-debug"
-APP_VERSION = "0.1.0-dev.3"
+APP_VERSION = "0.1.0-dev.4"
 CHANNEL = "development"
 REPO_OWNER = "slydtaz"
 REPO_NAME = "Chatgpt-media-downloader"
@@ -106,7 +108,7 @@ def background_key_for(widget, app, default="bg") -> str:
     return default
 
 
-def rounded_points(x1: float, y1: float, x2: float, y2: float, radius: float, steps: int = 8) -> list[float]:
+def rounded_points(x1: float, y1: float, x2: float, y2: float, radius: float, steps: int = 14) -> list[float]:
     """Approximate a rounded rectangle with evenly sampled quarter circles."""
     width = max(1.0, x2 - x1)
     height = max(1.0, y2 - y1)
@@ -123,6 +125,38 @@ def rounded_points(x1: float, y1: float, x2: float, y2: float, radius: float, st
             angle = (start + (end - start) * index / steps) * 3.141592653589793 / 180
             points.append((cx + r * __import__("math").cos(angle), cy + r * __import__("math").sin(angle)))
     return [value for point in points for value in point]
+
+
+def ellipse_point(cx: float, cy: float, rx: float, ry: float, angle: float, rotation: float = 0.0) -> tuple[float, float]:
+    """Return a point on a rotated ellipse."""
+    x, y = rx * math.cos(angle), ry * math.sin(angle)
+    cosine, sine = math.cos(rotation), math.sin(rotation)
+    return cx + x * cosine - y * sine, cy + x * sine + y * cosine
+
+
+def ellipse_line_points(cx: float, cy: float, rx: float, ry: float, rotation: float, steps: int = 48) -> list[float]:
+    points: list[float] = []
+    for step in range(steps + 1):
+        points.extend(ellipse_point(cx, cy, rx, ry, 2 * math.pi * step / steps, rotation))
+    return points
+
+
+def draw_orbit_icon(canvas: tk.Canvas, cx: float, cy: float, tint: str, variant: int = 0) -> str:
+    """Minimal orbit mark used in tabs without an external asset."""
+    tag = "orbit-icon"
+    rotations = (0.0, math.pi / 3, -math.pi / 3)
+    for idx, rotation in enumerate(rotations):
+        points = ellipse_line_points(cx, cy, 7.2 if idx else 8.0, 3.6 if idx else 3.1,
+                                     rotation + variant * 0.11, steps=28)
+        canvas.create_line(*points, fill=tint, width=1.45, smooth=True, splinesteps=10,
+                           tags=(tag, "orbit-track"))
+    canvas.create_oval(cx - 2.1, cy - 2.1, cx + 2.1, cy + 2.1,
+                       fill=tint, outline="", tags=(tag, "orbit-core"))
+    angle = 0.6 + variant * 0.7
+    px, py = ellipse_point(cx, cy, 7.1, 3.6, angle, rotations[variant % len(rotations)])
+    canvas.create_oval(px - 1.5, py - 1.5, px + 1.5, py + 1.5,
+                       fill=tint, outline="", tags=(tag, "orbit-node"))
+    return tag
 
 
 def rounded_span(y: int, width: int, height: int, radius: int) -> tuple[int, int]:
@@ -299,6 +333,11 @@ class GradientBackdrop(tk.Canvas):
         for index in range(160):
             item = self.create_rectangle(0, 0, 1, 1, width=0, tags="gradient")
             self.strips.append(item)
+        self.glow_items: list[tuple[int, str, float, str]] = []
+        for corner, tint in (("tl", "#D946EF"), ("tr", "#7C3AED"), ("bl", "#BE185D"), ("br", "#6D28D9")):
+            for level in range(34):
+                item = self.create_oval(0, 0, 1, 1, fill="", outline="", tags="corner-glow")
+                self.glow_items.append((item, corner, level / 33, tint))
         # Deterministic, subtle star specks; static unless reduced-motion is disabled.
         stars = [(0.13, 0.16), (0.31, 0.08), (0.46, 0.22), (0.69, 0.11),
                  (0.88, 0.27), (0.76, 0.42), (0.19, 0.56), (0.93, 0.68),
@@ -322,6 +361,12 @@ class GradientBackdrop(tk.Canvas):
             color = blend_hex(colors["bg"], colors["panel2"], index / max(1, len(self.strips) - 1) * 0.42)
             self.coords(item, x0, 0, x1, height)
             self.itemconfigure(item, fill=color, outline=color)
+        for item, corner, level, tint in self.glow_items:
+            cx = 0 if corner.endswith("l") else width
+            cy = 0 if corner.startswith("t") else height
+            rx, ry = width * (0.60 - 0.38 * level), height * (0.88 - 0.54 * level)
+            self.coords(item, cx - rx, cy - ry, cx + rx, cy + ry)
+            self.itemconfigure(item, fill=blend_hex(colors["bg"], tint, 0.018 + 0.17 * (level ** 1.65)), outline="")
         for index, (item, rx, ry) in enumerate(self.star_items):
             x, y = width * rx, height * ry
             r = 1.5 if index % 4 else 2.3
@@ -348,7 +393,7 @@ class RoundedCard(tk.Frame):
         self.body.pack(fill="both", expand=True, padx=max(2, int(px)), pady=max(2, int(py)))
         self._shape = self.canvas.create_polygon(
             *rounded_points(1, 1, 4, 4, radius), smooth=False,
-            fill=app.colors[background_key], outline=app.colors["border"], width=1,
+            fill=app.colors[background_key], outline=app.colors["border"], width=1.5,
             tags="surface",
         )
         self.bind("<Configure>", self._resize, add="+")
@@ -361,7 +406,7 @@ class RoundedCard(tk.Frame):
             self.canvas.coords(self._shape, *rounded_points(1, 1, width - 1, height - 1, self.radius))
             self.canvas.itemconfigure(
                 self._shape, fill=self.app.colors[self.background_key],
-                outline=self.app.colors["border"],
+                outline=self.app.colors["border"], width=1.5,
             )
             self.configure(bg=self.app.colors[self.backdrop_key])
             self.canvas.configure(bg=self.app.colors[self.backdrop_key])
@@ -375,33 +420,31 @@ class RoundedCard(tk.Frame):
 
 
 class RoundedButton(tk.Canvas):
-    """Small custom button: stable canvas items, clean radius and a restrained gradient."""
+    """Rounded button with a subtle animated hover scale and lavender hover fill."""
     def __init__(self, master, app, text, command=None, *, variant="secondary", width=None, height=40):
-        self.app = app
-        self.text = text
-        self.command = command
-        self.variant = variant
-        self.height = height
-        self.font = tkfont.Font(family="Segoe UI", size=9 if height < 36 else 10, weight="bold" if variant == "primary" else "normal")
+        self.app, self.text, self.command, self.variant = app, text, command, variant
+        self.base_height = self.height = int(height)
+        self.font_size = 9 if height < 36 else 10
+        self.font = tkfont.Font(family="Segoe UI", size=self.font_size,
+                                weight="bold" if variant == "primary" else "normal")
         desired = self.font.measure(text) + (34 if variant == "primary" else 30)
-        self.width = int(width or max(82, min(300, desired)))
+        self.base_width = self.width = int(width or max(82, min(300, desired)))
+        self.current_scale, self._target_scale, self._scale_after_id = 1.0, 1.0, None
         self.bg_key = background_key_for(master, app, "bg")
-        super().__init__(master, width=self.width, height=height, bg=app.colors[self.bg_key], bd=0, highlightthickness=0, cursor="hand2")
-        self.hovered = False
-        self.pressed = False
-        self._gradient_ids: list[int] = []
-        self._outline_id = None
-        self._text_id = None
+        super().__init__(master, width=self.width, height=self.height, bg=app.colors[self.bg_key], bd=0, highlightthickness=0, cursor="hand2")
+        self.hovered = self.pressed = False
+        self._gradient_ids = []
         for row in range(height):
             left, right = rounded_span(row, self.width, height, height // 2)
             color = app.colors["accent"] if variant == "primary" else app.colors["button"]
-            item = self.create_line(left, row, max(left, right), row, fill=color, width=1, tags="button-fill")
-            self._gradient_ids.append(item)
+            self._gradient_ids.append(self.create_line(left, row, max(left, right), row,
+                fill=color, width=2, tags=("button-shape", "button-fill")))
         self._outline_id = self.create_polygon(
-            *rounded_points(1, 1, self.width - 1, height - 1, height // 2),
-            fill="", outline=app.colors["accent"] if variant == "primary" else app.colors["border"], width=1,
-        )
-        self._text_id = self.create_text(self.width / 2, height / 2, text=text, fill=app.colors["fg"], font=self.font, width=self.width - 18)
+            *rounded_points(1, 1, self.width - 1, height - 1, height // 2, steps=16),
+            fill="", outline=app.colors["accent"] if variant == "primary" else app.colors["border"],
+            width=1.6, tags=("button-shape", "button-outline"))
+        self._text_id = self.create_text(self.width / 2, height / 2, text=text, fill=app.colors["fg"],
+                                         font=self.font, width=self.width - 18, tags="button-shape")
         self.bind("<Configure>", self._on_resize, add="+")
         self.bind("<Enter>", self._enter, add="+")
         self.bind("<Leave>", self._leave, add="+")
@@ -413,57 +456,99 @@ class RoundedButton(tk.Canvas):
         self.refresh_theme()
 
     def _on_resize(self, _event):
-        # The requested width/height are fixed; this is intentionally not a relayout animation.
         pass
+
+    def _apply_size(self, scale):
+        self.current_scale = scale
+        self.width, self.height = max(1, round(self.base_width * scale)), max(1, round(self.base_height * scale))
+        try:
+            self.configure(width=self.width, height=self.height)
+            denominator = max(1, len(self._gradient_ids) - 1)
+            for index, item in enumerate(self._gradient_ids):
+                row = (self.height - 1) * index / denominator
+                left, right = rounded_span(round(row), self.width, self.height, self.height // 2)
+                self.coords(item, left, row, max(left, right), row)
+                self.itemconfigure(item, width=2)
+            self.coords(self._outline_id, *rounded_points(1, 1, self.width - 1, self.height - 1, self.height / 2, steps=16))
+            self.itemconfigure(self._outline_id, width=1.6)
+            self.coords(self._text_id, self.width / 2, self.height / 2)
+            self.itemconfigure(self._text_id, width=self.width - 18)
+            self.font.configure(size=max(8, round(self.font_size * (1.04 if scale > 1.01 else 1.0))))
+            self._refresh_colors()
+        except tk.TclError:
+            pass
+
+    def _animate_to(self, scale):
+        self._target_scale = scale
+        if self.app.settings.get("reduce_motion") or not self.app.settings.get("animations_enabled", True):
+            if self._scale_after_id is not None:
+                try: self.after_cancel(self._scale_after_id)
+                except tk.TclError: pass
+                self._scale_after_id = None
+            self._apply_size(scale)
+            return
+        if self._scale_after_id is not None:
+            try: self.after_cancel(self._scale_after_id)
+            except tk.TclError: pass
+        start, frames = self.current_scale, 5
+        def frame(index=1):
+            if index > frames:
+                self._scale_after_id = None
+                self._apply_size(scale)
+                return
+            progress = index / frames
+            eased = 1 - (1 - progress) ** 3
+            self._apply_size(start + (scale - start) * eased)
+            self._scale_after_id = self.after(14, lambda: frame(index + 1))
+        frame()
 
     def _enter(self, _event=None):
         self.hovered = True
         self._refresh_colors()
+        self._animate_to(1.055)
 
     def _leave(self, _event=None):
-        self.hovered = False
-        self.pressed = False
+        self.hovered = self.pressed = False
         self._refresh_colors()
+        self._animate_to(1.0)
 
     def _press(self, _event=None):
         self.pressed = True
         self._refresh_colors()
+        self._animate_to(1.075 if self.hovered else 1.025)
         return "break"
 
     def _release(self, event=None):
         invoke = self.pressed and event is not None and 0 <= event.x <= self.width and 0 <= event.y <= self.height
         self.pressed = False
         self._refresh_colors()
+        self._animate_to(1.055 if self.hovered else 1.0)
         if invoke and callable(self.command):
             self.command()
         return "break"
 
     def _keyboard(self, _event=None):
-        if callable(self.command):
-            self.command()
+        if callable(self.command): self.command()
         return "break"
 
     def _refresh_colors(self):
         c = self.app.colors
         if self.variant == "primary":
             start, end = c["accent"], c["accent2"]
-            if self.hovered:
-                start, end = blend_hex(start, "#FFFFFF", 0.10), blend_hex(end, "#FFFFFF", 0.08)
-            if self.pressed:
-                start, end = blend_hex(start, "#000000", 0.12), blend_hex(end, "#000000", 0.12)
+            if self.hovered: start, end = blend_hex(start, "#FFFFFF", 0.10), blend_hex(end, "#FFFFFF", 0.08)
+            if self.pressed: start, end = blend_hex(start, "#000000", 0.12), blend_hex(end, "#000000", 0.12)
             for row, item in enumerate(self._gradient_ids):
-                amount = row / max(1, len(self._gradient_ids) - 1)
-                self.itemconfigure(item, fill=blend_hex(start, end, amount))
-            text_color = "#FFFFFF" if c["accent"] not in ("#FDE047", "#FFFF00") else "#14182B"
-            outline = blend_hex(end, "#FFFFFF", 0.16)
+                self.itemconfigure(item, fill=blend_hex(start, end, row / max(1, len(self._gradient_ids) - 1)))
+            text_color, outline = "#FFFFFF", blend_hex(end, "#FFFFFF", 0.20)
+        elif self.hovered:
+            start, end = "#D8C7FF", "#B9A5FF"
+            if self.pressed: start, end = blend_hex(start, "#8B5CF6", 0.18), blend_hex(end, "#8B5CF6", 0.18)
+            for row, item in enumerate(self._gradient_ids):
+                self.itemconfigure(item, fill=blend_hex(start, end, row / max(1, len(self._gradient_ids) - 1)))
+            text_color, outline = "#2B174E", "#D8C7FF"
         else:
-            fill = c["surface"] if self.hovered else c["button"]
-            if self.pressed:
-                fill = blend_hex(fill, "#000000", 0.10)
-            for item in self._gradient_ids:
-                self.itemconfigure(item, fill=fill)
-            text_color = c["fg"]
-            outline = c["accent"] if self.hovered else c["border"]
+            for item in self._gradient_ids: self.itemconfigure(item, fill=c["button"])
+            text_color, outline = c["fg"], c["border"]
         self.itemconfigure(self._outline_id, outline=outline)
         self.itemconfigure(self._text_id, fill=text_color)
         self.configure(bg=c.get(self.bg_key, c["bg"]))
@@ -482,7 +567,7 @@ class RoundedField(tk.Frame):
         self.readonly = readonly
         self.canvas = tk.Canvas(self, bg=app.colors[self.bg_key], bd=0, highlightthickness=0)
         self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
-        self.shape = self.canvas.create_polygon(*rounded_points(1, 1, 4, 4, 12), fill=app.colors["field"], outline=app.colors["border"], width=1)
+        self.shape = self.canvas.create_polygon(*rounded_points(1, 1, 4, 4, 12), fill=app.colors["field"], outline=app.colors["border"], width=1.5)
         self.entry = tk.Entry(
             self, textvariable=textvariable, bg=app.colors["field"], fg=app.colors["input_fg"],
             insertbackground=app.colors["input_fg"], relief="flat", bd=0, highlightthickness=0,
@@ -527,7 +612,7 @@ class Dropdown(tk.Frame):
         self.command = command
         self.canvas = tk.Canvas(self, bg=app.colors[self.bg_key], width=width, height=42, bd=0, highlightthickness=0, cursor="hand2")
         self.canvas.pack(fill="both", expand=True)
-        self.shape = self.canvas.create_polygon(*rounded_points(1, 1, width - 1, 41, 12), fill=app.colors["field"], outline=app.colors["border"], width=1)
+        self.shape = self.canvas.create_polygon(*rounded_points(1, 1, width - 1, 41, 12), fill=app.colors["field"], outline=app.colors["border"], width=1.5)
         self.label_id = self.canvas.create_text(14, 21, text=value, anchor="w", fill=app.colors["input_fg"], font=("Segoe UI", 10))
         self.chevron_id = self.canvas.create_text(width - 18, 21, text="⌄", fill=app.colors["accent2"], font=("Segoe UI", 13, "bold"))
         self.canvas.bind("<Button-1>", self._open)
@@ -600,8 +685,278 @@ class ToggleSwitch(tk.Canvas):
         self.configure(bg=c["panel"])
 
 
+class OrbitalAtom(tk.Canvas):
+    """Animated atom mark with moving light points and a soft gradient trail."""
+    def __init__(self, master, app, *, size=42):
+        super().__init__(master, width=size, height=size, bg=app.colors["panel"], bd=0, highlightthickness=0)
+        self.app, self.size, self.phase = app, size, 0.0
+        self.particles = []
+        self.app.orbital_marks.append(self)
+        self._draw_tracks()
+        specs = ((0.0, size * .34, size * .15, .3, app.colors["accent2"]),
+                 (math.pi / 3, size * .30, size * .135, 2.2, "#E879F9"),
+                 (-math.pi / 3, size * .30, size * .135, 4.1, "#A78BFA"))
+        for rotation, rx, ry, angle, color in specs:
+            rings = []
+            for radius, strength in ((5.7, .22), (4.1, .42), (2.8, .74), (1.55, 1.0)):
+                rings.append((self.create_oval(0, 0, 0, 0,
+                    fill=blend_hex(app.colors["panel"], color, strength), outline="", tags="atom-particle"), radius))
+            self.particles.append({"rotation": rotation, "rx": rx, "ry": ry, "angle": angle,
+                                   "speed": .085 if rotation == 0 else (.073 if rotation > 0 else -.067),
+                                   "rings": rings})
+        self.create_oval(size/2 - 2, size/2 - 2, size/2 + 2, size/2 + 2,
+                         fill=app.colors["accent2"], outline="", tags="atom-nucleus")
+        self._tick()
+
+    def _draw_tracks(self):
+        self.delete("atom-track")
+        c = self.app.colors
+        cx = cy = self.size / 2
+        for idx, (rotation, rx, ry) in enumerate(((0, self.size*.34, self.size*.15),
+            (math.pi/3, self.size*.30, self.size*.135), (-math.pi/3, self.size*.30, self.size*.135))):
+            points = [ellipse_point(cx, cy, rx, ry, 2 * math.pi * i / 48, rotation) for i in range(49)]
+            start, end = ((c["accent"], c["accent2"]) if idx == 0 else
+                          (("#E879F9", c["accent"]) if idx == 1 else (c["accent2"], "#A78BFA")))
+            for i in range(48):
+                self.create_line(*points[i], *points[i+1], fill=blend_hex(start, end, i/47),
+                                 width=1.35, tags="atom-track")
+
+    def _tick(self):
+        try:
+            self.phase += .08
+            cx = cy = self.size / 2
+            rotations = (0.0, math.pi / 3, -math.pi / 3)
+            for particle in self.particles:
+                particle["angle"] += particle["speed"]
+                x, y = ellipse_point(cx, cy, particle["rx"], particle["ry"],
+                    particle["angle"] + self.phase * .07, particle["rotation"])
+                for item, radius in particle["rings"]:
+                    self.coords(item, x-radius, y-radius, x+radius, y+radius)
+            self.after(34, self._tick)
+        except tk.TclError:
+            return
+
+    def refresh_theme(self):
+        self.configure(bg=self.app.colors["panel"])
+        self._draw_tracks()
+
+
+SPLASH_BACKGROUND = "#080713"
+SPLASH_PALETTES = (
+    ("#F9A8D4", "#A78BFA"), ("#C4B5FD", "#67E8F9"),
+    ("#F0ABFC", "#818CF8"), ("#FDA4AF", "#C084FC"),
+    ("#A5B4FC", "#F5D0FE"), ("#D8B4FE", "#7DD3FC"),
+    ("#FBCFE8", "#DDD6FE"), ("#E9D5FF", "#F0ABFC"),
+)
+STARTUP_MESSAGES = (
+    "Acendendo o núcleo visual", "Preparando seu espaço de trabalho",
+    "Carregando as preferências locais", "Alinhando cartões, contornos e órbitas",
+    "Polindo os detalhes da interface", "Conferindo o canal de desenvolvimento",
+    "Quase pronto — abrindo seu espaço de mídia",
+)
+UPDATE_MESSAGES = (
+    "Conectando ao canal de desenvolvimento", "Consultando o manifesto de versão",
+    "Preparando o pacote de atualização", "Conferindo os arquivos do protótipo",
+    "Validando os caminhos permitidos", "Preservando suas preferências locais",
+    "Finalizando os detalhes da nova órbita",
+)
+
+
+class CosmicSplash:
+    """Full-screen orbital loader, glowing particles, and gradient-only status text."""
+    def __init__(self, root, *, mode="startup", looping=False, on_close=None):
+        self.root, self.mode, self.looping, self.on_close = root, mode, looping, on_close
+        self._finish_callback = self._animation_after = self._message_after = self._finish_after = None
+        self._closed = False
+        self.width = max(800, int(root.winfo_screenwidth()))
+        self.height = max(600, int(root.winfo_screenheight()))
+        self.window = tk.Toplevel(root)
+        self.window.overrideredirect(True)
+        try:
+            self.window.attributes("-fullscreen", True)
+            self.window.attributes("-topmost", True)
+        except tk.TclError:
+            pass
+        self.window.geometry("%dx%d+0+0" % (self.width, self.height))
+        self.window.configure(bg=SPLASH_BACKGROUND)
+        self.canvas = tk.Canvas(self.window, bg=SPLASH_BACKGROUND, bd=0, highlightthickness=0)
+        self.canvas.pack(fill="both", expand=True)
+        self.active_texts, self._status_serial, self._palette_bag = [], 0, []
+        self.phase = 0.0
+        self._draw_scene()
+        self._draw_orbit_loader()
+        self._draw_brand()
+        self.messages = STARTUP_MESSAGES if mode == "startup" else UPDATE_MESSAGES
+        self.message_index = 0
+        self._add_status(self.messages[0])
+        self.window.bind("<Escape>", lambda _event: "break", add="+")
+        self._animation_after = self.window.after(30, self._animate)
+        self._message_after = self.window.after(690, self._advance_message)
+        try:
+            self.window.lift()
+            self.window.focus_force()
+        except tk.TclError:
+            pass
+
+    def _draw_scene(self):
+        c, w, h = self.canvas, self.width, self.height
+        for i in range(160):
+            x0, x1 = w * i / 160, w * (i + 1) / 160 + 1
+            c.create_rectangle(x0, 0, x1, h, fill=blend_hex(SPLASH_BACKGROUND, "#20113B", .05 + .20*i/159), outline="")
+        for cx, cy, tint in ((0, 0, "#D946EF"), (w, 0, "#7C3AED"), (0, h, "#BE185D"), (w, h, "#6D28D9")):
+            for level in range(38):
+                t = level / 37
+                rx, ry = w * (.58 - .34*t), h * (.82 - .48*t)
+                c.create_oval(cx-rx, cy-ry, cx+rx, cy+ry,
+                    fill=blend_hex(SPLASH_BACKGROUND, tint, .012 + .20*t**1.7), outline="")
+        rng = random.Random(119 + w + h)
+        for _ in range(38):
+            x, y = rng.random()*w, rng.random()*h
+            radius, tint = rng.choice((1, 1, 1.5, 2)), rng.choice(("#8D86B5", "#8E84D6", "#A58DCB", "#65CBDC"))
+            c.create_oval(x-radius, y-radius, x+radius, y+radius,
+                fill=blend_hex(SPLASH_BACKGROUND, tint, .55), outline="")
+
+    def _draw_orbit_loader(self):
+        cx, cy = self.width/2, self.height*.315
+        rx, ry = min(180, self.width*.145), min(88, self.height*.092)
+        self.track_specs = ((0.0, rx, ry, ("#E879F9", "#A78BFA")),
+            (math.pi/3, rx*.93, ry*.88, ("#C084FC", "#67E8F9")),
+            (-math.pi/3, rx*.72, ry*1.22, ("#F472B6", "#A78BFA")))
+        for rotation, orbit_rx, orbit_ry, palette in self.track_specs:
+            points = [ellipse_point(cx, cy, orbit_rx, orbit_ry, 2*math.pi*i/84, rotation) for i in range(85)]
+            for i in range(84):
+                self.canvas.create_line(*points[i], *points[i+1], fill=blend_hex(palette[0], palette[1], i/83),
+                                        width=2.4, tags="splash-orbit-track")
+        self.particles = []
+        for orbit, angle, speed, color in ((0, .7, .055, "#F9A8D4"), (1, 2.6, .047, "#A78BFA"), (2, 4.2, -.052, "#67E8F9")):
+            trail = [self.canvas.create_line(0, 0, 0, 0, fill=SPLASH_BACKGROUND, width=1,
+                     capstyle=tk.ROUND, tags="splash-trail") for _ in range(16)]
+            glows = [(self.canvas.create_oval(0, 0, 0, 0,
+                     fill=blend_hex(SPLASH_BACKGROUND, color, strength), outline="", tags="splash-particle"), radius, strength)
+                     for radius, strength in ((15, .16), (10, .27), (6.5, .52), (3.6, .93))]
+            self.particles.append({"orbit": orbit, "angle": angle, "speed": speed, "color": color, "trail": trail, "glows": glows, "history": []})
+        self.canvas.create_oval(cx-4, cy-4, cx+4, cy+4, fill="#F5D0FE", outline="")
+        self.canvas.create_oval(cx-12, cy-12, cx+12, cy+12, fill=blend_hex(SPLASH_BACKGROUND, "#C084FC", .55), outline="")
+
+    def _draw_brand(self):
+        self.canvas.create_text(self.width/2, self.height*.135, text="CHATGPT MEDIA DOWNLOADER",
+            fill="#AAA7C8", font=("Segoe UI", max(9, int(min(self.width,self.height)*.012)), "bold"))
+        subtitle = "UI-DEBUG  /  CANAL DE DESENVOLVIMENTO" if self.mode == "startup" else "ATUALIZAÇÃO VISUAL  /  CANAL UI-DEBUG"
+        self.canvas.create_text(self.width/2, self.height*.16, text=subtitle,
+            fill="#7E789F", font=("Segoe UI", max(8, int(min(self.width,self.height)*.009)), "normal"))
+        self.canvas.create_text(self.width/2, self.height*.92, text="UMA ÓRBITA DE CADA VEZ",
+            fill="#77718F", font=("Segoe UI", max(8, int(min(self.width,self.height)*.009)), "bold"))
+
+    def _next_palette(self):
+        if not self._palette_bag:
+            self._palette_bag = list(range(len(SPLASH_PALETTES)))
+            random.shuffle(self._palette_bag)
+        return SPLASH_PALETTES[self._palette_bag.pop()]
+
+    def _add_status(self, text):
+        self._status_serial += 1
+        tag = "splash-status-%d" % self._status_serial
+        palette = self._next_palette()
+        font = tkfont.Font(master=self.window, family="Segoe UI",
+                           size=max(15, int(min(self.width,self.height)*.018)), weight="bold")
+        widths = [font.measure(ch) for ch in text]
+        x, start_y = (self.width-sum(widths))/2, self.height*.695
+        glyphs, colors = [], []
+        for i, character in enumerate(text):
+            fill = blend_hex(palette[0], palette[1], i/max(1,len(text)-1))
+            item = self.canvas.create_text(x, start_y, text=character, anchor="w", fill=fill, font=font, tags=(tag,"splash-status"))
+            glyphs.append((item,x)); colors.append(fill); x += widths[i]
+        self.active_texts.append({"tag":tag,"glyphs":glyphs,"colors":colors,"start_y":start_y,"age":0,"font":font})
+
+    def set_stage(self, text):
+        if self._closed: return
+        if self._message_after is not None:
+            try: self.window.after_cancel(self._message_after)
+            except tk.TclError: pass
+        self._add_status(text)
+        self._message_after = self.window.after(1250 if not self.looping else 820, self._advance_message)
+
+    def _advance_message(self):
+        if self._closed: return
+        if self.looping:
+            self.message_index = (self.message_index+1) % len(self.messages)
+            self._add_status(self.messages[self.message_index])
+            self._message_after = self.window.after(740, self._advance_message)
+        else:
+            self.message_index += 1
+            if self.message_index < len(self.messages):
+                self._add_status(self.messages[self.message_index])
+                self._message_after = self.window.after(690, self._advance_message)
+            else:
+                self._finish_after = self.window.after(950, self.close)
+
+    def _animate(self):
+        if self._closed: return
+        self.phase += .055
+        for p in self.particles:
+            rotation, orbit_rx, orbit_ry, _palette = self.track_specs[p["orbit"]]
+            p["angle"] += p["speed"]
+            point = ellipse_point(self.width/2, self.height*.315, orbit_rx, orbit_ry, p["angle"], rotation)
+            history = p["history"]; history.insert(0, point); del history[16:]
+            for i, line in enumerate(p["trail"]):
+                if i+1 < len(history):
+                    a,b = history[i],history[i+1]
+                    self.canvas.coords(line,a[0],a[1],b[0],b[1])
+                    strength = .84*(1-i/len(p["trail"]))+.08
+                    self.canvas.itemconfigure(line,fill=blend_hex(SPLASH_BACKGROUND,p["color"],strength),width=max(1,3.2-i*.13))
+                else: self.canvas.coords(line,-5,-5,-5,-5)
+            x,y = point
+            for glow,radius,strength in p["glows"]:
+                r = radius*(1+.045*math.sin(self.phase*2+radius))
+                self.canvas.coords(glow,x-r,y-r,x+r,y+r)
+                self.canvas.itemconfigure(glow,fill=blend_hex(SPLASH_BACKGROUND,p["color"],strength))
+        for m in list(self.active_texts):
+            m["age"] += 30; age = m["age"]
+            y = m["start_y"] - self.height*.078*min(1,age/850)
+            fade = max(0,min(.97,(age-650)/520))
+            appear = .18+.82*min(1,age/240)
+            for (item,x),original in zip(m["glyphs"],m["colors"]):
+                self.canvas.coords(item,x,y)
+                self.canvas.itemconfigure(item,fill=blend_hex(SPLASH_BACKGROUND,original,appear*(1-fade)))
+            if age > 1520:
+                self.canvas.delete(m["tag"]); self.active_texts.remove(m)
+                try: m["font"].destroy()
+                except tk.TclError: pass
+        try: self._animation_after = self.window.after(30,self._animate)
+        except tk.TclError: self.close()
+
+    def finish(self, final_message, callback=None, *, hold_ms=1450):
+        if self._closed:
+            if callable(callback): callback()
+            return
+        self.looping = False; self._finish_callback = callback
+        if self._message_after is not None:
+            try: self.window.after_cancel(self._message_after)
+            except tk.TclError: pass
+            self._message_after = None
+        self._add_status(final_message)
+        if self._finish_after is not None:
+            try: self.window.after_cancel(self._finish_after)
+            except tk.TclError: pass
+        self._finish_after = self.window.after(hold_ms,self.close)
+
+    def close(self):
+        if self._closed: return
+        self._closed = True
+        for identifier in (self._animation_after,self._message_after,self._finish_after):
+            if identifier is not None:
+                try: self.window.after_cancel(identifier)
+                except tk.TclError: pass
+        try: self.window.destroy()
+        except tk.TclError: pass
+        for callback in (self.on_close,self._finish_callback):
+            if callable(callback):
+                try: callback()
+                except tk.TclError: pass
+
+
 class SpaceUIPrototype:
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root: tk.Tk, *, show_splash=True):
         self.root = root
         self.root.title(APP_NAME + "  •  v" + APP_VERSION)
         self.root.geometry("1280x830")
@@ -635,9 +990,8 @@ class SpaceUIPrototype:
         self._update_busy = False
         self._stop = threading.Event()
 
-        # Fixed gradient strip IDs are moved/colored in place, never deleted/recreated.
-        self.backdrop = GradientBackdrop(root, self)
-        self.backdrop.place(x=0, y=0, relwidth=1, relheight=1)
+        self.orbital_marks: list[OrbitalAtom] = []
+        self.splash: CosmicSplash | None = None
         self.shell = tk.Frame(root, bg=self.colors["bg"], bd=0, highlightthickness=0)
         self.shell.place(x=0, y=0, relwidth=1, relheight=1)
         self._build_shell()
@@ -645,7 +999,9 @@ class SpaceUIPrototype:
         self.show_page("home")
         self.apply_theme(refresh=False)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
-        if self.settings.get("update_check_on_startup", True):
+        if show_splash:
+            self.splash = CosmicSplash(root, mode="startup", looping=False, on_close=self._startup_splash_finished)
+        elif self.settings.get("update_check_on_startup", True):
             self.root.after(1800, self.check_update_async)
 
     def _settings_path(self) -> Path:
@@ -702,16 +1058,17 @@ class SpaceUIPrototype:
     def _build_shell(self):
         outer = tk.Frame(self.shell, bg=self.colors["bg"], padx=18, pady=16)
         outer.pack(fill="both", expand=True)
+        self.backdrop = GradientBackdrop(outer, self)
+        self.backdrop.place(x=0, y=0, relwidth=1, relheight=1)
+        self.backdrop.lower()
         self.sidebar = tk.Frame(outer, bg=self.colors["panel"], width=220, bd=0, highlightthickness=0)
         self.sidebar.pack(side="left", fill="y", padx=(0, 16))
         self.sidebar.pack_propagate(False)
 
         brand = tk.Frame(self.sidebar, bg=self.colors["panel"], padx=18, pady=20)
         brand.pack(fill="x")
-        mark = tk.Canvas(brand, width=42, height=42, bg=self.colors["panel"], highlightthickness=0, bd=0)
+        mark = OrbitalAtom(brand, self, size=42)
         mark.pack(side="left", padx=(0, 11))
-        mark.create_oval(3, 3, 39, 39, fill=self.colors["surface"], outline=self.colors["border"], width=1)
-        mark.create_text(21, 21, text="✦", fill=self.colors["accent2"], font=("Segoe UI Symbol", 20, "bold"))
         titlebox = tk.Frame(brand, bg=self.colors["panel"])
         titlebox.pack(side="left", fill="x", expand=True)
         self.label(titlebox, "MEDIA LAB", "fg", "panel", 10, "bold").pack(anchor="w")
@@ -730,11 +1087,11 @@ class SpaceUIPrototype:
         ]
         self.nav_container = tk.Frame(self.sidebar, bg=self.colors["panel"])
         self.nav_container.pack(fill="x", padx=10)
-        for key, glyph, text in navigation:
+        for nav_index, (key, glyph, text) in enumerate(navigation):
             nav = tk.Canvas(self.nav_container, width=194, height=43, bg=self.colors["panel"], bd=0, highlightthickness=0, cursor="hand2")
             nav.pack(fill="x", pady=2)
-            shape = nav.create_polygon(*rounded_points(1, 1, 192, 42, 12), fill=self.colors["panel"], outline="")
-            icon = nav.create_text(24, 21, text=glyph, fill=self.colors["muted"], font=("Segoe UI Symbol", 15, "bold"))
+            shape = nav.create_polygon(*rounded_points(1, 1, 192, 42, 12, steps=14), fill=self.colors["panel"], outline="")
+            icon = draw_orbit_icon(nav, 24, 21, self.colors["muted"], variant=nav_index)
             label = nav.create_text(48, 21, text=text, anchor="w", fill=self.colors["muted"], font=("Segoe UI", 10))
             nav.bind("<Button-1>", lambda _event, name=key: self.show_page(name))
             nav.bind("<Enter>", lambda _event, name=key: self._nav_hover(name, True))
@@ -790,6 +1147,16 @@ class SpaceUIPrototype:
             pane.pack(fill="both", expand=True)
             builder(pane.body)
 
+    def _startup_splash_finished(self):
+        self.splash = None
+        try:
+            self.root.deiconify(); self.root.lift(); self.root.focus_force()
+        except tk.TclError:
+            pass
+        if self.settings.get("update_check_on_startup", True):
+            try: self.root.after(900, self.check_update_async)
+            except tk.TclError: pass
+
     def label(self, parent, text, fg_key="fg", bg_key="panel", size=10, weight="normal", wraplength=None, **kwargs):
         widget = tk.Label(
             parent, text=text, bg=self.colors[bg_key], fg=self.colors[fg_key],
@@ -818,7 +1185,7 @@ class SpaceUIPrototype:
         return RoundedButton(parent, self, text, command, variant=variant, width=width)
 
     def _divider(self, parent, bg_key):
-        widget = tk.Frame(parent, bg=self.colors["border"], height=1)
+        widget = tk.Frame(parent, bg=self.colors["border"], height=2)
         widget.pack(fill="x", padx=16)
         widget._ui_bg_key = "border"
         return widget
@@ -1010,7 +1377,7 @@ class SpaceUIPrototype:
                 x0 = step * 105 / 40
                 x1 = (step + 1) * 105 / 40 + 1
                 swatch.create_rectangle(x0, 0, x1, 32, fill=blend_hex(first, second, step / 39), outline="")
-            swatch.create_polygon(*rounded_points(1, 1, 104, 31, 10), fill="", outline=self.colors["border"], width=1)
+            swatch.create_polygon(*rounded_points(1, 1, 104, 31, 10), fill="", outline=self.colors["border"], width=1.5)
             swatch.bind("<Button-1>", lambda _event, a=first, b=second: self._set_accent(a, b))
             self.label(holder, title, "muted", "panel", 8, "normal").pack(anchor="center", pady=(5, 0))
         custom_row = self.frame(accent.body, "panel")
@@ -1250,7 +1617,7 @@ class SpaceUIPrototype:
         for index in range(60):
             x0, x1 = width * index / 60, width * (index + 1) / 60 + 1
             self.accent_preview.create_rectangle(x0, 0, x1, 14, fill=blend_hex(self.settings["accent_color"], self.settings["accent_color_2"], index / 59), outline="", tags="gradient")
-        self.accent_preview.create_polygon(*rounded_points(1, 1, width - 1, 13, 6), fill="", outline=self.colors["border"])
+        self.accent_preview.create_polygon(*rounded_points(1, 1, width - 1, 13, 6), fill="", outline=self.colors["border"], width=1.5)
         self.accent_preview.tag_raise("gradient")
 
     def _apply_scrollbar_style(self):
@@ -1324,6 +1691,8 @@ class SpaceUIPrototype:
             button.refresh_theme()
         for toggle in self.toggles:
             toggle.refresh_theme()
+        for mark in self.orbital_marks:
+            mark.refresh_theme()
         for pane in self.scroll_panes:
             pane.refresh_theme()
         try:
@@ -1360,6 +1729,8 @@ class SpaceUIPrototype:
         if hasattr(self, "update_status_label"):
             self.update_status_label.configure(text="Consultando o manifesto da branch ui-debug…")
         self.toast("Verificando atualizações do canal de desenvolvimento…")
+        if user_initiated and self.splash is None:
+            self.splash = CosmicSplash(self.root, mode="update", looping=True)
 
         def worker():
             try:
@@ -1368,28 +1739,40 @@ class SpaceUIPrototype:
             except Exception as exc:
                 info, error = None, str(exc)
             def done():
-                self._update_busy = False
-                if error:
-                    text = "Não foi possível consultar a branch: " + error
+                latest = str((info or {}).get("version", ""))
+                newer = bool(info) and version_key(latest) > version_key(APP_VERSION)
+                final_message = ("Não foi possível verificar a atualização" if error else
+                    ("Nova versão disponível — pronta para sua confirmação" if newer else
+                     "Seu UI-debug já está na versão mais recente"))
+                def apply_result():
+                    self._update_busy = False
+                    if error:
+                        text = "Não foi possível consultar a branch: " + error
+                        if hasattr(self, "update_status_label"):
+                            self.update_status_label.configure(text=text)
+                        if user_initiated:
+                            self.toast("Falha ao verificar atualização. Confira a conexão.")
+                        return
+                    self.update_info = info
                     if hasattr(self, "update_status_label"):
-                        self.update_status_label.configure(text=text)
-                    if user_initiated:
-                        self.toast("Falha ao verificar atualização. Confira a conexão.")
-                    return
-                self.update_info = info
-                latest = str(info.get("version", ""))
-                newer = version_key(latest) > version_key(APP_VERSION)
-                if hasattr(self, "update_status_label"):
-                    if newer:
-                        self.update_status_label.configure(text="Nova versão disponível: " + latest + ". A instalação só começa após sua confirmação.")
-                    else:
-                        self.update_status_label.configure(text="Você já está na versão de desenvolvimento mais recente consultada: " + latest)
-                self.toast("Há uma atualização do UI-debug." if newer else "UI-debug consultado; nenhuma versão mais nova encontrada.")
-            try:
-                self.root.after(0, done)
-            except tk.TclError:
-                pass
+                        if newer:
+                            self.update_status_label.configure(text="Nova versão disponível: " + latest + ". A instalação só começa após sua confirmação.")
+                        else:
+                            self.update_status_label.configure(text="Você já está na versão de desenvolvimento mais recente consultada: " + latest)
+                    self.toast("Há uma atualização do UI-debug." if newer else "UI-debug consultado; nenhuma versão mais nova encontrada.")
+                splash = self.splash if user_initiated else None
+                if splash is not None:
+                    splash.finish(final_message, callback=lambda: self._finish_splash_then(apply_result, splash))
+                else:
+                    apply_result()
+            try: self.root.after(0, done)
+            except tk.TclError: pass
         threading.Thread(target=worker, name="ui-debug-update-check", daemon=True).start()
+
+    def _finish_splash_then(self, callback, splash):
+        if self.splash is splash:
+            self.splash = None
+        callback()
 
     def _install_update_if_available(self):
         if not self.update_info:
@@ -1418,39 +1801,61 @@ class SpaceUIPrototype:
         self._update_busy = True
         if hasattr(self, "update_status_label"):
             self.update_status_label.configure(text="Baixando e validando o pacote de desenvolvimento…")
+        if self.splash is None:
+            self.splash = CosmicSplash(self.root, mode="update", looping=True)
 
         def worker():
             try:
                 payload = read_update_bytes(ARCHIVE_URL, MAX_ARCHIVE_BYTES)
+                try:
+                    self.root.after(0, lambda: self.splash.set_stage("Pacote recebido — validando os arquivos com segurança") if self.splash else None)
+                except tk.TclError:
+                    pass
                 install_self_update(self.app_dir, payload)
-                result, error = True, None
+                error = None
             except Exception as exc:
-                result, error = False, str(exc)
+                error = str(exc)
             def done():
-                self._update_busy = False
-                if error:
-                    self.toast("Atualização cancelada: " + error)
+                def finish_install():
+                    self._update_busy = False
+                    if error:
+                        self.toast("Atualização cancelada: " + error)
+                        if hasattr(self, "update_status_label"):
+                            self.update_status_label.configure(text="Atualização não instalada: " + error)
+                        return
                     if hasattr(self, "update_status_label"):
-                        self.update_status_label.configure(text="Atualização não instalada: " + error)
-                    return
-                if messagebox.askyesno(
-                    "Atualização preparada",
-                    "Os arquivos foram atualizados. Reiniciar agora para carregar a nova versão?",
-                    parent=self.root,
-                ):
-                    try:
-                        subprocess.Popen([sys.executable, str(self.app_dir / "ui_debug.py")], cwd=str(self.app_dir))
-                        self.root.destroy()
-                    except OSError as exc:
-                        self.toast("Atualizado, mas não foi possível reiniciar automaticamente: " + str(exc))
-            try:
-                self.root.after(0, done)
-            except tk.TclError:
-                pass
+                        self.update_status_label.configure(text="Arquivos atualizados com segurança. Reinicie para carregar a nova versão.")
+                    if messagebox.askyesno(
+                        "Atualização preparada",
+                        "Os arquivos foram atualizados. Reiniciar agora para carregar a nova versão?",
+                        parent=self.root,
+                    ):
+                        try:
+                            subprocess.Popen([sys.executable, str(self.app_dir / "ui_debug.py")], cwd=str(self.app_dir))
+                            self.root.destroy()
+                        except OSError as exc:
+                            self.toast("Atualizado, mas não foi possível reiniciar automaticamente: " + str(exc))
+                    else:
+                        self.toast("Atualização instalada. Feche e abra o UI-debug para usar a versão nova.")
+                splash = self.splash
+                if splash is not None:
+                    splash.finish("Atualização interrompida com segurança" if error else
+                        "Nova órbita pronta — atualização preparada",
+                        callback=lambda: self._finish_splash_then(finish_install, splash))
+                else:
+                    finish_install()
+            try: self.root.after(0, done)
+            except tk.TclError: pass
         threading.Thread(target=worker, name="ui-debug-update-install", daemon=True).start()
 
     def close(self):
         self._stop.set()
+        if self.splash is not None:
+            self.splash.close()
+            self.splash = None
+        for mark in getattr(self, "orbital_marks", []):
+            try: mark.destroy()
+            except tk.TclError: pass
         self.root.destroy()
 
 
