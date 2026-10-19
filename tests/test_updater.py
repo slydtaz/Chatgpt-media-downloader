@@ -2,12 +2,12 @@ import hashlib
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 from app.platform import SystemInfo
 from app.updater import (
-    ReleaseAsset, _trusted_github_api_url, _trusted_github_url, _verify_checksum,
+    ReleaseAsset, UpdateError, _download, _trusted_github_api_url, _trusted_github_url, _verify_checksum,
     ff_asset_name, yt_asset_name,
 )
 
@@ -71,6 +71,18 @@ class DependencyDownloadTrustTests(unittest.TestCase):
         ):
             with self.subTest(url=url):
                 self.assertFalse(_trusted_github_api_url(url))
+
+
+    def test_dependency_download_rejects_untrusted_redirect_destination(self):
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.geturl.return_value = "https://attacker.example/payload.exe"
+        with TemporaryDirectory() as tmp:
+            destination = Path(tmp) / "tool.exe"
+            with patch("app.updater.urllib.request.urlopen", return_value=response):
+                with self.assertRaises(UpdateError):
+                    _download("https://github.com/project/tool/releases/download/v1/tool.exe", destination)
+            self.assertFalse(destination.exists())
 
     def test_missing_upstream_checksum_manifest_fails_closed(self):
         asset = ReleaseAsset("tool.exe", "https://github.com/project/tool/releases/download/v1/tool.exe", 4)
