@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import lzma
 import os
-import re
 import shutil
 import stat
 import subprocess
@@ -289,10 +288,20 @@ def extract_archive(archive: Path, destination: Path) -> None:
         if not candidates:
             raise ValueError("O arquivo compactado não contém uma ferramenta de mídia reconhecida.")
 
-        # Stage every tool before touching an installed file. os.replace replaces a
-        # destination symlink itself rather than following it to an external target.
+        # Different folders can contain the same basename. Reject this ambiguity
+        # instead of letting archive order silently decide which executable wins.
+        seen_names: set[str] = set()
+        for candidate in candidates:
+            basename = candidate.name.casefold()
+            if basename in seen_names:
+                raise ValueError("O arquivo compactado contém ferramentas com nomes duplicados.")
+            seen_names.add(basename)
+
         staged: list[tuple[Path, Path]] = []
+        backups: list[tuple[Path, Path]] = []
+        promoted: list[Path] = []
         try:
+            # Stage every tool before touching installed files.
             for candidate in candidates:
                 target = destination_root / candidate.name
                 if _is_reparse_directory(target) or (target.exists() and not target.is_file()):
@@ -304,11 +313,43 @@ def extract_archive(archive: Path, destination: Path) -> None:
                     staging_path.chmod(staging_path.stat().st_mode | 0o111)
                 staged.append((staging_path, target))
 
-            for staging_path, target in staged:
+            for _staging_path, target in staged:
                 if _is_reparse_directory(target) or (target.exists() and not target.is_file()):
                     raise ValueError("O destino da ferramenta mudou para um caminho inseguro.")
+
+            # Keep original binaries until every staged file has been promoted.
+            token = uuid.uuid4().hex
+            for _staging_path, target in staged:
+                if target.exists():
+                    backup = destination_root / f".{target.name}.{token}.backup"
+                    os.replace(target, backup)
+                    backups.append((backup, target))
             for staging_path, target in staged:
                 os.replace(staging_path, target)
+                promoted.append(target)
+        except OSError as exc:
+            for target in reversed(promoted):
+                try:
+                    target.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            rollback_errors: list[str] = []
+            for backup, target in reversed(backups):
+                try:
+                    if backup.exists():
+                        os.replace(backup, target)
+                except OSError as rollback_exc:
+                    rollback_errors.append(f"{target.name}: {rollback_exc}")
+            detail = "Não foi possível instalar as ferramentas; a versão anterior foi preservada quando possível."
+            if rollback_errors:
+                detail += " Falha ao restaurar backup: " + "; ".join(rollback_errors)
+            raise ValueError(detail) from exc
+        else:
+            for backup, _target in backups:
+                try:
+                    backup.unlink(missing_ok=True)
+                except OSError:
+                    pass
         finally:
             for staging_path, _target in staged:
                 staging_path.unlink(missing_ok=True)
