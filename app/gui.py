@@ -485,7 +485,9 @@ class MediaDownloaderApp:
         ttk.Label(footer,text="Dica: use o gerenciador de playlists para escolher itens individualmente.",style="Muted.TLabel").pack(side="left")
         self.cancel_btn=ttk.Button(footer,text="Cancelar download",style="Secondary.TButton",command=self.cancel_download,state="disabled")
         self.cancel_btn.pack(side="right")
+    @staticmethod
     def _strategy_label(value: str) -> str:
+        """Format the stored playlist strategy; callable through class or instance."""
         return "Paralelo (mais rápido)" if value == "parallel" else "Um por vez (recomendado)"
 
     @staticmethod
