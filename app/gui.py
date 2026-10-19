@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import tkinter as tk
 from pathlib import Path
 from tkinter import colorchooser, filedialog, messagebox, ttk
+from tkinter import font as tkfont
 from typing import Callable
 
 from .config import (
@@ -315,9 +316,291 @@ class IconNavButton(tk.Canvas):
             pass
 
 
+class RoundedGlowButton(tk.Canvas):
+    """A real clickable Canvas button with rounded pink-violet styling and native keyboard support."""
+
+    def __init__(self, parent, **kwargs):
+        self.app = getattr(parent.winfo_toplevel(), "_media_downloader_app", None)
+        if self.app is None:
+            raise RuntimeError("RoundedGlowButton requires a registered application window.")
+        self.text = str(kwargs.pop("text", ""))
+        self.command = kwargs.pop("command", None)
+        self.style_name = str(kwargs.pop("style", "Secondary.TButton"))
+        self._state = str(kwargs.pop("state", "normal"))
+        width_units = kwargs.pop("width", None)
+        kwargs.pop("padding", None)
+        kwargs.pop("default", None)
+        kwargs.pop("underline", None)
+        self._pressed = False
+        self._hovered = False
+        self._focused = False
+        self._textvariable = kwargs.pop("textvariable", None)
+        self._font = tkfont.Font(
+            root=self.app.root, family="Segoe UI",
+            size=9 if self.style_name == "Help.TButton" else 10,
+            weight="bold" if self.style_name == "Accent.TButton" else "normal",
+        )
+        self._height = 28 if self.style_name == "Help.TButton" else (40 if self.style_name == "Accent.TButton" else 36)
+        measured = self._font.measure(self.text)
+        if self._textvariable is not None:
+            try:
+                self.text = str(self._textvariable.get())
+                measured = self._font.measure(self.text)
+                self._textvariable.trace_add("write", self._text_changed)
+            except Exception:
+                self._textvariable = None
+        if width_units is not None and self.style_name == "Help.TButton":
+            self._natural_width = 38
+        else:
+            self._natural_width = max(48, min(420, measured + (28 if self.style_name != "Help.TButton" else 18)))
+        bg = self._parent_background(parent)
+        super().__init__(
+            parent, width=self._natural_width, height=self._height,
+            bd=0, borderwidth=0, highlightthickness=0, takefocus=1,
+            cursor="hand2" if self._state != "disabled" else "arrow",
+            background=bg,
+        )
+        self.bind("<Configure>", lambda _event: self._draw(), add="+")
+        self.bind("<Enter>", self._on_enter, add="+")
+        self.bind("<Leave>", self._on_leave, add="+")
+        self.bind("<ButtonPress-1>", self._on_press, add="+")
+        self.bind("<ButtonRelease-1>", self._on_release, add="+")
+        self.bind("<FocusIn>", self._on_focus_in, add="+")
+        self.bind("<FocusOut>", self._on_focus_out, add="+")
+        self.bind("<Return>", self._on_keyboard_activate, add="+")
+        self.bind("<space>", self._on_keyboard_activate, add="+")
+        self._draw()
+
+    def _text_changed(self, *_args):
+        try:
+            self.text = str(self._textvariable.get())
+        except Exception:
+            pass
+        self._recalculate_size()
+        self._draw()
+
+    def _parent_background(self, parent):
+        colors = self.app.colors
+        if isinstance(parent, RoundedCard):
+            return colors.get(parent.backdrop_key, colors["bg"])
+        try:
+            style_name = str(parent.cget("style") or "TFrame")
+        except (tk.TclError, TypeError):
+            style_name = "TFrame"
+        key = {
+            "Card.TFrame": "panel",
+            "Hero.TFrame": "panel2",
+            "Sidebar.TFrame": "panel2",
+            "Topbar.TFrame": "bg",
+            "RoundedCard.TFrame": "panel",
+        }.get(style_name, "bg")
+        return colors.get(key, colors["bg"])
+
+    def _recalculate_size(self):
+        measured = self._font.measure(self.text)
+        self._natural_width = max(48, min(420, measured + (28 if self.style_name != "Help.TButton" else 18)))
+        try:
+            tk.Canvas.configure(self, width=self._natural_width, height=self._height)
+        except tk.TclError:
+            pass
+
+    @staticmethod
+    def _span(y, top, bottom, left, right, radius):
+        center_y = (top + bottom) / 2.0
+        half_height = (bottom - top) / 2.0
+        depth = abs(y - center_y) - (half_height - radius)
+        inset = radius - math.sqrt(max(0.0, radius * radius - depth * depth)) if depth > 0 else 0.0
+        return math.ceil(left + inset), math.floor(right - inset)
+
+    def _palette(self):
+        c = self.app.colors
+        if self.style_name == "Accent.TButton":
+            edge = _blend_hex(c.get("pink", "#F472B6"), "#FFFFFF", 0.16)
+            top = _blend_hex(c.get("pink", "#F472B6"), c["accent"], 0.26)
+            bottom = _blend_hex(c["accent"], c.get("accent2", "#D946EF"), 0.32)
+            text_color = "#FFFFFF"
+        elif self.style_name == "Danger.TButton":
+            edge = _blend_hex(c["bad"], "#FFFFFF", 0.20)
+            top = _blend_hex(c["bad"], "#F43F5E", 0.35)
+            bottom = _blend_hex(c["bad"], c["accent"], 0.24)
+            text_color = "#FFFFFF"
+        elif self.style_name == "Help.TButton":
+            edge = c.get("accent2", c["accent"])
+            top = _blend_hex(c["accent"], c["panel2"], 0.18)
+            bottom = _blend_hex(c["accent"], c["panel"], 0.40)
+            text_color = "#FFFFFF"
+        else:
+            edge = _blend_hex(c.get("pink", "#F472B6"), c["accent"], 0.20)
+            top = _blend_hex(c["pink"] if "pink" in c else "#F472B6", c["accent"], 0.54)
+            bottom = _blend_hex(c["accent"], c["panel2"], 0.20)
+            text_color = "#FFFFFF"
+        if self._state == "disabled":
+            edge = _blend_hex(edge, c["muted"], 0.56)
+            top = _blend_hex(top, c["panel2"], 0.60)
+            bottom = _blend_hex(bottom, c["panel2"], 0.64)
+            text_color = _blend_hex(c["fg"], c["panel2"], 0.42)
+        elif self._pressed:
+            top = _blend_hex(top, "#000000", 0.16)
+            bottom = _blend_hex(bottom, "#000000", 0.20)
+        elif self._hovered or self._focused:
+            edge = _blend_hex(edge, "#FFFFFF", 0.28)
+            top = _blend_hex(top, "#FFFFFF", 0.12)
+            bottom = _blend_hex(bottom, "#D8B4FE", 0.12)
+        return edge, top, bottom, text_color
+
+    def _draw(self):
+        try:
+            width = max(self._natural_width, self.winfo_width(), 38)
+            height = max(self._height, self.winfo_height(), 26)
+            c = self.app.colors
+            bg = self._parent_background(self.master)
+            tk.Canvas.configure(
+                self, background=bg,
+                cursor="arrow" if self._state == "disabled" else "hand2",
+            )
+            self.delete("all")
+            edge, top, bottom, text_color = self._palette()
+            outer_radius = max(9, height / 2 - 1)
+            inner_radius = max(7, height / 2 - 3)
+            self.create_polygon(
+                _rounded_polygon(1.2, 1.2, width - 1.2, height - 1.2, outer_radius),
+                fill=_blend_hex(edge, bg, 0.24), outline=edge, width=1.4,
+            )
+            x0, y0, x1, y1 = 3, 3, width - 3, height - 3
+            self.create_polygon(
+                _rounded_polygon(x0, y0, x1, y1, inner_radius),
+                fill=bottom, outline="",
+            )
+            for y in range(y0 + 1, y1):
+                left, right = self._span(y, y0 + 1, y1 - 1, x0 + 1, x1 - 1, inner_radius - 1)
+                if left <= right:
+                    t = (y - y0) / max(1, y1 - y0)
+                    color = _blend_hex(top, bottom, max(0.0, min(1.0, t)))
+                    self.create_line(left, y, right, y, fill=color, width=1)
+            self.create_polygon(
+                _rounded_polygon(1.2, 1.2, width - 1.2, height - 1.2, outer_radius),
+                fill="", outline=edge, width=1.1,
+            )
+            self.create_line(
+                min(width / 2 - 10, 26), 4,
+                max(width / 2 + 10, width - 26), 4,
+                fill=_blend_hex(edge, "#FFFFFF", 0.34 if self._hovered else 0.16),
+                width=1,
+            )
+            self.create_text(
+                width / 2, height / 2 + (0.5 if self._pressed else 0),
+                text=self.text, fill=text_color, font=self._font,
+                anchor="center", width=max(10, width - 20),
+            )
+        except tk.TclError:
+            pass
+
+    def _on_enter(self, _event=None):
+        self._hovered = True
+        self._draw()
+
+    def _on_leave(self, _event=None):
+        self._hovered = False
+        self._pressed = False
+        self._draw()
+
+    def _on_press(self, _event=None):
+        if self._state == "disabled":
+            return "break"
+        self._pressed = True
+        self.focus_set()
+        self._draw()
+        return None
+
+    def _on_release(self, event=None):
+        should_invoke = self._pressed and self._state != "disabled"
+        if event is not None:
+            should_invoke = should_invoke and 0 <= event.x <= self.winfo_width() and 0 <= event.y <= self.winfo_height()
+        self._pressed = False
+        self._draw()
+        if should_invoke:
+            self.invoke()
+        return None
+
+    def _on_keyboard_activate(self, _event=None):
+        if self._state != "disabled":
+            self._pressed = True
+            self._draw()
+            self.after(75, self._release_keyboard)
+            self.invoke()
+        return "break"
+
+    def _release_keyboard(self):
+        self._pressed = False
+        self._draw()
+
+    def _on_focus_in(self, _event=None):
+        self._focused = True
+        self._draw()
+
+    def _on_focus_out(self, _event=None):
+        self._focused = False
+        self._draw()
+
+    def refresh_theme(self):
+        self._draw()
+
+    def invoke(self):
+        if self._state == "disabled" or not callable(self.command):
+            return None
+        return self.command()
+
+    def configure(self, cnf=None, **kwargs):
+        if isinstance(cnf, dict):
+            kwargs = {**cnf, **kwargs}
+        if not kwargs:
+            return tk.Canvas.configure(self)
+        if "text" in kwargs:
+            self.text = str(kwargs.pop("text"))
+            self._recalculate_size()
+        if "command" in kwargs:
+            self.command = kwargs.pop("command")
+        if "style" in kwargs:
+            self.style_name = str(kwargs.pop("style"))
+            self._font.configure(
+                size=9 if self.style_name == "Help.TButton" else 10,
+                weight="bold" if self.style_name == "Accent.TButton" else "normal",
+            )
+            self._height = 28 if self.style_name == "Help.TButton" else (40 if self.style_name == "Accent.TButton" else 36)
+            self._recalculate_size()
+        if "state" in kwargs:
+            self._state = str(kwargs.pop("state"))
+            self._pressed = False
+        if "width" in kwargs:
+            value = kwargs.pop("width")
+            if isinstance(value, (int, float)) and self.style_name == "Help.TButton":
+                self._natural_width = max(34, int(value) * 10 + 18)
+                tk.Canvas.configure(self, width=self._natural_width)
+        if "padding" in kwargs:
+            kwargs.pop("padding")
+        allowed = {k: v for k, v in kwargs.items() if k in {"background", "bg", "cursor", "takefocus", "height", "highlightthickness", "highlightbackground", "highlightcolor"}}
+        if allowed:
+            tk.Canvas.configure(self, **allowed)
+        self._draw()
+
+    config = configure
+
+    def cget(self, key):
+        if key == "text":
+            return self.text
+        if key == "state":
+            return self._state
+        if key == "style":
+            return self.style_name
+        if key == "command":
+            return self.command
+        return tk.Canvas.cget(self, key)
+
+
 class MediaDownloaderApp:
     def __init__(self, root: tk.Tk):
         self.root = root
+        self.root._media_downloader_app = self
         self.system = detect_system()
         self.config = load_config()
         self.install_id = ensure_install_id()
@@ -335,7 +618,6 @@ class MediaDownloaderApp:
         except tk.TclError:
             pass
         self.brand_images = load_brand_images(root)
-        self._install_button_skin()
         self.palette_name = "light"
         self.colors: dict[str, str] = {}
         self._apply_theme(self.config.get("theme", "system"))
@@ -417,33 +699,6 @@ class MediaDownloaderApp:
         # Small GPU-free Canvas animation inspired by SKlauncher 4.0's cosmic theme.
         self._hero_animation_job = self.root.after(180, self._animate_hero_visual)
         self.root.after(2200, self._maybe_start_update_check)
-
-    def _install_button_skin(self):
-        """Give native ttk buttons a resizable rounded gradient skin without replacing their behavior."""
-        try:
-            self.style.element_create(
-                "CosmicButton.border", "image", self.brand_images["button_normal"],
-                ("pressed", self.brand_images["button_pressed"]),
-                ("active", self.brand_images["button_hover"]),
-                border=(5, 3, 5, 3), sticky="nsew",
-            )
-
-            def replace_border(layout):
-                result = []
-                for element, options in layout:
-                    current = dict(options)
-                    if "children" in current:
-                        current["children"] = replace_border(current["children"])
-                    if element == "Button.border":
-                        element = "CosmicButton.border"
-                    result.append((element, current))
-                return result
-
-            base_layout = self.style.layout("TButton")
-            self.style.layout("TButton", replace_border(base_layout))
-        except tk.TclError:
-            # Retain native clickable controls if the platform theme lacks the clam border element.
-            self.logger.warning("Não foi possível aplicar o tema arredondado dos botões.", exc_info=True)
 
     # ---------- Theme ----------
     def _resolve_theme(self, requested: str) -> str:
@@ -590,7 +845,7 @@ class MediaDownloaderApp:
         header_actions=ttk.Frame(header,style="Topbar.TFrame")
         header_actions.pack(side="right",anchor="n",padx=(10,0),pady=(9,0))
         ttk.Label(header_actions,text=f"v{VERSION}",style="SectionBadge.TLabel").pack(side="left",padx=(0,8))
-        self.header_update_btn=ttk.Button(header_actions,text="Atualizações  ↗",style="Secondary.TButton",command=lambda:self.show_page("updates"))
+        self.header_update_btn=RoundedGlowButton(header_actions,text="Atualizações  ↗",style="Secondary.TButton",command=lambda:self.show_page("updates"))
         self.header_update_btn.pack(side="left")
         self.pages_area=ttk.Frame(content_wrap)
         self.pages_area.pack(fill="both",expand=True)
@@ -641,9 +896,9 @@ class MediaDownloaderApp:
         self._sync_quality()
         buttons=ttk.Frame(controls,style="Hero.TFrame")
         buttons.pack(side="right",anchor="s",padx=(12,0))
-        self.download_btn=ttk.Button(buttons,text="↓  BAIXAR AGORA",style="Accent.TButton",command=self.start_download)
+        self.download_btn=RoundedGlowButton(buttons,text="↓  BAIXAR AGORA",style="Accent.TButton",command=self.start_download)
         self.download_btn.pack(side="right")
-        self.analyze_playlist_btn=ttk.Button(buttons,text="Analisar playlist",style="Secondary.TButton",command=self._start_playlist_analysis)
+        self.analyze_playlist_btn=RoundedGlowButton(buttons,text="Analisar playlist",style="Secondary.TButton",command=self._start_playlist_analysis)
         self.analyze_playlist_btn.pack(side="right",padx=(0,8))
         progress_card=self._card(frame,16)
         progress_card.pack(fill="x",pady=(0,13))
@@ -667,7 +922,7 @@ class MediaDownloaderApp:
         top_log.pack(fill="x")
         ttk.Label(top_log,text="Console de atividade",style="CardTitle.TLabel").pack(side="left")
         ttk.Label(top_log,textvariable=self.log_mode_var,style="Muted.TLabel",font=("Segoe UI",8,"bold")).pack(side="left",padx=(9,0),pady=(2,0))
-        ttk.Button(top_log,text="Limpar",style="Secondary.TButton",command=self._clear_log).pack(side="right")
+        RoundedGlowButton(top_log,text="Limpar",style="Secondary.TButton",command=self._clear_log).pack(side="right")
         log_frame=ttk.Frame(log_card,style="Card.TFrame")
         log_frame.pack(fill="both",expand=True,pady=(9,0))
         self.log_text=tk.Text(log_frame,bg=self.colors["field"],fg=self.colors["fg"],insertbackground=self.colors["fg"],selectbackground=self.colors["accent"],selectforeground=self.colors["accent_fg"],relief="flat",wrap="word",font=("Cascadia Code",9),padx=12,pady=10,borderwidth=0)
@@ -678,7 +933,7 @@ class MediaDownloaderApp:
         footer=ttk.Frame(frame)
         footer.pack(fill="x",pady=(9,0))
         ttk.Label(footer,text="Dica: use o gerenciador de playlists para escolher itens individualmente.",style="Muted.TLabel").pack(side="left")
-        self.cancel_btn=ttk.Button(footer,text="Cancelar download",style="Secondary.TButton",command=self.cancel_download,state="disabled")
+        self.cancel_btn=RoundedGlowButton(footer,text="Cancelar download",style="Secondary.TButton",command=self.cancel_download,state="disabled")
         self.cancel_btn.pack(side="right")
     @staticmethod
     def _strategy_label(value: str) -> str:
@@ -715,10 +970,10 @@ class MediaDownloaderApp:
         search = ttk.Entry(toolbar, textvariable=self.playlist_search_var, width=24)
         search.pack(side="left", padx=(7, 10))
         self.playlist_search_var.trace_add("write", lambda *_: self._render_playlist_rows())
-        ttk.Button(toolbar, text="Marcar visíveis", style="Secondary.TButton", command=lambda: self._set_visible_playlist_included(True)).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Desmarcar visíveis", style="Secondary.TButton", command=lambda: self._set_visible_playlist_included(False)).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Inverter", style="Secondary.TButton", command=self._invert_visible_playlist_items).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Analisar novamente", style="Secondary.TButton", command=self._reanalyze_playlist).pack(side="right")
+        RoundedGlowButton(toolbar, text="Marcar visíveis", style="Secondary.TButton", command=lambda: self._set_visible_playlist_included(True)).pack(side="left", padx=2)
+        RoundedGlowButton(toolbar, text="Desmarcar visíveis", style="Secondary.TButton", command=lambda: self._set_visible_playlist_included(False)).pack(side="left", padx=2)
+        RoundedGlowButton(toolbar, text="Inverter", style="Secondary.TButton", command=self._invert_visible_playlist_items).pack(side="left", padx=2)
+        RoundedGlowButton(toolbar, text="Analisar novamente", style="Secondary.TButton", command=self._reanalyze_playlist).pack(side="right")
 
         table_card = self._card(frame, 8)
         table_card.pack(fill="both", expand=True, pady=(0, 10))
@@ -756,7 +1011,7 @@ class MediaDownloaderApp:
         self.playlist_editor_quality = ttk.Combobox(controls, textvariable=self.playlist_editor_quality_var, state="readonly", width=15)
         self.playlist_editor_quality.pack(side="left", padx=(5, 12))
         self._sync_playlist_editor_quality()
-        ttk.Button(controls, text="Aplicar aos selecionados", style="Secondary.TButton", command=self._apply_playlist_item_settings).pack(side="right")
+        RoundedGlowButton(controls, text="Aplicar aos selecionados", style="Secondary.TButton", command=self._apply_playlist_item_settings).pack(side="right")
 
         bottom = ttk.Frame(frame)
         bottom.pack(fill="x")
@@ -768,7 +1023,7 @@ class MediaDownloaderApp:
         ttk.Label(strategy, text="Simultâneos", style="Muted.TLabel").pack(side="left")
         self.playlist_parallelism_combo = ttk.Combobox(strategy, textvariable=self.playlist_parallelism_var, values=["2", "3", "4", "6"], state="readonly", width=4)
         self.playlist_parallelism_combo.pack(side="left", padx=6)
-        ttk.Button(bottom, text="BAIXAR ITENS MARCADOS", style="Accent.TButton", command=self._start_selected_playlist_download).pack(side="right")
+        RoundedGlowButton(bottom, text="BAIXAR ITENS MARCADOS", style="Accent.TButton", command=self._start_selected_playlist_download).pack(side="right")
         self._render_playlist_rows()
 
     # ---------- Settings ----------
@@ -778,7 +1033,7 @@ class MediaDownloaderApp:
         head = ttk.Frame(card, style="Card.TFrame")
         head.pack(fill="x")
         ttk.Label(head, text=label, style="CardTitle.TLabel").pack(side="left")
-        q = ttk.Button(head, text="?", style="Help.TButton")
+        q = RoundedGlowButton(head, text="?", style="Help.TButton")
         q.pack(side="left", padx=(7, 0))
         Tooltip(q, description)
         self.settings_vars[key] = tk.StringVar(value=str(self.config.get(key, "")))
@@ -797,9 +1052,9 @@ class MediaDownloaderApp:
                     value = filedialog.askopenfilename(parent=self.root, filetypes=[("Executáveis", "*.exe" if os.name == "nt" else "*"), ("Todos os arquivos", "*.*")])
                 if value:
                     self.settings_vars[key].set(value)
-            ttk.Button(actions, text="Selecionar pasta" if browse == "dir" else "Selecionar arquivo", style="Secondary.TButton", command=choose).pack(side="left")
-        ttk.Button(actions, text="↺ Padrão", style="Secondary.TButton", command=lambda k=key: self.reset_setting(k, "default")).pack(side="right", padx=(7, 0))
-        ttk.Button(actions, text="⏮ Inicial", style="Secondary.TButton", command=lambda k=key: self.reset_setting(k, "baseline")).pack(side="right")
+            RoundedGlowButton(actions, text="Selecionar pasta" if browse == "dir" else "Selecionar arquivo", style="Secondary.TButton", command=choose).pack(side="left")
+        RoundedGlowButton(actions, text="↺ Padrão", style="Secondary.TButton", command=lambda k=key: self.reset_setting(k, "default")).pack(side="right", padx=(7, 0))
+        RoundedGlowButton(actions, text="⏮ Inicial", style="Secondary.TButton", command=lambda k=key: self.reset_setting(k, "baseline")).pack(side="right")
 
     def _build_settings(self):
         frame=ttk.Frame(self.pages_area)
@@ -831,13 +1086,13 @@ class MediaDownloaderApp:
         accent_entry_wrap.pack(side="left",fill="x",expand=True)
         ttk.Label(accent_entry_wrap,text="COR DE DESTAQUE · HEX",style="Muted.TLabel",font=("Segoe UI",8,"bold")).pack(anchor="w",pady=(0,4))
         ttk.Entry(accent_entry_wrap,textvariable=self.settings_vars["accent_color"]).pack(fill="x")
-        ttk.Button(accent_row,text="Escolher cor…",style="Secondary.TButton",command=self._choose_accent_color).pack(side="left",padx=(10,0),anchor="s")
-        ttk.Button(accent_row,text="↺ Padrão",style="Secondary.TButton",command=lambda:self.reset_setting("accent_color","default")).pack(side="left",padx=(7,0),anchor="s")
+        RoundedGlowButton(accent_row,text="Escolher cor…",style="Secondary.TButton",command=self._choose_accent_color).pack(side="left",padx=(10,0),anchor="s")
+        RoundedGlowButton(accent_row,text="↺ Padrão",style="Secondary.TButton",command=lambda:self.reset_setting("accent_color","default")).pack(side="left",padx=(7,0),anchor="s")
         presets=ttk.Frame(appearance,style="Card.TFrame")
         presets.pack(fill="x",pady=(10,0))
         ttk.Label(presets,text="PALETAS RÁPIDAS",style="Muted.TLabel",font=("Segoe UI",8,"bold")).pack(side="left",padx=(0,10))
         for name,color in (("Violeta","#8B5CF6"),("Azul","#3B82F6"),("Ciano","#06B6D4"),("Verde","#10B981"),("Rosa","#EC4899"),("Âmbar","#F59E0B")):
-            ttk.Button(presets,text=name,style="Secondary.TButton",command=lambda c=color:self.settings_vars["accent_color"].set(c)).pack(side="left",padx=(0,5))
+            RoundedGlowButton(presets,text=name,style="Secondary.TButton",command=lambda c=color:self.settings_vars["accent_color"].set(c)).pack(side="left",padx=(0,5))
         dev_mode_row=ttk.Frame(appearance,style="Card.TFrame")
         dev_mode_row.pack(fill="x",pady=(14,0))
         ttk.Checkbutton(
@@ -875,9 +1130,9 @@ class MediaDownloaderApp:
         self._setting_row(body,"subtitle_mode","Legendas de vídeo","Selecione quais legendas salvar.",choices=["Desativadas","Legendas manuais","Manuais + automáticas"])
         actions=ttk.Frame(body)
         actions.pack(fill="x",pady=(12,24))
-        ttk.Button(actions,text="Salvar personalização",style="Accent.TButton",command=self.save_settings).pack(side="right")
-        ttk.Button(actions,text="Reverter tudo para padrão",style="Secondary.TButton",command=lambda:self.reset_all("default")).pack(side="left")
-        ttk.Button(actions,text="Reverter para instalação inicial",style="Secondary.TButton",command=lambda:self.reset_all("baseline")).pack(side="left",padx=(8,0))
+        RoundedGlowButton(actions,text="Salvar personalização",style="Accent.TButton",command=self.save_settings).pack(side="right")
+        RoundedGlowButton(actions,text="Reverter tudo para padrão",style="Secondary.TButton",command=lambda:self.reset_all("default")).pack(side="left")
+        RoundedGlowButton(actions,text="Reverter para instalação inicial",style="Secondary.TButton",command=lambda:self.reset_all("baseline")).pack(side="left",padx=(8,0))
         note=self._card(body,12)
         note.pack(fill="x",pady=(0,20))
         ttk.Label(note,text="Como as personalizações são salvas",style="CardTitle.TLabel").pack(anchor="w")
@@ -1009,10 +1264,10 @@ class MediaDownloaderApp:
 
         actions = ttk.Frame(body)
         actions.pack(fill="x", pady=(14, 24))
-        self.install_btn = ttk.Button(actions, text="Instalar/Reparar automaticamente", style="Accent.TButton", command=self.install_dependencies_async)
+        self.install_btn = RoundedGlowButton(actions, text="Instalar/Reparar automaticamente", style="Accent.TButton", command=self.install_dependencies_async)
         self.install_btn.pack(side="left")
-        ttk.Button(actions, text="Atualizar informações", style="Secondary.TButton", command=lambda: self._refresh_dependencies(force=True)).pack(side="left", padx=(8, 0))
-        ttk.Button(actions, text="Abrir Configurações", style="Secondary.TButton", command=lambda: self.show_page("settings")).pack(side="right")
+        RoundedGlowButton(actions, text="Atualizar informações", style="Secondary.TButton", command=lambda: self._refresh_dependencies(force=True)).pack(side="left", padx=(8, 0))
+        RoundedGlowButton(actions, text="Abrir Configurações", style="Secondary.TButton", command=lambda: self.show_page("settings")).pack(side="right")
 
         info = self._card(body, 12)
         info.pack(fill="x")
@@ -1152,22 +1407,22 @@ class MediaDownloaderApp:
         actions.pack(fill="x", pady=(0, 12))
         buttons = ttk.Frame(actions, style="Card.TFrame")
         buttons.pack(fill="x")
-        self.app_update_check_button = ttk.Button(
+        self.app_update_check_button = RoundedGlowButton(
             buttons, text="Verificar atualizações", style="Accent.TButton",
             command=lambda: self._start_app_update_check(user_initiated=True),
         )
         self.app_update_check_button.pack(side="left")
-        self.app_update_install_button = ttk.Button(
+        self.app_update_install_button = RoundedGlowButton(
             buttons, text="Baixar e instalar", style="Secondary.TButton",
             state="disabled", command=self._show_cached_update_prompt,
         )
         self.app_update_install_button.pack(side="left", padx=(8, 0))
-        self.app_uninstall_button = ttk.Button(
+        self.app_uninstall_button = RoundedGlowButton(
             buttons, text="Desinstalar aplicativo", style="Secondary.TButton",
             command=self._start_uninstall,
         )
         self.app_uninstall_button.pack(side="left", padx=(8, 0))
-        self.app_update_repair_button = ttk.Button(
+        self.app_update_repair_button = RoundedGlowButton(
             buttons, text="Reparar todos os arquivos", style="Secondary.TButton",
             command=self._start_app_repair,
         )
@@ -1304,8 +1559,8 @@ class MediaDownloaderApp:
                 pass
             self._start_app_update(update, repair=False)
 
-        ttk.Button(actions, text="Atualizar agora", style="Accent.TButton", command=start_update).pack(side="left")
-        ttk.Button(actions, text="Continuar nesta versão", style="Secondary.TButton", command=later).pack(side="right")
+        RoundedGlowButton(actions, text="Atualizar agora", style="Accent.TButton", command=start_update).pack(side="left")
+        RoundedGlowButton(actions, text="Continuar nesta versão", style="Secondary.TButton", command=later).pack(side="right")
         dialog.protocol("WM_DELETE_WINDOW", later)
         dialog.update_idletasks()
         x = self.root.winfo_rootx() + max(0, (self.root.winfo_width() - dialog.winfo_width()) // 2)
@@ -1496,7 +1751,7 @@ class MediaDownloaderApp:
         info.pack(fill="x", pady=(12, 10))
         ttk.Label(info, text="O que o aplicativo executa localmente", style="CardTitle.TLabel").pack(anchor="w")
         ttk.Label(info, text="A interface executa apenas processos locais necessários para yt-dlp e FFmpeg/FFprobe, usando listas de argumentos em vez de comandos concatenados. URL, senhas, tokens e cookies não são gravados nos logs.", style="Card.TLabel", wraplength=760, justify="left").pack(anchor="w", pady=(4, 0))
-        ttk.Button(body, text="Desinstalar", style="Danger.TButton", command=self._uninstall).pack(anchor="e", pady=(0, 25))
+        RoundedGlowButton(body, text="Desinstalar", style="Danger.TButton", command=self._uninstall).pack(anchor="e", pady=(0, 25))
         self._update_developer_vars()
 
     def _update_developer_vars(self):
