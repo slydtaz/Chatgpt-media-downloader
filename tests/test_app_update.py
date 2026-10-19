@@ -292,16 +292,6 @@ class SafeArchiveTests(unittest.TestCase):
                 with self.assertRaises(AppUpdateError):
                     _safe_extract_zip(archive, root / "extract")
 
-    def test_parent_traversal_is_rejected(self):
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            archive = root / "unsafe.zip"
-            with zipfile.ZipFile(archive, "w") as zf:
-                zf.writestr("../outside.txt", "do not write")
-            with self.assertRaises(AppUpdateError):
-                _safe_extract_zip(archive, root / "extract")
-            self.assertFalse((root / "outside.txt").exists())
-
     def test_duplicate_or_case_colliding_archive_paths_are_rejected(self):
         cases = (
             ("project/README.md", "project/README.md"),
@@ -337,6 +327,17 @@ class SafeArchiveTests(unittest.TestCase):
                     zf.writestr(info, "payload")
                 with self.assertRaises(AppUpdateError):
                     _safe_extract_zip(archive, root / "extract")
+
+    def test_parent_traversal_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            archive = root / "unsafe.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("../outside.txt", "do not write")
+            with self.assertRaises(AppUpdateError):
+                _safe_extract_zip(archive, root / "extract")
+            self.assertFalse((root / "outside.txt").exists())
+
 
 
 if __name__ == "__main__":
