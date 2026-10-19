@@ -81,6 +81,34 @@ class DependencyTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 extract_archive(archive, root / "tools")
 
+    def test_extract_archive_rolls_back_if_second_tool_replacement_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "tools.zip"
+            destination = root / "tools"
+            destination.mkdir()
+            (destination / "ffmpeg.exe").write_bytes(b"old-ffmpeg")
+            (destination / "ffprobe.exe").write_bytes(b"old-ffprobe")
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("release/bin/ffmpeg.exe", b"new-ffmpeg")
+                zf.writestr("release/bin/ffprobe.exe", b"new-ffprobe")
+
+            real_replace = os.replace
+
+            def fail_ffprobe_promotion(source, target):
+                source_path, target_path = Path(source), Path(target)
+                if target_path.name == "ffprobe.exe" and source_path.name.endswith(".staged"):
+                    raise OSError("simulated disk or permission failure")
+                return real_replace(source, target)
+
+            with patch("app.dependencies.os.replace", side_effect=fail_ffprobe_promotion):
+                with self.assertRaises(ValueError):
+                    extract_archive(archive, destination)
+
+            self.assertEqual((destination / "ffmpeg.exe").read_bytes(), b"old-ffmpeg")
+            self.assertEqual((destination / "ffprobe.exe").read_bytes(), b"old-ffprobe")
+            self.assertFalse(list(destination.glob("*.staged")))
+
     def test_extract_archive_rejects_duplicate_tool_basenames(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
