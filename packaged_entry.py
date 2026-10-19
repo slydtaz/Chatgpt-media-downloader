@@ -116,49 +116,51 @@ def _run_gui_smoke_test() -> int:
     drawn_items = 0
     try:
         # Keep this smoke test completely isolated from the user's settings and tools.
-        with tempfile.TemporaryDirectory(prefix="cgmd-gui-smoke-") as isolated_data:
-            os.environ["LOCALAPPDATA"] = isolated_data
-            import time
-            import tkinter as tk
-            from app.gui import MediaDownloaderApp
+        # Use a unique temporary profile. The CI runner discards TEMP when the job ends.
+        # Do not delete it while a FileHandler may still have app.log open on Windows.
+        isolated_data = tempfile.mkdtemp(prefix="cgmd-gui-smoke-")
+        os.environ["LOCALAPPDATA"] = isolated_data
+        os.environ["LOCALAPPDATA"] = isolated_data
+        import time
+        import tkinter as tk
+        from app.gui import MediaDownloaderApp
 
-            # The smoke test must never inspect, install or download media tools and
-            # must never query GitHub for updates. Those flows are unrelated to GUI render.
-            refresh_original = MediaDownloaderApp._refresh_dependencies
-            update_check_original = MediaDownloaderApp._maybe_start_update_check
-            MediaDownloaderApp._refresh_dependencies = lambda self, force=False: None
-            MediaDownloaderApp._maybe_start_update_check = lambda self: None
+        # The smoke test must never inspect, install or download media tools and
+        # must never query GitHub for updates. Those flows are unrelated to GUI render.
+        refresh_original = MediaDownloaderApp._refresh_dependencies
+        update_check_original = MediaDownloaderApp._maybe_start_update_check
+        MediaDownloaderApp._refresh_dependencies = lambda self, force=False: None
+        MediaDownloaderApp._maybe_start_update_check = lambda self: None
 
-            root = tk.Tk()
-            root.geometry("1220x820")
-            app = MediaDownloaderApp(root)
+        root = tk.Tk()
+        root.geometry("1220x820")
+        app = MediaDownloaderApp(root)
+        root.update_idletasks()
+        root.deiconify()
+        root.update_idletasks()
+        root.update()
+
+        app._animate_hero_visual()
+        drawn_items = len(app.hero_visual.find_all())
+        if drawn_items < 12:
+            raise RuntimeError(
+                f"A animação do painel inicial desenhou apenas {drawn_items} elementos; esperado pelo menos 12."
+            )
+
+        for page_name in ("playlist", "settings", "dependencies", "updates", "help", "developer", "home"):
+            app.show_page(page_name)
+            # Wait for actual transition completion rather than assuming a 190 ms frame budget.
+            deadline = time.monotonic() + 3.0
+            while (app._visible_page != page_name or app._page_animation_job is not None) and time.monotonic() < deadline:
+                root.update()
+                time.sleep(0.01)
             root.update_idletasks()
-            root.deiconify()
-            root.update_idletasks()
-            root.update()
+            if app.current_page != page_name or app._visible_page != page_name or app._page_animation_job is not None:
+                raise RuntimeError(f"A navegação não concluiu a transição para {page_name!r} em 3 segundos.")
+            visited.append(page_name)
 
-            app._animate_hero_visual()
-            drawn_items = len(app.hero_visual.find_all())
-            if drawn_items < 12:
-                raise RuntimeError(
-                    f"A animação do painel inicial desenhou apenas {drawn_items} elementos; esperado pelo menos 12."
-                )
-
-            for page_name in ("playlist", "settings", "dependencies", "updates", "help", "developer", "home"):
-                app.show_page(page_name)
-                deadline = time.monotonic() + 0.19
-                while time.monotonic() < deadline:
-                    root.update()
-                    time.sleep(0.004)
-                root.update_idletasks()
-                if app.current_page != page_name or app._visible_page != page_name:
-                    raise RuntimeError(
-                        f"A navegação não concluiu a transição para a página {page_name!r}."
-                    )
-                visited.append(page_name)
-
-            root.destroy()
-            root = None
+        root.destroy()
+        root = None
     except Exception:
         failure = traceback.format_exc()
     finally:
@@ -181,12 +183,12 @@ def _run_gui_smoke_test() -> int:
             os.environ["LOCALAPPDATA"] = original_local_app_data
 
     smoke_report = (
-        "GUI SMOKE TEST FALHOU\\n" + failure
+        "GUI SMOKE TEST FALHOU\n" + failure
         if failure
-        else "GUI SMOKE TEST OK\\n"
-        + f"Elementos desenhados na animação: {drawn_items}\\n"
+        else "GUI SMOKE TEST OK\n"
+        + f"Elementos desenhados na animação: {drawn_items}\n"
         + "Páginas percorridas: " + ", ".join(visited)
-        + "\\nSem downloads de mídia nem verificações de atualização.\\n"
+        + "\nSem downloads de mídia nem verificações de atualização.\n"
     )
     smoke_path = os.environ.get("CGMD_SMOKE_LOG", "").strip()
     if smoke_path:
@@ -198,9 +200,9 @@ def _run_gui_smoke_test() -> int:
             _write_startup_log(f"Não foi possível gravar o relatório do smoke test: {exc}")
 
     if failure:
-        _write_startup_log("GUI SMOKE TEST FALHOU.\\n" + failure)
+        _write_startup_log("GUI SMOKE TEST FALHOU.\n" + failure)
         try:
-            sys.stderr.write(failure + "\\n")
+            sys.stderr.write(failure + "\n")
             sys.stderr.flush()
         except Exception:
             pass
