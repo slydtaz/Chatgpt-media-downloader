@@ -9,7 +9,7 @@
 [Sugerir uma melhoria](https://github.com/slydtaz/chatgpt-media-downloader/issues/new?template=feature_request.yml)
 
 ![Sistema: Windows](https://img.shields.io/badge/SO-Windows-0078D6)
-![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.1.4-blue)
+![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.1.5-blue)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green)
 
 </div>
@@ -18,7 +18,7 @@
 
 > **Aviso de nome:** “ChatGPT” no nome é apenas parte do identificador do projeto. Este software é independente e **não é afiliado, patrocinado, certificado ou distribuído pela OpenAI**.
 
-> **Se o aplicativo não abrir ou aparecer uma janela escura vazia:** a versão 5.1.4 adiciona diagnóstico de reserva para registrar exceções inesperadas antes da interface aparecer. Confira `%LOCALAPPDATA%\\ChatGPT\\MediaDownloader\\logs\\startup-fallback.log` e, se não existir, `%TEMP%\\ChatGPTMediaDownloader-startup.log`; o log principal fica em `%LOCALAPPDATA%\\ChatGPT\\MediaDownloader\\logs\\app.log`.
+> **Se o aplicativo não abrir:** a versão 5.1.5 corrige o erro de inicialização registrado nos logs (`_strategy_label`) e executa um smoke test da interface no build do Windows. Se precisar remover o aplicativo, use o [GPT Media Uninstaller](https://github.com/slydtaz/Chatgpt-media-downloader/releases/latest). A ferramenta preserva músicas/vídeos por padrão; a exclusão dessas pastas exige confirmação adicional.
 
 ## 🎨 Aparência e personalização
 
@@ -26,7 +26,7 @@ A interface usa navegação lateral e painéis de trabalho inspirados no design 
 
 ## 📥 Download oficial para usuários
 
-**Recomendado:** abra **[Releases estáveis — baixar](https://github.com/slydtaz/chatgpt-media-downloader/releases/latest)** e baixe `ChatGPTMediaDownloader.exe`. Esse é o pacote de um único arquivo para quem só quer instalar e usar o programa; confira também `SHA256SUMS.txt` da mesma Release.
+**Aplicativo:** abra **[Releases estáveis — baixar](https://github.com/slydtaz/chatgpt-media-downloader/releases/latest)** e baixe `ChatGPTMediaDownloader.exe`. Confira o `SHA256SUMS.txt` da mesma Release. **Desinstalador emergencial:** baixe `GPT-Media-Uninstaller.exe` se precisar limpar instalações e configurações antigas. Ele é separado do aplicativo e não apaga músicas/vídeos por padrão.
 
 1. Baixe `ChatGPTMediaDownloader.exe` da Release estável.
 2. (Recomendado) Compare o SHA-256 do arquivo com `SHA256SUMS.txt` da mesma Release.
@@ -111,7 +111,7 @@ Contribuições são bem-vindas. Leia [`CONTRIBUTING.md`](CONTRIBUTING.md), abra
 
 ## 📚 Documentação
 
-- [Hotfix 5.1.4 — diagnóstico de inicialização](docs/5.1.4_changes.md) · [Hotfix 5.1.3 — janela vazia, animações e interface](docs/5.1.3_changes.md) · [Hotfix 5.1.2 — recuperação, desinstalação e identificação Windows](docs/5.1.2_changes.md) · [Identificação, SmartScreen e assinatura digital](docs/windows-trust.md) · [Hotfix 5.1.1 — ciclo de reparo e reinicialização](docs/5.1.1_changes.md) · [Versão 5.1.0](docs/5.1.0_changes.md) · [Versão 5.0.6](docs/5.0.6_changes.md) · [Versão 5.0.5](docs/5.0.5_changes.md) · [Versão 5.0.4](docs/5.0.4_changes.md) · [Versão 5.0.3](docs/5.0.3_changes.md) · [Versão 5.0.2](docs/5.0.2_changes.md) · [Versão 5.0.1](docs/5.0.1_changes.md) · [Versão 5.0.0](docs/5.0.0_changes.md)
+- [Hotfix 5.1.5 — correção de inicialização e desinstalador](docs/5.1.5_changes.md) · [Hotfix 5.1.4 — diagnóstico de inicialização](docs/5.1.4_changes.md) · [Hotfix 5.1.3 — janela vazia, animações e interface](docs/5.1.3_changes.md) · [Hotfix 5.1.2 — recuperação, desinstalação e identificação Windows](docs/5.1.2_changes.md) · [Identificação, SmartScreen e assinatura digital](docs/windows-trust.md) · [Hotfix 5.1.1 — ciclo de reparo e reinicialização](docs/5.1.1_changes.md) · [Versão 5.1.0](docs/5.1.0_changes.md) · [Versão 5.0.6](docs/5.0.6_changes.md) · [Versão 5.0.5](docs/5.0.5_changes.md) · [Versão 5.0.4](docs/5.0.4_changes.md) · [Versão 5.0.3](docs/5.0.3_changes.md) · [Versão 5.0.2](docs/5.0.2_changes.md) · [Versão 5.0.1](docs/5.0.1_changes.md) · [Versão 5.0.0](docs/5.0.0_changes.md)
 - [Matriz de funcionalidades legadas](docs/legacy_functionality_matrix.md)
 - [Modelo de segurança e limites](docs/security_model.md)
 - [Relatório de testes e limitações](docs/test_report.md)
