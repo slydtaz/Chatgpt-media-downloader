@@ -1,6 +1,6 @@
 # UI-debug — Cosmic interface prototype
 
-**Version:** 0.1.0-dev.4  
+**Version:** 0.1.0-dev.5  
 **Channel:** development  
 **Status:** visual prototype — not a production downloader and not a GitHub Release.
 
@@ -28,7 +28,7 @@ The updater reads \`UI-debug/version.json\` from the dedicated development branc
 
 ## Visual direction
 
-The layout keeps the current project's main sections (Home, Playlists, Appearance, Dependencies, Updates, Help and Diagnostics) with a pink-to-deep-violet corner glow, slightly thicker and smoother borders, gently growing buttons with a lavender hover state, small orbital tab icons, and an animated atom mark. Startup and update operations use a fullscreen orbital loader with upward-moving gradient status text, glowing particles and colored light trails.
+The layout keeps the current project's main sections (Home, Playlists, Appearance, Dependencies, Updates, Help and Diagnostics) with a pink-to-deep-violet corner glow, smoother and slightly thicker outlines, stable fixed-geometry buttons with a small internal hover scale, distinct vector icons for each tab, and a compact animated atom mark. Scroll handling uses one active-pane router instead of repeated global bindings. Startup and update operations use a lighter fullscreen orbital loader with fewer canvas objects, upward-moving gradient status text, glowing particles and colored light trails.
 
 The two \`share.google\` reference links could not be resolved by the browsing environment, so the layout uses the current app's organization and public SKlauncher 4.0 documentation as general layout inspiration.
 
