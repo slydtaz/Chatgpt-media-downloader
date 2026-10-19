@@ -254,7 +254,9 @@ def validate_preview_url(raw_url: str) -> str:
         port = parts.port
     except ValueError as exc:
         raise ValueError("A porta do link não é válida.") from exc
-    if port not in (None, 80, 443):
+    if (parts.scheme.lower() == "https" and port not in (None, 443)) or (
+        parts.scheme.lower() == "http" and port not in (None, 80)
+    ):
         raise ValueError("Portas personalizadas não são aceitas para prévias.")
     return urllib.parse.urlunsplit((parts.scheme.lower(), parts.netloc, parts.path, parts.query, ""))
 
@@ -380,6 +382,8 @@ def fetch_thumbnail_bytes(raw_url: str, *, max_bytes: int = 5 * 1024 * 1024) -> 
     try:
         parts = urllib.parse.urlsplit(value)
         if parts.scheme.lower() != "https" or not parts.hostname or parts.username or parts.password:
+            return None
+        if parts.port not in (None, 443):
             return None
         host = parts.hostname.rstrip(".").lower()
         if host in {"localhost", "localhost.localdomain"} or host.endswith(
@@ -1638,8 +1642,8 @@ class SpaceUIPrototype:
         """Show a fetched poster; Pillow is optional and Tk native formats are tried first."""
         if not image_bytes:
             return False
-        width = max(self.scale_px(80), canvas.winfo_width())
-        height = max(self.scale_px(45), canvas.winfo_height())
+        width = max(self.scale_px(80), canvas.winfo_width(), int(canvas.cget("width")))
+        height = max(self.scale_px(45), canvas.winfo_height(), int(canvas.cget("height")))
         try:
             try:
                 from PIL import Image, ImageOps, ImageTk
