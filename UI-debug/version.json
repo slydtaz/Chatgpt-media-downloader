@@ -1,8 +1,8 @@
 {
   "app_name": "ChatGPT Media Downloader UI-debug",
-  "version": "0.1.0-dev.5",
+  "version": "0.1.0-dev.6",
   "channel": "development",
   "update_branch": "ui-debug",
   "minimum_python": "3.10",
-  "description": "Standalone visual prototype with smoother vector controls and a lighter fullscreen orbital loader. Not a production downloader and not a GitHub Release."
+  "description": "Standalone visual prototype with smooth reusable orbital trails, a neon-violet dashboard inspired by public visual patterns, and adaptive scaling for high-resolution displays. Not a production downloader and not a GitHub Release."
 }
