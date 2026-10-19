@@ -6,7 +6,7 @@
   <meta name="description" content="Baixe o ChatGPT Media Downloader: aplicativo desktop de código aberto para vídeos, músicas e playlists.">
   <title>ChatGPT Media Downloader — Download oficial</title>
   <style>
-    :root { color-scheme: dark; --bg:#10131b; --panel:#191f2b; --text:#f3f5f8; --muted:#bac4d2; --accent:#82aaff; --line:#303a4c; }
+    :root { color-scheme: dark; --bg:#111827; --panel:#1f2937; --text:#f9fafb; --muted:#a7b0c0; --accent:#60a5fa; --line:#374151; }
     * { box-sizing:border-box; }
     body { margin:0; background:radial-gradient(ellipse at top,#1b2d4b 0,#10131b 48rem); color:var(--text); font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
     main { width:min(900px,92vw); margin:0 auto; padding:64px 0 36px; }
@@ -15,26 +15,26 @@
     .lead { max-width:660px; color:var(--muted); font-size:1.15rem; }
     .panel { margin:28px 0; padding:26px; border:1px solid var(--line); border-radius:18px; background:rgba(25,31,43,.92); }
     a { color:var(--accent); }
-    .button { display:inline-block; margin:8px 8px 4px 0; padding:12px 18px; border-radius:10px; background:#c5d7ff; color:#0e1728; font-weight:800; text-decoration:none; }
+    .button { display:inline-block; margin:8px 8px 4px 0; padding:12px 18px; border-radius:10px; background:#2563eb; color:#ffffff; font-weight:800; text-decoration:none; }
     .secondary { border:1px solid var(--line); color:var(--text); background:transparent; }
     h2 { margin-top:0; }
     li { margin:.4rem 0; }
-    .notice { border-left:4px solid #efb95b; padding:12px 16px; color:var(--muted); background:#27251f; border-radius:5px; }
+    .notice { border-left:4px solid #efb95b; padding:12px 16px; color:var(--muted); background:#1f2937; border-radius:5px; }
     footer { margin-top:46px; padding-top:18px; color:var(--muted); border-top:1px solid var(--line); font-size:.9rem; }
   </style>
 </head>
 <body>
 <main>
-  <div class="eyebrow">Projeto de código aberto · versão-fonte 5.1.3</div>
+  <div class="eyebrow">Projeto de código aberto · versão-fonte 5.3.0</div>
   <h1>ChatGPT Media Downloader</h1>
   <p class="lead">Uma interface gráfica para baixar vídeos, extrair áudio em MP3 e selecionar itens de playlists sem precisar montar comandos manualmente.</p>
 
   <section class="panel" aria-labelledby="download-heading">
     <h2 id="download-heading">Baixar para Windows</h2>
-    <p>Recomendado para usuários finais: baixe o executável único da Release stable e confira o hash SHA-256 que acompanha o arquivo. O ZIP de código-fonte é para desenvolvedores e auditoria.</p>
+    <p>Recomendado para usuários finais: baixe o executável único da Release stable e confira o hash SHA-256 que acompanha o arquivo. O ZIP de código-fonte é para desenvolvedores e auditoria. A versão 5.3.0 inclui validações adicionais e atestação de proveniência do build.</p>
     <a class="button" href="https://github.com/slydtaz/chatgpt-media-downloader/releases/latest">Baixar EXE oficial (última stable)</a>
     <a class="button secondary" href="https://github.com/slydtaz/chatgpt-media-downloader/archive/refs/heads/main.zip">Código-fonte (desenvolvedores)</a>
-    <p><small>A Release stable deve conter ChatGPTMediaDownloader.exe e SHA256SUMS.txt. Caso falte um desses arquivos, não há ainda um pacote executável pronto para atualizar automaticamente.</small></p>
+    <p><small>A Release estável deve conter ChatGPTMediaDownloader.exe, SHA256SUMS.txt e Windows-Signature-Status.txt. Confira o hash e leia o estado da assinatura antes de executar o programa.</small></p>
   </section>
 
   <section class="panel">
@@ -58,7 +58,7 @@
 
   <section class="panel">
     <h2>Transparência e segurança</h2>
-    <p>O projeto não foi criado para conter vírus ou funcionalidades maliciosas e não há malware intencional conhecido. Mesmo assim, nenhum projeto pode prometer honestamente que todos os executáveis estão 100% livres de vírus ou de falsos positivos sem auditoria independente. Baixe somente pelas releases oficiais, confira o SHA-256 e escaneie o arquivo com seu antivírus.</p>
+    <p>O projeto não foi criado para conter vírus ou funcionalidades maliciosas e não há malware intencional conhecido. Mesmo assim, nenhum projeto pode prometer honestamente que todos os executáveis estão 100% livres de vírus ou de falsos positivos sem auditoria independente. Baixe somente pelas releases oficiais, confira o SHA-256, verifique a proveniência quando disponível e escaneie o arquivo com seu antivírus. Hash e proveniência não substituem uma assinatura Authenticode confiável ou uma auditoria independente.</p>
     <p>Este é um projeto independente e não é afiliado, patrocinado ou certificado pela OpenAI. Use-o apenas com mídia que você tem autorização para salvar.</p>
     <p><a href="https://github.com/slydtaz/chatgpt-media-downloader/blob/main/SECURITY.md">Política de segurança</a> · <a href="https://github.com/slydtaz/chatgpt-media-downloader/blob/main/LICENSE">Licença MIT</a></p>
   </section>
