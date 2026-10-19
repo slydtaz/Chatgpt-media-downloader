@@ -372,7 +372,6 @@ class RoundedCard(tk.Frame):
     def refresh_theme(self):
         self.configure(bg=self.app.colors["bg"])
         self._resize(None)
-        self.canvas.lower()
 
 
 class RoundedButton(tk.Canvas):
@@ -638,7 +637,6 @@ class SpaceUIPrototype:
         # Fixed gradient strip IDs are moved/colored in place, never deleted/recreated.
         self.backdrop = GradientBackdrop(root, self)
         self.backdrop.place(x=0, y=0, relwidth=1, relheight=1)
-        self.backdrop.lower()
         self.shell = tk.Frame(root, bg=self.colors["bg"], bd=0, highlightthickness=0)
         self.shell.place(x=0, y=0, relwidth=1, relheight=1)
         self._build_shell()
