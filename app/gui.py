@@ -264,6 +264,11 @@ class IconNavButton(tk.Canvas):
                 self.after_cancel(self._scale_job)
             except tk.TclError:
                 pass
+        if not self.app.config.get("animations_enabled", True):
+            self._scale = self._target_scale
+            self._scale_job = None
+            self._draw()
+            return
         delta = self._target_scale - self._scale
         if abs(delta) < 0.012:
             self._scale = self._target_scale
@@ -342,6 +347,7 @@ class MediaDownloaderApp:
         self.log_history: list[tuple[str, bool]] = []
         self._developer_mode_active = bool(self.config.get("developer_mode", False))
         self.developer_mode_var = tk.BooleanVar(value=self._developer_mode_active)
+        self.animations_enabled_var = tk.BooleanVar(value=bool(self.config.get("animations_enabled", True)))
         self.log_mode_var = tk.StringVar(value="CONSOLE TÉCNICO" if self._developer_mode_active else "RESUMO DE ATIVIDADE")
         self.dep_infos = {}
         self._dependencies_checked = False
@@ -807,6 +813,14 @@ class MediaDownloaderApp:
             text="Desativado: o painel mostra só o resumo. Ativado: exibe linhas técnicas completas do yt-dlp/FFmpeg e detalhes de diagnóstico.",
             style="Card.TLabel",wraplength=760,justify="left",
         ).pack(anchor="w",padx=(24,0),pady=(2,0))
+        ttk.Checkbutton(
+            appearance,text="Animações espaciais e transições suaves",
+            variable=self.animations_enabled_var,command=self._preview_animations,
+        ).pack(anchor="w",pady=(12,0))
+        ttk.Label(
+            appearance,text="Desative para reduzir movimento e economizar recursos gráficos.",
+            style="Card.TLabel",wraplength=760,justify="left",
+        ).pack(anchor="w",padx=(24,0),pady=(2,0))
         self.settings_vars["theme"].trace_add("write",lambda *_:self._preview_theme_from_setting())
         self.settings_vars["ui_density"].trace_add("write",lambda *_:self._preview_theme_from_setting())
         self.settings_vars["accent_color"].trace_add("write",lambda *_:self._preview_theme_from_setting())
@@ -860,6 +874,8 @@ class MediaDownloaderApp:
             self.settings_vars[key].set(self._display_setting_value(key,source_config.get(key,DEFAULT_CONFIG.get(key,""))))
         self.developer_mode_var.set(bool(source_config.get("developer_mode",False)))
         self._preview_developer_mode()
+        self.animations_enabled_var.set(bool(source_config.get("animations_enabled", True)))
+        self._preview_animations()
         self._preview_theme_from_setting()
         messagebox.showinfo("Configurações","Os valores foram revertidos nesta tela. Clique em Salvar personalização para gravá-los.")
     @staticmethod
@@ -912,12 +928,15 @@ class MediaDownloaderApp:
         new_config["accent_color"]=accent.upper()
         new_config["auto_video_quality"]=q
         new_config["developer_mode"]=bool(self.developer_mode_var.get())
+        new_config["animations_enabled"]=bool(self.animations_enabled_var.get())
         new_config["audio_bitrate"]=b
         try:
             save_config(new_config)
             self.config=load_config()
             self.developer_mode_var.set(bool(self.config.get("developer_mode",False)))
             self._preview_developer_mode()
+            self.animations_enabled_var.set(bool(self.config.get("animations_enabled", True)))
+            self._preview_animations()
             self.playlist_strategy_var.set(self._strategy_label(self.config.get("playlist_strategy","sequential")))
             self.playlist_parallelism_var.set(str(self.config.get("playlist_parallelism",3)))
             self._apply_theme(self.config.get("theme","dark"))
@@ -1538,7 +1557,10 @@ class MediaDownloaderApp:
                 font=("Segoe UI", 27, "bold"),
             )
             self._hero_visual_phase = (phase + 0.13) % math.tau
-            self.root.after(72, self._animate_hero_visual)
+            if self.config.get("animations_enabled", True):
+                self._hero_animation_job = self.root.after(72, self._animate_hero_visual)
+            else:
+                self._hero_animation_job = None
         except tk.TclError:
             return
 
@@ -1604,7 +1626,7 @@ class MediaDownloaderApp:
             self._update_developer_vars()
 
         width = self.pages_area.winfo_width()
-        if old_name is None or old_name == name or width < 180:
+        if old_name is None or old_name == name or width < 180 or not self.config.get("animations_enabled", True):
             for frame in self.page_frames.values():
                 frame.place_forget()
                 frame.pack_forget()
@@ -1653,6 +1675,8 @@ class MediaDownloaderApp:
             var.set(self._display_setting_value(key,self.config.get(key,DEFAULT_CONFIG.get(key,""))))
         self.developer_mode_var.set(bool(self.config.get("developer_mode",False)))
         self._preview_developer_mode()
+        self.animations_enabled_var.set(bool(self.config.get("animations_enabled", True)))
+        self._preview_animations()
         self._apply_theme(self.config.get("theme","dark"))
         if hasattr(self,"playlist_strategy_var"):
             self.playlist_strategy_var.set(self._strategy_label(self.config.get("playlist_strategy","sequential")))
@@ -1699,6 +1723,13 @@ class MediaDownloaderApp:
         self.log_mode_var.set("CONSOLE TÉCNICO" if self._developer_mode_active else "RESUMO DE ATIVIDADE")
         if hasattr(self, "log_text"):
             self._render_log_history()
+
+    def _preview_animations(self):
+        enabled = bool(self.animations_enabled_var.get())
+        self.config["animations_enabled"] = enabled
+        if enabled and getattr(self, "hero_visual", None) is not None:
+            if getattr(self, "_hero_animation_job", None) is None:
+                self._hero_animation_job = self.root.after(0, self._animate_hero_visual)
 
     def _clear_log(self):
         self.log_history.clear()
