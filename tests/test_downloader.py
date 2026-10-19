@@ -5,7 +5,8 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
-from app.downloader import build_video_command, choose_video_height, playlist_finished_with_warnings, _refresh_recent_media_in_explorer
+from app.downloader import Downloader, DownloadResult, build_video_command, choose_video_height, playlist_finished_with_warnings, _refresh_recent_media_in_explorer
+from app.dependencies import ToolInfo
 from app.security import validate_url
 
 
@@ -36,8 +37,39 @@ class DownloaderTests(unittest.TestCase):
         self.assertTrue(fallback)
 
 
+    def test_audio_download_ignores_external_yt_dlp_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            yt = ToolInfo("yt-dlp", Path("yt-dlp"), executable_ok=True)
+            ffmpeg = ToolInfo("ffmpeg", Path("ffmpeg"), executable_ok=True)
+            ffprobe = ToolInfo("ffprobe", Path("ffprobe"), executable_ok=True)
+            downloader = Downloader(yt, ffmpeg, ffprobe, logging.getLogger("test"))
+            with patch.object(downloader, "_run", return_value=DownloadResult(0, "ok", "", root)) as run, \
+                 patch("app.downloader._refresh_recent_media_in_explorer", return_value=0):
+                downloader.download_audio("https://example.com/audio", 192, root)
+            command = run.call_args.args[0]
+            self.assertEqual(command[1], "--ignore-config")
+            self.assertEqual(command[-1], "https://example.com/audio")
+
+    def test_format_probe_ignores_external_yt_dlp_config(self):
+        class FakeProcess:
+            returncode = 0
+            def communicate(self, timeout):
+                return ('{"formats": []}', "")
+
+        yt = ToolInfo("yt-dlp", Path("yt-dlp"), executable_ok=True)
+        ffmpeg = ToolInfo("ffmpeg", Path("ffmpeg"), executable_ok=True)
+        ffprobe = ToolInfo("ffprobe", Path("ffprobe"), executable_ok=True)
+        downloader = Downloader(yt, ffmpeg, ffprobe, logging.getLogger("test"))
+        fake_process = FakeProcess()
+        with patch("app.downloader.subprocess.Popen", return_value=fake_process) as popen:
+            self.assertEqual(downloader._probe_formats("https://example.com/video"), [])
+        command = popen.call_args.args[0]
+        self.assertEqual(command[1], "--ignore-config")
+
     def test_video_command_embeds_thumbnail_without_leaving_sidecar(self):
         command = build_video_command("yt-dlp.exe", "ffmpeg.exe", "C:/Videos/%(title)s.%(ext)s", 1080, "https://example.com/watch/123")
+        self.assertIn("--ignore-config", command)
         self.assertIn("--embed-thumbnail", command)
         self.assertIn("--embed-metadata", command)
         self.assertIn("--remux-video", command)
@@ -47,6 +79,7 @@ class DownloaderTests(unittest.TestCase):
 
     def test_playlist_video_command_enables_all_entries(self):
         command = build_video_command("yt-dlp", "ffmpeg", "/videos/%(playlist_index)s - %(title)s.%(ext)s", 1080, "https://www.youtube.com/playlist?list=PL123", playlist=True)
+        self.assertIn("--ignore-config", command)
         self.assertIn("--yes-playlist", command)
         self.assertNotIn("--no-playlist", command)
         self.assertEqual(command[-1], "https://www.youtube.com/playlist?list=PL123")

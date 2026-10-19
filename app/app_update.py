@@ -5,6 +5,8 @@ import json
 import os
 import re
 import shutil
+import stat
+import unicodedata
 import subprocess
 import sys
 import tempfile
@@ -29,6 +31,10 @@ USER_AGENT = f"ChatGPT-Media-Downloader/{VERSION}"
 INSTALL_MARKER = ".chatgpt-media-downloader-install.json"
 MAX_DOWNLOAD_BYTES = 250 * 1024 * 1024
 MAX_SOURCE_UNPACKED_BYTES = 512 * 1024 * 1024
+MAX_SOURCE_ARCHIVE_MEMBERS = 10_000
+MAX_SOURCE_PATH_CHARS = 4_096
+MAX_SOURCE_PATH_DEPTH = 128
+MAX_SOURCE_COMPONENT_UTF16_UNITS = 255
 TRUSTED_UPDATE_HOSTS = frozenset({
     "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com",
     "codeload.github.com", "api.github.com", "raw.githubusercontent.com",
@@ -374,30 +380,98 @@ def _verify_executable_hash(update: AppUpdate, staged: Path, computed_hash: str,
 
 
 def _safe_extract_zip(archive: Path, destination: Path) -> Path:
+    """Extract a source ZIP only after validating every member and path collision."""
     destination.mkdir(parents=True, exist_ok=True)
     dest_resolved = destination.resolve()
     try:
         with zipfile.ZipFile(archive) as zf:
             members = zf.infolist()
-            if not members or len(members) > 10000:
+            if not members or len(members) > MAX_SOURCE_ARCHIVE_MEMBERS:
                 raise AppUpdateError("O arquivo de origem tem uma estrutura inesperada.")
             unpacked_size = sum(max(0, int(member.file_size)) for member in members)
             if unpacked_size > MAX_SOURCE_UNPACKED_BYTES:
                 raise AppUpdateError("O pacote de origem excede o limite de tamanho após extração.")
+
+            # Windows and common macOS filesystems are case-insensitive. Validate
+            # the whole archive before extraction so duplicate/colliding members
+            # cannot overwrite a file that was already checked.
+            seen_paths: dict[str, str] = {}
+            paths_with_descendants: set[str] = set()
             for member in members:
-                pure = PurePosixPath(member.filename)
-                if pure.is_absolute() or ".." in pure.parts or "\\" in member.filename:
+                name = member.filename
+                directory_entry = name.endswith("/")
+                path_text = name[:-1] if directory_entry else name
+                raw_parts = path_text.split("/")
+                if (
+                    not path_text
+                    or "\x00" in path_text
+                    or "\\" in path_text
+                    or path_text.startswith("/")
+                    or any(part in {"", ".", ".."} for part in raw_parts)
+                    or len(path_text) > MAX_SOURCE_PATH_CHARS
+                    or len(raw_parts) > MAX_SOURCE_PATH_DEPTH
+                    or re.match(r"(?i)^[a-z]:", raw_parts[0])
+                ):
                     raise AppUpdateError("O pacote de origem contém um caminho inseguro.")
+
+                pure = PurePosixPath(path_text)
+                # Windows filenames have additional restrictions that are not
+                # represented by PurePosixPath: ADS (colon), reserved device
+                # names, control characters, and trailing dots/spaces.
+                for part in pure.parts:
+                    component_length = sum(2 if ord(char) > 0xFFFF else 1 for char in part)
+                    normalized_compat = unicodedata.normalize("NFKC", part)
+                    reserved_stem = normalized_compat.split(".", 1)[0].rstrip(" .").upper()
+                    if (
+                        component_length > MAX_SOURCE_COMPONENT_UTF16_UNITS
+                        or part.endswith((".", " "))
+                        or any(ord(char) < 32 or char in '<>:"|?*' for char in part)
+                        or reserved_stem in {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
+                        or re.fullmatch(r"(?:COM|LPT)[1-9]", reserved_stem)
+                    ):
+                        raise AppUpdateError("O pacote de origem contém um nome de arquivo incompatível com Windows.")
+
+                mode = (member.external_attr >> 16) & 0xFFFF
+                file_type = stat.S_IFMT(mode)
+                if file_type and file_type not in {stat.S_IFREG, stat.S_IFDIR}:
+                    raise AppUpdateError("O pacote de origem contém um link ou arquivo especial não permitido.")
+                if file_type == stat.S_IFDIR and not directory_entry:
+                    raise AppUpdateError("O pacote de origem contém uma entrada de diretório inconsistente.")
+                if file_type == stat.S_IFREG and directory_entry:
+                    raise AppUpdateError("O pacote de origem contém uma entrada de arquivo inconsistente.")
+                if member.flag_bits & 0x1:
+                    raise AppUpdateError("Arquivos ZIP criptografados não são aceitos.")
+
+                # NFC + casefold catches case-insensitive duplicates and canonically
+                # equivalent Unicode names before extraction on all platforms.
+                normalized_parts = tuple(
+                    unicodedata.normalize("NFC", part.casefold()) for part in pure.parts
+                )
+                path_key = "/".join(normalized_parts)
+                entry_kind = "dir" if directory_entry or file_type == stat.S_IFDIR else "file"
+                if path_key in seen_paths:
+                    raise AppUpdateError("O pacote de origem contém caminhos duplicados ou incompatíveis entre maiúsculas/minúsculas ou Unicode.")
+
+                for depth in range(1, len(normalized_parts)):
+                    parent_key = "/".join(normalized_parts[:depth])
+                    if seen_paths.get(parent_key) == "file":
+                        raise AppUpdateError("O pacote de origem contém conflito entre arquivo e diretório.")
+                # Track parent prefixes as we go, avoiding an O(n²) scan of all
+                # previous members for every new file in a large source archive.
+                if entry_kind == "file" and path_key in paths_with_descendants:
+                    raise AppUpdateError("O pacote de origem contém conflito entre arquivo e diretório.")
+
                 target = (destination / Path(*pure.parts)).resolve()
                 if target != dest_resolved and dest_resolved not in target.parents:
                     raise AppUpdateError("O pacote de origem tenta gravar fora da pasta temporária.")
-                mode = (member.external_attr >> 16) & 0o170000
-                if mode == 0o120000:
-                    raise AppUpdateError("O pacote de origem contém um link simbólico não permitido.")
+                for depth in range(1, len(normalized_parts)):
+                    paths_with_descendants.add("/".join(normalized_parts[:depth]))
+                seen_paths[path_key] = entry_kind
+
             zf.extractall(destination)
     except AppUpdateError:
         raise
-    except (OSError, zipfile.BadZipFile, RuntimeError) as exc:
+    except (OSError, zipfile.BadZipFile, RuntimeError, ValueError) as exc:
         raise AppUpdateError(f"O pacote ZIP não pôde ser extraído com segurança: {exc}") from exc
 
     for candidate in destination.iterdir():

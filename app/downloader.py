@@ -131,7 +131,7 @@ def build_video_command(
     fragment_retries = retries
     concurrent_fragments = concurrent_fragments if concurrent_fragments in {1, 2, 4, 8, 16} else 4
     command = [
-        str(yt_dlp_path), "--newline", "--yes-playlist" if playlist else "--no-playlist",
+        str(yt_dlp_path), "--ignore-config", "--newline", "--yes-playlist" if playlist else "--no-playlist",
         "--check-formats", "-f",
         f"bv*[height<={selected_height}]+ba/b[height<={selected_height}]/bv*+ba/b",
         "--merge-output-format", container, "--remux-video", container,
@@ -192,6 +192,7 @@ class Downloader:
     def _probe_formats(self, url: str) -> list[dict]:
         command = [
             str(self.yt_dlp.path),
+            "--ignore-config",
             "--no-playlist",
             "--skip-download",
             "--dump-single-json",
@@ -348,6 +349,7 @@ class Downloader:
         output_template = str(output_dir / ("%(playlist_title).100B/%(playlist_index)03d - %(title).180B [%(id)s].%(ext)s" if playlist else "%(title).200B [%(id)s].%(ext)s"))
         command = [
             str(self.yt_dlp.path),
+            "--ignore-config",
             "--newline",
             "--yes-playlist" if playlist else "--no-playlist",
             "--retries",
