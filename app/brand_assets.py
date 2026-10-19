@@ -29,7 +29,7 @@ def _paint_round_rect(image, x0, y0, x1, y1, radius, start, end):
         image.put("{" + " ".join(row) + "}", to=(left, y))
 
 def _button_skin(root, state):
-    image = tk.PhotoImage(master=root, width=128, height=44)
+    image = tk.PhotoImage(master=root, width=80, height=38)
     if state == "hover":
         edge_a, edge_b = "#FFB5F8", "#D4C3FF"
         face_a, face_b = "#FF62E9", "#AE92FF"
@@ -42,9 +42,9 @@ def _button_skin(root, state):
         edge_a, edge_b = "#FF8AF1", "#C6A8FF"
         face_a, face_b = "#EE4CE0", "#925FF7"
         gleam = "#FFE0FD"
-    _paint_round_rect(image, 4, 5, 123, 39, 18, edge_a, edge_b)
-    _paint_round_rect(image, 7, 7, 120, 37, 15, face_a, face_b)
-    image.put("{" + " ".join([gleam] * 79) + "}", to=(24, 8))
+    _paint_round_rect(image, 2, 4, 77, 34, 15, edge_a, edge_b)
+    _paint_round_rect(image, 4, 6, 75, 32, 13, face_a, face_b)
+    image.put("{" + " ".join([gleam] * 46) + "}", to=(17, 7))
     return image
 
 def load_brand_images(root: tk.Misc) -> dict[str, tk.PhotoImage]:
