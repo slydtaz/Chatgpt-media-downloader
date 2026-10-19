@@ -327,7 +327,6 @@ class GradientBackdrop(tk.Canvas):
             r = 1.5 if index % 4 else 2.3
             self.coords(item, x - r, y - r, x + r, y + r)
             self.itemconfigure(item, fill=blend_hex(colors["muted"], colors["accent2"], 0.3), outline="")
-        self.tag_lower("gradient")
 
 
 class RoundedCard(tk.Frame):
