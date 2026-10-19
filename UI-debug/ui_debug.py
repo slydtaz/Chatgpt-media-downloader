@@ -329,7 +329,7 @@ class RoundedCard(tk.Frame):
             px, py = padding
         else:
             px = py = padding
-        self.body.pack(fill="both", expand=True, padx=max(2, self.radius // 4), pady=max(2, self.radius // 4))
+        self.body.pack(fill="both", expand=True, padx=max(2, int(px)), pady=max(2, int(py)))
         self._shape = self.canvas.create_polygon(
             *rounded_points(1, 1, 4, 4, radius), smooth=False,
             fill=app.colors[background_key], outline=app.colors["border"], width=1,
@@ -605,6 +605,7 @@ class SpaceUIPrototype:
         self.fields: list[RoundedField] = []
         self.dropdowns: list[Dropdown] = []
         self.toggles: list[ToggleSwitch] = []
+        self.scroll_panes: list[ScrollPane] = []
         self.labels: list[tuple[tk.Widget, str, str, tuple]] = []
         self.nav_items: dict[str, tuple[tk.Canvas, str, str, str]] = {}
         self.current_page = "home"
@@ -1040,10 +1041,8 @@ class SpaceUIPrototype:
         row_buttons = self.frame(card.body, "panel2")
         row_buttons.pack(fill="x")
         self.button(row_buttons, "Verificar agora", lambda: self.check_update_async(user_initiated=True), "primary", width=150).pack(side="left")
-        self.install_update_button = self.button(row_buttons, "Instalar versão de desenvolvimento", self.install_update_async, "secondary", width=250)
+        self.install_update_button = self.button(row_buttons, "Instalar versão de desenvolvimento", self._install_update_if_available, "secondary", width=250)
         self.install_update_button.pack(side="left", padx=(10, 0))
-        self.install_update_button.configure(cursor="arrow")
-        self.install_update_button.bind("<Button-1>", lambda _event: self._install_update_if_available(), add="+")
         self.label(body, "Não será criada uma Release do GitHub. O código ficará em uma branch/PR para revisão visual.", "muted", "bg", 9, wraplength=900).pack(anchor="w", pady=(0, 14))
         note = self.card(body, padding=16)
         note.pack(fill="x")
@@ -1206,9 +1205,30 @@ class SpaceUIPrototype:
         self.accent_preview.tag_raise("gradient")
 
     def apply_theme(self, refresh=True):
+        old_colors = dict(self.colors or PALETTES["dark"])
         c = dict(PALETTES.get(self.settings.get("theme"), PALETTES["dark"]))
         c["accent"] = self.settings.get("accent_color", DEFAULT_SETTINGS["accent_color"])
         c["accent2"] = self.settings.get("accent_color_2", DEFAULT_SETTINGS["accent_color_2"])
+
+        # Recolor existing widgets in place instead of destroying/rebuilding the view.
+        # This avoids the full-window flash when theme settings change.
+        def recolor_tree(widget):
+            for child in widget.winfo_children():
+                try:
+                    old_bg = str(child.cget("bg")).lower()
+                    explicit_key = getattr(child, "_ui_bg_key", None)
+                    old_key = explicit_key or next(
+                        (key for key, value in old_colors.items() if str(value).lower() == old_bg),
+                        None,
+                    )
+                    if old_key in c:
+                        child.configure(bg=c[old_key])
+                except (tk.TclError, TypeError):
+                    pass
+                recolor_tree(child)
+
+        if hasattr(self, "shell"):
+            recolor_tree(self.shell)
         self.colors = c
         self.root.configure(bg=c["bg"])
         if hasattr(self, "shell"):
@@ -1220,15 +1240,6 @@ class SpaceUIPrototype:
                 widget.configure(bg=c.get(bg_key, c["panel"]), fg=c.get(fg_key, c["fg"]), font=font)
             except tk.TclError:
                 pass
-        def update_frames(widget):
-            for child in widget.winfo_children():
-                if hasattr(child, "_ui_bg_key"):
-                    try:
-                        child.configure(bg=c.get(child._ui_bg_key, c["panel"]))
-                    except tk.TclError:
-                        pass
-                update_frames(child)
-        update_frames(self.shell)
         for card in self.cards:
             card.refresh_theme()
         for field in self.fields:
@@ -1239,6 +1250,8 @@ class SpaceUIPrototype:
             button.refresh_theme()
         for toggle in self.toggles:
             toggle.refresh_theme()
+        for pane in self.scroll_panes:
+            pane.refresh_theme()
         try:
             self.backdrop._resize(None)
         except (AttributeError, tk.TclError):
@@ -1381,11 +1394,13 @@ class ScrollPane(tk.Frame):
         self.scrollbar.pack(side="right", fill="y")
         self.body.bind("<Configure>", lambda _event: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.bind("<Configure>", lambda event: self.canvas.itemconfigure(self.window, width=event.width))
-        self.canvas.bind("<MouseWheel>", self._wheel, add="+")
+        # Global bindings are scoped by _event_inside, so hidden pages and other
+        # panels never consume the same wheel event.
         self.bind_all("<MouseWheel>", self._wheel_global, add="+")
         self.bind_all("<Button-4>", self._wheel_global, add="+")
         self.bind_all("<Button-5>", self._wheel_global, add="+")
         self._scroll_body_bg = app.colors["bg"]
+        self.app.scroll_panes.append(self)
 
     def _event_inside(self, event):
         widget = getattr(event, "widget", None)
