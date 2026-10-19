@@ -605,7 +605,7 @@ class SpaceUIPrototype:
         self.root = root
         self.root.title(APP_NAME + "  •  v" + APP_VERSION)
         self.root.geometry("1280x830")
-        self.root.minsize(1040, 700)
+        self.root.minsize(960, 620)
         self.root.configure(bg=PALETTES["dark"]["bg"])
         self.root.option_add("*tearOff", False)
         self.style = ttk.Style(root)
@@ -844,18 +844,32 @@ class SpaceUIPrototype:
         url.entry.bind("<FocusIn>", lambda _event: self.toast("Entrada de exemplo — o protótipo não acessa este link."))
         controls = self.frame(inside, "panel2")
         controls.pack(fill="x", pady=(14, 0))
-        modes = self.frame(controls, "panel2")
+        select_row = self.frame(controls, "panel2")
+        select_row.pack(fill="x")
+        modes = self.frame(select_row, "panel2")
         modes.pack(side="left", fill="x", expand=True)
         self.label(modes, "FORMATO", "muted", "panel2", 8, "bold").pack(anchor="w", pady=(0, 5))
-        Dropdown(modes, self, ["Automático — vídeo", "Vídeo", "Música — MP3"], "Automático — vídeo", width=220).pack(anchor="w")
-        qualities = self.frame(controls, "panel2")
+        Dropdown(
+            modes, self, ["Automático — vídeo", "Vídeo", "Música — MP3"],
+            "Automático — vídeo", width=220,
+        ).pack(anchor="w")
+        qualities = self.frame(select_row, "panel2")
         qualities.pack(side="left", fill="x", expand=True, padx=(14, 0))
         self.label(qualities, "QUALIDADE", "muted", "panel2", 8, "bold").pack(anchor="w", pady=(0, 5))
-        Dropdown(qualities, self, ["720p", "1080p", "1440p", "2160p / 4K", "192 kbps", "320 kbps"], "1080p", width=180).pack(anchor="w")
+        Dropdown(
+            qualities, self, ["720p", "1080p", "1440p", "2160p / 4K", "192 kbps", "320 kbps"],
+            "1080p", width=180,
+        ).pack(anchor="w")
         actions = self.frame(controls, "panel2")
-        actions.pack(side="right", anchor="s", padx=(10, 0))
-        self.button(actions, "Analisar playlist", lambda: self._mock_action("Analisar playlist"), "secondary", width=140).pack(side="right", padx=(0, 8))
-        self.button(actions, "↓  Baixar agora", lambda: self._mock_action("Download"), "primary", width=150).pack(side="right")
+        actions.pack(fill="x", pady=(12, 0))
+        self.button(
+            actions, "↓  Baixar agora", lambda: self._mock_action("Download"),
+            "primary", width=150,
+        ).pack(side="right")
+        self.button(
+            actions, "Analisar playlist", lambda: self._mock_action("Analisar playlist"),
+            "secondary", width=140,
+        ).pack(side="right", padx=(0, 8))
 
         progress = self.card(body, padding=16)
         progress.pack(fill="x", pady=(0, 12))
