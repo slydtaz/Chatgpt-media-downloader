@@ -231,11 +231,26 @@ def extract_archive(archive: Path, destination: Path) -> None:
                 tf.extractall(temp_dir)
         else:
             raise ValueError(f"Formato de arquivo não suportado: {archive.name}")
+        allowed_tools = {
+            "ffmpeg", "ffmpeg.exe", "ffprobe", "ffprobe.exe", "yt-dlp", "yt-dlp.exe",
+            "yt-dlp_x86.exe", "yt-dlp_arm64.exe", "yt-dlp_linux", "yt-dlp_linux_aarch64",
+        }
         for candidate in temp_dir.rglob("*"):
-            if candidate.is_file() and candidate.suffix.lower() not in {".txt", ".md"} and candidate.name.lower() in {"ffmpeg", "ffmpeg.exe", "ffprobe", "ffprobe.exe", "yt-dlp", "yt-dlp.exe", "yt-dlp_x86.exe", "yt-dlp_arm64.exe", "yt-dlp_linux", "yt-dlp_linux_aarch64"}:
-                target = destination / candidate.name
-                shutil.copy2(candidate, target)
+            if not candidate.is_file() or candidate.name.lower() not in allowed_tools:
+                continue
+            target = destination / candidate.name
+            # Never follow a pre-existing symlink or replace a directory unexpectedly.
+            if target.is_symlink() or (target.exists() and not target.is_file()):
+                raise ValueError("O destino da ferramenta contém um caminho inseguro.")
+            staged = destination / f".{candidate.name}.staged"
+            if staged.is_symlink() or (staged.exists() and not staged.is_file()):
+                raise ValueError("O arquivo temporário da ferramenta contém um caminho inseguro.")
+            try:
+                shutil.copyfile(candidate, staged)
                 if os.name != "nt":
-                    target.chmod(target.stat().st_mode | 0o111)
+                    staged.chmod(staged.stat().st_mode | 0o111)
+                os.replace(staged, target)
+            finally:
+                staged.unlink(missing_ok=True)
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
