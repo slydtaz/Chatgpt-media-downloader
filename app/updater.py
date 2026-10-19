@@ -147,9 +147,20 @@ def _trusted_github_url(url: str) -> bool:
     return host in GITHUB_ASSET_HOSTS
 
 def _asset(release: dict, name: str) -> Optional[ReleaseAsset]:
-    for item in release.get("assets", []):
-        if item.get("name") == name:
-            return ReleaseAsset(item["name"], item["browser_download_url"], int(item.get("size", 0)))
+    assets = release.get("assets", [])
+    if not isinstance(assets, list):
+        return None
+    for item in assets:
+        if not isinstance(item, dict) or item.get("name") != name:
+            continue
+        url = item.get("browser_download_url")
+        try:
+            size = int(item.get("size", 0))
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(url, str) or not _trusted_github_url(url) or size <= 0:
+            return None
+        return ReleaseAsset(name, url, size)
     return None
 
 
