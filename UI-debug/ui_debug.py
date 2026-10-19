@@ -1281,9 +1281,9 @@ class SpaceUIPrototype:
     def _tint_nav_icon(self, nav, tag, color):
         """Tint each vector item by type so outlines remain outlines and strokes stay sharp."""
         for item_tag, options in (
-            ("nav-icon-line", {"fill": color, "width": 2.4}),
+            ("nav-icon-line", {"fill": color, "width": 2.4 * self.ui_scale}),
             ("nav-icon-text", {"fill": color}),
-            ("nav-icon-outline", {"outline": color, "width": 2.3}),
+            ("nav-icon-outline", {"outline": color, "width": 2.3 * self.ui_scale}),
             ("nav-icon-filled", {"fill": color, "outline": color}),
         ):
             try:
