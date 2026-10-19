@@ -118,6 +118,8 @@ class VisualConceptTests(unittest.TestCase):
         self.assertIn("def preview_media_async", source)
         self.assertIn("def preview_playlist_async", source)
         self.assertIn("def _install_thumbnail", source)
+        self.assertIn("def render_nav_icon_image", source)
+        self.assertIn("Image.Resampling", source)
         self.assertIn("extractor.extract_info(url, download=False)", source)
         self.assertIn('"skip_download": True', source)
 
