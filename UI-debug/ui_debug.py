@@ -961,6 +961,10 @@ class SpaceUIPrototype:
         self.root.geometry("1280x830")
         self.root.minsize(960, 620)
         self.root.configure(bg=PALETTES["dark"]["bg"])
+        # Keep the native root hidden behind the immersive Toplevel until the
+        # startup sequence ends; otherwise Windows can lift the root over it.
+        if show_splash:
+            self.root.withdraw()
         self.root.option_add("*tearOff", False)
         self.style = ttk.Style(root)
         try:
