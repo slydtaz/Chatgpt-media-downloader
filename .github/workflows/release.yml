@@ -73,14 +73,14 @@ jobs:
       - name: Smoke-test packaged GUI (no downloads or update checks)
         shell: pwsh
         run: |
-          & '.\\dist\\ChatGPTMediaDownloader.exe' --smoke-test-gui
+          & '.\dist\ChatGPTMediaDownloader.exe' --smoke-test-gui
           if ($LASTEXITCODE -ne 0) { throw "GUI smoke test failed with exit code $LASTEXITCODE." }
       - name: Build standalone emergency uninstaller
         shell: cmd
         run: |
           python -m PyInstaller --noconfirm --clean --onefile --noconsole --name GPT-Media-Uninstaller --distpath dist-uninstaller --workpath build/uninstaller emergency_uninstaller.py
-          if not exist "dist-uninstaller\\GPT-Media-Uninstaller.exe" exit /b 1
-          copy /y "dist-uninstaller\\GPT-Media-Uninstaller.exe" "dist\\GPT-Media-Uninstaller.exe"
+          if not exist "dist-uninstaller\GPT-Media-Uninstaller.exe" exit /b 1
+          copy /y "dist-uninstaller\GPT-Media-Uninstaller.exe" "dist\GPT-Media-Uninstaller.exe"
       - name: Sign EXE with Authenticode when a trusted certificate is configured
         shell: pwsh
         env:
