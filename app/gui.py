@@ -54,10 +54,28 @@ def _blend_hex(color: str, toward: str, amount: float = 0.18) -> str:
 
 
 def _contrast_text(value: str) -> str:
+    """Choose the higher-contrast foreground for a user-selected accent color."""
     try:
-        rgb=[int(value[i:i+2],16)/255 for i in (1,3,5)]
-        lin=[v/12.92 if v<=0.04045 else ((v+0.055)/1.055)**2.4 for v in rgb]
-        return "#11131A" if 0.2126*lin[0]+0.7152*lin[1]+0.0722*lin[2] > 0.42 else "#FFFFFF"
+        rgb = [int(value[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        linear = [v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in rgb]
+        luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+        dark_rgb = [17 / 255, 19 / 255, 26 / 255]
+        dark_linear = [
+            v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+            for v in dark_rgb
+        ]
+        dark_luminance = (
+            0.2126 * dark_linear[0]
+            + 0.7152 * dark_linear[1]
+            + 0.0722 * dark_linear[2]
+        )
+
+        dark_contrast = (max(luminance, dark_luminance) + 0.05) / (
+            min(luminance, dark_luminance) + 0.05
+        )
+        white_contrast = 1.05 / (luminance + 0.05)
+        return "#11131A" if dark_contrast >= white_contrast else "#FFFFFF"
     except (ValueError, TypeError, IndexError):
         return "#FFFFFF"
 
