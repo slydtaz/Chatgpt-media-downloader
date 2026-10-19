@@ -6,7 +6,7 @@ cd /d "%~dp0"
 title Build ChatGPT Media Downloader - single EXE
 
 echo ============================================================
-echo   ChatGPT Media Downloader 5.2.0 - Build de arquivo unico
+echo   ChatGPT Media Downloader 5.3.0 - Build de arquivo unico
 echo ============================================================
 echo.
 
@@ -28,7 +28,7 @@ if errorlevel 1 (
 
 echo.
 echo [1/3] Instalando/atualizando PyInstaller...
-py -3 -m pip install --upgrade pyinstaller
+py -3 -m pip install pyinstaller==6.22.3
 if errorlevel 1 (
   echo ERRO: nao foi possivel instalar PyInstaller.
   if not defined BUILD_NO_PAUSE pause

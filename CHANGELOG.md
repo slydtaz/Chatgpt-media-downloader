@@ -1,3 +1,12 @@
+## 5.3.0 - stable
+
+- Reforça a validação de URLs, a redação de credenciais nos logs e a confiança nos destinos de download.
+- Protege a extração ZIP/TAR contra travessia de caminhos, links simbólicos, entradas especiais e arquivos compactados desproporcionais.
+- Valida origem, redirecionamentos, limite de tamanho e SHA-256 de yt-dlp/FFmpeg; ausência de manifesto válido interrompe instalação automática.
+- Fixa actions da pipeline por SHA completo, fixa versões de build, reduz permissões de job e acrescenta proveniência verificável da GitHub Actions.
+- Padroniza a interface em azul e cinza, usa botões sólidos e inicia novas instalações sem animações, preservando preferências e cores personalizadas existentes.
+- Substitui a marca visual semelhante a terceiros por um símbolo próprio de download, para deixar clara a identidade independente do projeto.
+- Documenta os limites de confiança: hashes e atestações não substituem assinatura Authenticode nem auditoria independente.
 ## 5.2.0 - stable
 
 - Substitui o bloco com estrela da marca por uma imagem PNG estática e transparente com o símbolo branco, pequenas estrelas e nuvem azul; a arte fica embutida no código e funciona offline.

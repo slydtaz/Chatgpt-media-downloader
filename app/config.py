@@ -13,7 +13,7 @@ from typing import Any
 APP_NAME = "ChatGPT Media Downloader"
 PRODUCT_ID = "com.chatgpt.mediadownloader"
 VENDOR = "ChatGPT"
-VERSION = "5.2.0"
+VERSION = "5.3.0"
 
 
 def _windows_local_appdata() -> Path:
@@ -122,10 +122,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "ffmpeg_path": "",
     "ffprobe_path": "",
     "theme": "dark",
-    "accent_color": "#8B5CF6",
+    "accent_color": "#2563EB",
     "ui_density": "comfortable",
     "developer_mode": False,
-    "animations_enabled": True,
+    "animations_enabled": False,
     "playlist_strategy": "sequential",
     "playlist_parallelism": 3,
     "concurrent_fragments": 4,
@@ -134,6 +134,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "subtitle_mode": "off",
     "update_open_after": True,
     "update_check_on_startup": True,
+    "settings_schema_version": 2,
 }
 
 
@@ -147,13 +148,27 @@ def _looks_foreign_path(value: str) -> bool:
 def load_config() -> dict[str, Any]:
     ensure_dirs()
     data = dict(DEFAULT_CONFIG)
+    loaded_config: dict[str, Any] = {}
     if CONFIG_PATH.exists():
         try:
             loaded = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
             if isinstance(loaded, dict):
+                loaded_config = loaded
                 data.update(loaded)
         except (OSError, json.JSONDecodeError):
             pass
+
+    # One-time visual migration: replace only the previous built-in accent.
+    # Explicit user-selected accent colors and existing motion preferences remain intact.
+    try:
+        schema_version = int(loaded_config.get("settings_schema_version", 1))
+    except (TypeError, ValueError):
+        schema_version = 1
+    if schema_version < 2:
+        legacy_accent = str(loaded_config.get("accent_color", "#8B5CF6") or "#8B5CF6").strip().upper()
+        if legacy_accent in {"", "#8B5CF6"}:
+            data["accent_color"] = DEFAULT_CONFIG["accent_color"]
+        data["settings_schema_version"] = 2
 
     for key in ("music_dir", "video_dir", "yt_dlp_path", "ffmpeg_path", "ffprobe_path"):
         data[key] = str(data.get(key) or "")
@@ -215,6 +230,7 @@ def load_config() -> dict[str, Any]:
             data[option] = bool(value)
         else:
             data[option] = str(value).strip().lower() in {"1", "true", "yes", "sim", "on"}
+    data["settings_schema_version"] = 2
     return data
 
 

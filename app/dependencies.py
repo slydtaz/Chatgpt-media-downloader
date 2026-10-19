@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import stat
 import subprocess
 import zipfile
 import tarfile
@@ -13,6 +14,10 @@ from typing import Optional
 from .config import TOOLS_DIR
 from .platform import SystemInfo
 from .process_utils import hidden_subprocess_kwargs
+from .security import safe_archive_member_path
+
+MAX_ARCHIVE_MEMBERS = 100_000
+MAX_ARCHIVE_UNPACKED_BYTES = 2 * 1024 * 1024 * 1024
 
 
 @dataclass
@@ -192,6 +197,7 @@ def inspect_tool(name: str, configured: str, system: SystemInfo) -> ToolInfo:
 
 
 def extract_archive(archive: Path, destination: Path) -> None:
+    """Extract only regular files/directories after validating every archive member."""
     destination.mkdir(parents=True, exist_ok=True)
     temp_dir = destination / ".extracting"
     if temp_dir.exists():
@@ -200,22 +206,33 @@ def extract_archive(archive: Path, destination: Path) -> None:
     try:
         if archive.suffix.lower() == ".zip":
             with zipfile.ZipFile(archive) as zf:
-                for member in zf.infolist():
-                    target = (temp_dir / member.filename).resolve()
-                    if not str(target).startswith(str(temp_dir.resolve()) + os.sep):
-                        raise ValueError("Arquivo compactado contém caminho inseguro.")
+                members = zf.infolist()
+                if len(members) > MAX_ARCHIVE_MEMBERS or sum(max(0, item.file_size) for item in members) > MAX_ARCHIVE_UNPACKED_BYTES:
+                    raise ValueError("Arquivo compactado excede o limite de conteúdo permitido.")
+                for member in members:
+                    safe_archive_member_path(temp_dir, member.filename)
+                    if member.flag_bits & 0x1:
+                        raise ValueError("Arquivo compactado criptografado não é aceito.")
+                    mode = (member.external_attr >> 16) & 0xFFFF
+                    file_type = stat.S_IFMT(mode)
+                    if file_type == stat.S_IFLNK or (file_type and file_type not in {stat.S_IFREG, stat.S_IFDIR}):
+                        raise ValueError("Arquivo compactado contém link ou arquivo especial inseguro.")
                 zf.extractall(temp_dir)
         elif archive.name.endswith(".tar.xz"):
             with tarfile.open(archive, "r:xz") as tf:
-                for member in tf.getmembers():
-                    target = (temp_dir / member.name).resolve()
-                    if not str(target).startswith(str(temp_dir.resolve()) + os.sep):
-                        raise ValueError("Arquivo compactado contém caminho inseguro.")
+                members = tf.getmembers()
+                total_unpacked = sum(member.size for member in members if member.isreg())
+                if len(members) > MAX_ARCHIVE_MEMBERS or total_unpacked > MAX_ARCHIVE_UNPACKED_BYTES:
+                    raise ValueError("Arquivo compactado excede o limite de conteúdo permitido.")
+                for member in members:
+                    safe_archive_member_path(temp_dir, member.name)
+                    if not (member.isdir() or member.isreg()):
+                        raise ValueError("Arquivo compactado contém link ou arquivo especial inseguro.")
                 tf.extractall(temp_dir)
         else:
             raise ValueError(f"Formato de arquivo não suportado: {archive.name}")
         for candidate in temp_dir.rglob("*"):
-            if candidate.is_file() and candidate.name.lower() in {"ffmpeg", "ffmpeg.exe", "ffprobe", "ffprobe.exe", "yt-dlp", "yt-dlp.exe", "yt-dlp_x86.exe", "yt-dlp_arm64.exe", "yt-dlp_linux", "yt-dlp_linux_aarch64"}:
+            if candidate.is_file() and candidate.suffix.lower() not in {".txt", ".md"} and candidate.name.lower() in {"ffmpeg", "ffmpeg.exe", "ffprobe", "ffprobe.exe", "yt-dlp", "yt-dlp.exe", "yt-dlp_x86.exe", "yt-dlp_arm64.exe", "yt-dlp_linux", "yt-dlp_linux_aarch64"}:
                 target = destination / candidate.name
                 shutil.copy2(candidate, target)
                 if os.name != "nt":

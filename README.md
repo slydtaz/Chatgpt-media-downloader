@@ -9,7 +9,7 @@
 [Sugerir uma melhoria](https://github.com/slydtaz/chatgpt-media-downloader/issues/new?template=feature_request.yml)
 
 ![Sistema: Windows](https://img.shields.io/badge/SO-Windows-0078D6)
-![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.2.0-blue)
+![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.3.0-blue)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green)
 
 </div>
@@ -18,11 +18,15 @@
 
 > **Aviso de nome:** “ChatGPT” no nome é apenas parte do identificador do projeto. Este software é independente e **não é afiliado, patrocinado, certificado ou distribuído pela OpenAI**.
 
-> **Interface 5.2.0:** inclui navegação por ícones, tema espacial violeta-azul-rosa, arte estática no emblema, botões arredondados, movimento opcional e console técnico separado do resumo de atividade. A versão preserva configurações antigas e é validada por testes automatizados no Windows e Linux. Se precisar remover o aplicativo, use o [GPT Media Uninstaller](https://github.com/slydtaz/Chatgpt-media-downloader/releases/latest).
+> **Interface 5.3.0:** usa uma identidade visual profissional em azul e cinza, navegação compacta, cartões discretos e botões sólidos. Novas instalações iniciam sem animações; as preferências e cores personalizadas existentes são preservadas. A versão acrescenta validações de URLs, extração segura de arquivos compactados, validação mais rígida dos downloads de dependências e testes de segurança.
 
 ## 🎨 Aparência e personalização
 
-A interface usa navegação lateral compacta por ícones e painéis arredondados. Personalize o tema **Escuro**, **Claro** ou **Preto OLED**, escolha uma cor de destaque (HEX ou paletas rápidas), altere o espaçamento entre **Confortável** e **Compacto**, e ative/desative animações nas Configurações. O **Modo desenvolvedor** mostra a saída bruta dos comandos; o painel padrão permanece simplificado. O estilo usa referências gerais de launchers como o [SKlauncher 4.0 Beta](https://docs.skmedix.pl/4.0/) — painel escuro, realces violeta e transições sutis — sem copiar sua marca ou identidade visual.
+A interface usa navegação lateral compacta, painéis organizados e botões com cores sólidas. Personalize o tema **Escuro**, **Claro** ou **Preto OLED**, escolha uma cor de destaque, altere o espaçamento entre **Confortável** e **Compacto**, e ative/desative animações nas Configurações. O **Modo desenvolvedor** mostra a saída técnica dos comandos; por padrão, o painel exibe um resumo da atividade. A paleta azul e cinza prioriza legibilidade, estados claros e aparência discreta.
+
+## 🔎 Integridade e proveniência
+
+Os builds de release incluem `SHA256SUMS.txt` e o relatório explícito de assinatura do Windows. A pipeline também gera uma atestação de proveniência da GitHub Actions para os artefatos publicados; desenvolvedores podem conferi-la com o GitHub CLI usando `gh attestation verify` e o repositório de origem. A atestação ajuda a vincular o artefato ao processo de build, mas **não equivale à assinatura Authenticode do executável** nem a uma auditoria independente.
 
 ## 📥 Download oficial para usuários
 
@@ -31,7 +35,7 @@ A interface usa navegação lateral compacta por ícones e painéis arredondados
 1. Baixe `ChatGPTMediaDownloader.exe` da Release estável.
 2. (Recomendado) Compare o SHA-256 do arquivo com `SHA256SUMS.txt` da mesma Release.
 3. Faça uma verificação com o Microsoft Defender ou seu antivírus antes de executar.
-4. Abra o EXE. Na primeira execução, o aplicativo prepara suas dependências de mídia (yt-dlp/FFmpeg) a partir de fontes configuradas no projeto.
+4. Abra o EXE. Na primeira execução, o aplicativo prepara suas dependências de mídia (yt-dlp/FFmpeg) a partir de releases oficiais configurados no projeto, conferindo o manifesto SHA-256 quando publicado pela origem.
 
 **Se o reparo continuar falhando:** baixe uma vez o EXE da [última Release oficial](https://github.com/slydtaz/Chatgpt-media-downloader/releases/latest) e execute-o. A partir desta versão, a instalação no Windows prioriza uma pasta por usuário para evitar bloqueios de escrita em Program Files, e a recuperação após erro crítico oferece reparar, desinstalar ou cancelar. Consulte [a documentação de identificação e assinatura do Windows](docs/windows-trust.md).
 

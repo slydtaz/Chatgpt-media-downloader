@@ -19,6 +19,7 @@ from app.app_update import (
     _safe_extract_zip,
     _stage_source_tree,
     _verify_executable_hash,
+    _trusted_url,
     AppUpdate,
     check_for_update,
     check_repair_candidate,
@@ -26,6 +27,22 @@ from app.app_update import (
     version_key,
 )
 from app.config import PRODUCT_ID
+
+
+
+class TrustedUpdateUrlTests(unittest.TestCase):
+    def test_release_urls_require_https_trusted_host_and_standard_port(self):
+        self.assertTrue(_trusted_url("https://github.com/slydtaz/Chatgpt-media-downloader/releases/latest"))
+        self.assertTrue(_trusted_url("https://api.github.com/repos/slydtaz/Chatgpt-media-downloader/releases/latest", metadata=True))
+        for value in (
+            "http://github.com/slydtaz/Chatgpt-media-downloader",
+            "https://user:password@github.com/slydtaz/Chatgpt-media-downloader",
+            "https://github.com:444/slydtaz/Chatgpt-media-downloader",
+            "https://github.com.attacker.example/slydtaz/Chatgpt-media-downloader",
+        ):
+            with self.subTest(value=value):
+                self.assertFalse(_trusted_url(value, metadata=True))
+        self.assertFalse(_trusted_url("https://api.github.com/repos/owner/repo"))
 
 
 class VersionComparisonTests(unittest.TestCase):
