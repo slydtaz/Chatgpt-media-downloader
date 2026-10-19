@@ -1,0 +1,40 @@
+name: Capture real application UI preview
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/ui-preview.yml"
+      - "tools/capture_ui_preview.py"
+      - "app/gui.py"
+      - "app/config.py"
+
+permissions:
+  contents: read
+
+jobs:
+  capture-ui:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install screenshot capture dependency
+        shell: pwsh
+        run: python -m pip install --upgrade pillow
+      - name: Capture actual UI tabs and animations
+        shell: pwsh
+        run: python tools/capture_ui_preview.py --output ui-preview-output
+      - name: Upload screenshots and animations
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatgpt-media-downloader-ui-preview-5.1.5
+          path: ui-preview-output/
+          if-no-files-found: error
+          retention-days: 14
