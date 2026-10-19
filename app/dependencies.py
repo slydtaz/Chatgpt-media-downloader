@@ -7,6 +7,7 @@ import stat
 import subprocess
 import zipfile
 import tarfile
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -231,11 +232,28 @@ def extract_archive(archive: Path, destination: Path) -> None:
                 tf.extractall(temp_dir)
         else:
             raise ValueError(f"Formato de arquivo não suportado: {archive.name}")
+        allowed_tools = {
+            "ffmpeg", "ffmpeg.exe", "ffprobe", "ffprobe.exe", "yt-dlp", "yt-dlp.exe",
+            "yt-dlp_x86.exe", "yt-dlp_arm64.exe", "yt-dlp_linux", "yt-dlp_linux_aarch64",
+        }
         for candidate in temp_dir.rglob("*"):
-            if candidate.is_file() and candidate.suffix.lower() not in {".txt", ".md"} and candidate.name.lower() in {"ffmpeg", "ffmpeg.exe", "ffprobe", "ffprobe.exe", "yt-dlp", "yt-dlp.exe", "yt-dlp_x86.exe", "yt-dlp_arm64.exe", "yt-dlp_linux", "yt-dlp_linux_aarch64"}:
-                target = destination / candidate.name
-                shutil.copy2(candidate, target)
+            if not candidate.is_file() or candidate.name.lower() not in allowed_tools:
+                continue
+            target = destination / candidate.name
+            # Never use a path that is already a symlink or a directory as a tool target.
+            if target.is_symlink() or (target.exists() and not target.is_file()):
+                raise ValueError("O destino da ferramenta contém um caminho inseguro.")
+            staged = destination / f".{candidate.name}.{uuid.uuid4().hex}.staged"
+            try:
+                with candidate.open("rb") as source, staged.open("xb") as output:
+                    shutil.copyfileobj(source, output, length=1024 * 1024)
                 if os.name != "nt":
-                    target.chmod(target.stat().st_mode | 0o111)
+                    staged.chmod(staged.stat().st_mode | 0o111)
+                # os.replace replaces a link itself, not the path its link points to.
+                if target.is_symlink() or (target.exists() and not target.is_file()):
+                    raise ValueError("O destino da ferramenta mudou para um caminho inseguro.")
+                os.replace(staged, target)
+            finally:
+                staged.unlink(missing_ok=True)
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
