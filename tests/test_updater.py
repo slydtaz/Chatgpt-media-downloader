@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from app.platform import SystemInfo
 from app.updater import (
-    ReleaseAsset, UpdateError, _download, _trusted_github_api_url, _trusted_github_url, _verify_checksum,
+    ReleaseAsset, UpdateError, _asset, _download, _trusted_github_api_url, _trusted_github_url, _verify_checksum,
     ff_asset_name, yt_asset_name,
 )
 
@@ -79,10 +79,30 @@ class DependencyDownloadTrustTests(unittest.TestCase):
         response.geturl.return_value = "https://attacker.example/payload.exe"
         with TemporaryDirectory() as tmp:
             destination = Path(tmp) / "tool.exe"
-            with patch("app.updater.urllib.request.urlopen", return_value=response):
+            with patch("app.updater.trusted_urlopen", return_value=response):
                 with self.assertRaises(UpdateError):
                     _download("https://github.com/project/tool/releases/download/v1/tool.exe", destination)
             self.assertFalse(destination.exists())
+
+    def test_asset_metadata_requires_trusted_url_and_positive_size(self):
+        valid = {
+            "assets": [{
+                "name": "tool.exe",
+                "browser_download_url": "https://github.com/vendor/project/releases/download/v1/tool.exe",
+                "size": 1024,
+            }]
+        }
+        self.assertEqual(_asset(valid, "tool.exe"), ReleaseAsset(
+            "tool.exe", "https://github.com/vendor/project/releases/download/v1/tool.exe", 1024
+        ))
+        for bad in (
+            {"assets": [{"name": "tool.exe", "browser_download_url": "https://attacker.example/tool.exe", "size": 1024}]},
+            {"assets": [{"name": "tool.exe", "browser_download_url": "https://github.com/tool.exe", "size": 0}]},
+            {"assets": [{"name": "tool.exe", "browser_download_url": "http://github.com/tool.exe", "size": 1024}]},
+            {"assets": "not-a-list"},
+        ):
+            with self.subTest(bad=bad):
+                self.assertIsNone(_asset(bad, "tool.exe"))
 
     def test_missing_upstream_checksum_manifest_fails_closed(self):
         asset = ReleaseAsset("tool.exe", "https://github.com/project/tool/releases/download/v1/tool.exe", 4)

@@ -1,3 +1,11 @@
+## 5.3.1 - stable
+
+- Valida cada destino HTTPS de redirecionamento antes de enviar a próxima requisição nos downloads de atualizações e dependências; bloqueia downgrade para HTTP, userinfo, portas não padrão e hosts fora da lista permitida.
+- Valida metadados de assets do GitHub antes do download, exige tamanho positivo/compatível e mantém a exigência de SHA-256 para dependências.
+- Instala ferramentas extraídas por substituição atômica, sem gravar através de links simbólicos preexistentes; acrescenta testes para redirecionamentos e destinos de escrita inseguros.
+- Acrescenta análise estática CodeQL e um fluxo de análise VirusTotal para executáveis públicos; a publicação fica bloqueada enquanto a assinatura Authenticode confiável ou os relatórios de antivírus não satisfizerem os requisitos.
+- A assinatura ainda depende de certificado de código confiável e os testes/relatórios não tornam o programa invulnerável nem garantem zero alertas de antivírus.
+
 ## 5.3.0 - stable
 
 - Reforça a validação de URLs, a redação de credenciais nos logs e a confiança nos destinos de download.
