@@ -94,6 +94,18 @@ def blend_hex(first: str, second: str, amount: float) -> str:
     return "#" + "".join("%02X" % round(x + (y - x) * amount) for x, y in zip(a, b))
 
 
+def background_key_for(widget, app, default="bg") -> str:
+    """Map a container's current background to the matching theme role."""
+    try:
+        actual = str(widget.cget("bg")).lower()
+    except (tk.TclError, TypeError, AttributeError):
+        return default
+    for key in ("bg", "panel", "panel2", "surface", "field", "button", "muted", "border", "accent", "accent2"):
+        if str(app.colors.get(key, "")).lower() == actual:
+            return key
+    return default
+
+
 def rounded_points(x1: float, y1: float, x2: float, y2: float, radius: float, steps: int = 8) -> list[float]:
     """Approximate a rounded rectangle with evenly sampled quarter circles."""
     width = max(1.0, x2 - x1)
@@ -317,12 +329,13 @@ class GradientBackdrop(tk.Canvas):
 class RoundedCard(tk.Frame):
     """Rounded canvas underlay with a normal frame for native, accessible controls."""
     def __init__(self, master, app, *, background_key="panel", padding=16, radius=18):
-        super().__init__(master, bg=app.colors["bg"], bd=0, highlightthickness=0)
+        self.backdrop_key = background_key_for(master, app, "bg")
+        super().__init__(master, bg=app.colors[self.backdrop_key], bd=0, highlightthickness=0)
         self.app = app
         self.background_key = background_key
         self.padding = padding
         self.radius = radius
-        self.canvas = tk.Canvas(self, bg=app.colors["bg"], bd=0, highlightthickness=0)
+        self.canvas = tk.Canvas(self, bg=app.colors[self.backdrop_key], bd=0, highlightthickness=0)
         self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
         self.body = tk.Frame(self, bg=app.colors[background_key], bd=0, highlightthickness=0)
         if isinstance(padding, tuple):
@@ -347,7 +360,8 @@ class RoundedCard(tk.Frame):
                 self._shape, fill=self.app.colors[self.background_key],
                 outline=self.app.colors["border"],
             )
-            self.canvas.configure(bg=self.app.colors["bg"])
+            self.configure(bg=self.app.colors[self.backdrop_key])
+            self.canvas.configure(bg=self.app.colors[self.backdrop_key])
             self.body.configure(bg=self.app.colors[self.background_key])
         except tk.TclError:
             pass
@@ -369,7 +383,8 @@ class RoundedButton(tk.Canvas):
         self.font = tkfont.Font(family="Segoe UI", size=9 if height < 36 else 10, weight="bold" if variant == "primary" else "normal")
         desired = self.font.measure(text) + (34 if variant == "primary" else 30)
         self.width = int(width or max(82, min(300, desired)))
-        super().__init__(master, width=self.width, height=height, bg=app.colors["bg"], bd=0, highlightthickness=0, cursor="hand2")
+        self.bg_key = background_key_for(master, app, "bg")
+        super().__init__(master, width=self.width, height=height, bg=app.colors[self.bg_key], bd=0, highlightthickness=0, cursor="hand2")
         self.hovered = False
         self.pressed = False
         self._gradient_ids: list[int] = []
@@ -449,7 +464,7 @@ class RoundedButton(tk.Canvas):
             outline = c["accent"] if self.hovered else c["border"]
         self.itemconfigure(self._outline_id, outline=outline)
         self.itemconfigure(self._text_id, fill=text_color)
-        self.configure(bg=c["bg"])
+        self.configure(bg=c.get(self.bg_key, c["bg"]))
 
     def refresh_theme(self):
         self._refresh_colors()
@@ -458,11 +473,12 @@ class RoundedButton(tk.Canvas):
 class RoundedField(tk.Frame):
     """Rounded border/background behind a flat native entry."""
     def __init__(self, master, app, *, textvariable=None, placeholder=None, width=None, readonly=False):
-        super().__init__(master, bg=app.colors["bg"], bd=0, highlightthickness=0, width=width or 260, height=42)
+        self.bg_key = background_key_for(master, app, "bg")
+        super().__init__(master, bg=app.colors[self.bg_key], bd=0, highlightthickness=0, width=width or 260, height=42)
         self.app = app
         self.placeholder = placeholder
         self.readonly = readonly
-        self.canvas = tk.Canvas(self, bg=app.colors["bg"], bd=0, highlightthickness=0)
+        self.canvas = tk.Canvas(self, bg=app.colors[self.bg_key], bd=0, highlightthickness=0)
         self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
         self.shape = self.canvas.create_polygon(*rounded_points(1, 1, 4, 4, 12), fill=app.colors["field"], outline=app.colors["border"], width=1)
         self.entry = tk.Entry(
@@ -483,8 +499,8 @@ class RoundedField(tk.Frame):
             width, height = max(4, self.winfo_width()), max(4, self.winfo_height())
             self.canvas.coords(self.shape, *rounded_points(1, 1, width - 1, height - 1, min(12, height / 2)))
             self.canvas.itemconfigure(self.shape, fill=self.app.colors["field"], outline=self.app.colors["border"])
-            self.canvas.configure(bg=self.app.colors["bg"])
-            self.configure(bg=self.app.colors["bg"])
+            self.canvas.configure(bg=self.app.colors[self.bg_key])
+            self.configure(bg=self.app.colors[self.bg_key])
             self.entry.configure(
                 bg=self.app.colors["field"], fg=self.app.colors["input_fg"],
                 insertbackground=self.app.colors["input_fg"],
@@ -501,12 +517,13 @@ class RoundedField(tk.Frame):
 class Dropdown(tk.Frame):
     """Compact custom dropdown that visually fits the rounded field system."""
     def __init__(self, master, app, options, value, command=None, *, width=220):
-        super().__init__(master, bg=app.colors["bg"], width=width, height=42, bd=0, highlightthickness=0)
+        self.bg_key = background_key_for(master, app, "bg")
+        super().__init__(master, bg=app.colors[self.bg_key], width=width, height=42, bd=0, highlightthickness=0)
         self.app = app
         self.options = list(options)
         self.value = tk.StringVar(value=value)
         self.command = command
-        self.canvas = tk.Canvas(self, bg=app.colors["bg"], width=width, height=42, bd=0, highlightthickness=0, cursor="hand2")
+        self.canvas = tk.Canvas(self, bg=app.colors[self.bg_key], width=width, height=42, bd=0, highlightthickness=0, cursor="hand2")
         self.canvas.pack(fill="both", expand=True)
         self.shape = self.canvas.create_polygon(*rounded_points(1, 1, width - 1, 41, 12), fill=app.colors["field"], outline=app.colors["border"], width=1)
         self.label_id = self.canvas.create_text(14, 21, text=value, anchor="w", fill=app.colors["input_fg"], font=("Segoe UI", 10))
@@ -544,7 +561,8 @@ class Dropdown(tk.Frame):
 
     def refresh_theme(self):
         c = self.app.colors
-        self.canvas.configure(bg=c["bg"])
+        self.configure(bg=c.get(self.bg_key, c["bg"]))
+        self.canvas.configure(bg=c.get(self.bg_key, c["bg"]))
         self.canvas.itemconfigure(self.shape, fill=c["field"], outline=c["border"])
         self.canvas.itemconfigure(self.label_id, fill=c["input_fg"])
         self.canvas.itemconfigure(self.chevron_id, fill=c["accent2"])
