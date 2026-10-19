@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import lzma
 import os
 import re
 import shutil
 import stat
 import subprocess
-import zipfile
 import tarfile
+import tempfile
+import zipfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +20,7 @@ from .process_utils import hidden_subprocess_kwargs
 from .security import safe_archive_member_path
 
 MAX_ARCHIVE_MEMBERS = 100_000
+MAX_ARCHIVE_COMPRESSED_BYTES = 512 * 1024 * 1024
 MAX_ARCHIVE_UNPACKED_BYTES = 2 * 1024 * 1024 * 1024
 
 
@@ -197,21 +200,52 @@ def inspect_tool(name: str, configured: str, system: SystemInfo) -> ToolInfo:
     return info
 
 
+def _is_reparse_directory(path: Path) -> bool:
+    """Detect a symlink/junction directory without requiring Path.is_junction on Python 3.10."""
+    if path.is_symlink():
+        return True
+    checker = getattr(path, "is_junction", None)
+    try:
+        return bool(checker()) if checker is not None else False
+    except OSError:
+        return True
+
+
 def extract_archive(archive: Path, destination: Path) -> None:
-    """Extract only regular files/directories after validating every archive member."""
+    """Safely extract trusted media-tool archives into isolated, unique staging."""
+    archive = Path(archive)
+    destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
-    temp_dir = destination / ".extracting"
-    if temp_dir.exists():
-        shutil.rmtree(temp_dir, ignore_errors=True)
-    temp_dir.mkdir(parents=True, exist_ok=True)
+    if _is_reparse_directory(destination):
+        raise ValueError("A pasta de ferramentas não pode ser um link simbólico ou junction.")
+    destination_root = destination.resolve()
+
+    try:
+        archive_stat = archive.lstat()
+    except OSError as exc:
+        raise ValueError(f"Não foi possível inspecionar o arquivo compactado: {exc}") from exc
+    if not stat.S_ISREG(archive_stat.st_mode) or archive.is_symlink():
+        raise ValueError("O arquivo compactado precisa ser um arquivo regular, não um link.")
+    if archive_stat.st_size <= 0 or archive_stat.st_size > MAX_ARCHIVE_COMPRESSED_BYTES:
+        raise ValueError("O arquivo compactado está vazio ou excede o limite permitido.")
+
+    # A unique private directory prevents concurrent launches or stale files from
+    # sharing a predictable extraction location.
+    temp_dir = Path(tempfile.mkdtemp(prefix=".extracting-", dir=str(destination_root)))
     try:
         if archive.suffix.lower() == ".zip":
             with zipfile.ZipFile(archive) as zf:
                 members = zf.infolist()
-                if len(members) > MAX_ARCHIVE_MEMBERS or sum(max(0, item.file_size) for item in members) > MAX_ARCHIVE_UNPACKED_BYTES:
-                    raise ValueError("Arquivo compactado excede o limite de conteúdo permitido.")
+                unpacked_size = sum(max(0, int(item.file_size)) for item in members)
+                if not members or len(members) > MAX_ARCHIVE_MEMBERS or unpacked_size > MAX_ARCHIVE_UNPACKED_BYTES:
+                    raise ValueError("Arquivo compactado excede os limites de conteúdo permitidos.")
+                seen_paths: set[str] = set()
                 for member in members:
-                    safe_archive_member_path(temp_dir, member.filename)
+                    target_path = safe_archive_member_path(temp_dir, member.filename)
+                    path_key = target_path.as_posix().casefold()
+                    if path_key in seen_paths:
+                        raise ValueError("Arquivo compactado contém caminhos duplicados ou ambíguos.")
+                    seen_paths.add(path_key)
                     if member.flag_bits & 0x1:
                         raise ValueError("Arquivo compactado criptografado não é aceito.")
                     mode = (member.external_attr >> 16) & 0xFFFF
@@ -219,41 +253,69 @@ def extract_archive(archive: Path, destination: Path) -> None:
                     if file_type == stat.S_IFLNK or (file_type and file_type not in {stat.S_IFREG, stat.S_IFDIR}):
                         raise ValueError("Arquivo compactado contém link ou arquivo especial inseguro.")
                 zf.extractall(temp_dir)
-        elif archive.name.endswith(".tar.xz"):
+        elif archive.name.lower().endswith(".tar.xz"):
             with tarfile.open(archive, "r:xz") as tf:
                 members = tf.getmembers()
-                total_unpacked = sum(member.size for member in members if member.isreg())
-                if len(members) > MAX_ARCHIVE_MEMBERS or total_unpacked > MAX_ARCHIVE_UNPACKED_BYTES:
-                    raise ValueError("Arquivo compactado excede o limite de conteúdo permitido.")
+                if not members or len(members) > MAX_ARCHIVE_MEMBERS:
+                    raise ValueError("Arquivo TAR excede o limite de entradas permitido.")
+                total_unpacked = 0
+                seen_paths: set[str] = set()
                 for member in members:
-                    safe_archive_member_path(temp_dir, member.name)
+                    if member.size < 0:
+                        raise ValueError("Arquivo TAR contém tamanho de entrada inválido.")
+                    target_path = safe_archive_member_path(temp_dir, member.name)
+                    path_key = target_path.as_posix().casefold()
+                    if path_key in seen_paths:
+                        raise ValueError("Arquivo TAR contém caminhos duplicados ou ambíguos.")
+                    seen_paths.add(path_key)
                     if not (member.isdir() or member.isreg()):
-                        raise ValueError("Arquivo compactado contém link ou arquivo especial inseguro.")
+                        raise ValueError("Arquivo TAR contém links ou arquivos especiais inseguros.")
+                    if member.isreg():
+                        total_unpacked += member.size
+                        if total_unpacked > MAX_ARCHIVE_UNPACKED_BYTES:
+                            raise ValueError("Arquivo TAR excede o limite de conteúdo permitido.")
                 tf.extractall(temp_dir)
         else:
             raise ValueError(f"Formato de arquivo não suportado: {archive.name}")
+
         allowed_tools = {
             "ffmpeg", "ffmpeg.exe", "ffprobe", "ffprobe.exe", "yt-dlp", "yt-dlp.exe",
             "yt-dlp_x86.exe", "yt-dlp_arm64.exe", "yt-dlp_linux", "yt-dlp_linux_aarch64",
         }
-        for candidate in temp_dir.rglob("*"):
-            if not candidate.is_file() or candidate.name.lower() not in allowed_tools:
-                continue
-            target = destination / candidate.name
-            # Never use a path that is already a symlink or a directory as a tool target.
-            if target.is_symlink() or (target.exists() and not target.is_file()):
-                raise ValueError("O destino da ferramenta contém um caminho inseguro.")
-            staged = destination / f".{candidate.name}.{uuid.uuid4().hex}.staged"
-            try:
-                with candidate.open("rb") as source, staged.open("xb") as output:
+        candidates = [
+            item for item in temp_dir.rglob("*")
+            if item.is_file() and not item.is_symlink() and item.name.lower() in allowed_tools
+        ]
+        if not candidates:
+            raise ValueError("O arquivo compactado não contém uma ferramenta de mídia reconhecida.")
+
+        # Stage every tool before touching an installed file. os.replace replaces a
+        # destination symlink itself rather than following it to an external target.
+        staged: list[tuple[Path, Path]] = []
+        try:
+            for candidate in candidates:
+                target = destination_root / candidate.name
+                if _is_reparse_directory(target) or (target.exists() and not target.is_file()):
+                    raise ValueError("O destino da ferramenta contém um caminho inseguro.")
+                staging_path = destination_root / f".{candidate.name}.{uuid.uuid4().hex}.staged"
+                with candidate.open("rb") as source, staging_path.open("xb") as output:
                     shutil.copyfileobj(source, output, length=1024 * 1024)
                 if os.name != "nt":
-                    staged.chmod(staged.stat().st_mode | 0o111)
-                # os.replace replaces a link itself, not the path its link points to.
-                if target.is_symlink() or (target.exists() and not target.is_file()):
+                    staging_path.chmod(staging_path.stat().st_mode | 0o111)
+                staged.append((staging_path, target))
+
+            for staging_path, target in staged:
+                if _is_reparse_directory(target) or (target.exists() and not target.is_file()):
                     raise ValueError("O destino da ferramenta mudou para um caminho inseguro.")
-                os.replace(staged, target)
-            finally:
-                staged.unlink(missing_ok=True)
+            for staging_path, target in staged:
+                os.replace(staging_path, target)
+        finally:
+            for staging_path, _target in staged:
+                staging_path.unlink(missing_ok=True)
+    except ValueError:
+        raise
+    except (OSError, EOFError, lzma.LZMAError, NotImplementedError, RuntimeError,
+            tarfile.TarError, zipfile.BadZipFile) as exc:
+        raise ValueError(f"O arquivo compactado não pôde ser extraído com segurança: {exc}") from exc
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
