@@ -1,0 +1,121 @@
+from __future__ import annotations
+
+import io
+import json
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+import zipfile
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+import ui_debug
+
+
+def make_update_archive(files: dict[str, bytes | str]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, data in files.items():
+            archive.writestr(name, data)
+    return buffer.getvalue()
+
+
+class VersionAndGeometryTests(unittest.TestCase):
+    def test_dev_versions_compare_numerically(self):
+        self.assertGreater(ui_debug.version_key("0.1.0-dev.10"), ui_debug.version_key("0.1.0-dev.2"))
+        self.assertGreater(ui_debug.version_key("0.1.1-dev.1"), ui_debug.version_key("0.1.0-dev.99"))
+        self.assertGreater(ui_debug.version_key("0.1.0"), ui_debug.version_key("0.1.0-dev.99"))
+        self.assertGreater(ui_debug.version_key("0.2.0-dev.1"), ui_debug.version_key("0.1.9"))
+
+    def test_rounded_rectangle_points_stay_inside_requested_bounds(self):
+        points = ui_debug.rounded_points(2, 3, 202, 63, 16)
+        self.assertEqual(len(points) % 2, 0)
+        xs, ys = points[0::2], points[1::2]
+        self.assertGreaterEqual(min(xs), 2)
+        self.assertLessEqual(max(xs), 202)
+        self.assertGreaterEqual(min(ys), 3)
+        self.assertLessEqual(max(ys), 63)
+
+    def test_updater_url_allowlist_requires_https_and_official_hosts(self):
+        self.assertTrue(ui_debug.validate_update_url("https://raw.githubusercontent.com/owner/repo/ui-debug/version.json"))
+        self.assertTrue(ui_debug.validate_update_url("https://github.com/owner/repo/archive/refs/heads/ui-debug.zip"))
+        for bad in (
+            "http://github.com/owner/repo/file.zip",
+            "https://github.com.attacker.example/owner/repo.zip",
+            "https://user:pass@github.com/owner/repo.zip",
+            "https://github.com:444/owner/repo.zip",
+            "https://attacker.example/file.zip",
+        ):
+            with self.subTest(url=bad):
+                self.assertFalse(ui_debug.validate_update_url(bad))
+
+    def test_settings_path_is_separate_from_production_app_data(self):
+        prototype = object.__new__(ui_debug.SpaceUIPrototype)
+        path = prototype._settings_path()
+        self.assertEqual(path.parent.name, "MediaDownloader-UI-debug")
+        self.assertNotEqual(path.parent.name.casefold(), "mediadownloader")
+
+
+class SelfUpdaterTests(unittest.TestCase):
+    def version_manifest(self, version="0.1.1-dev.2"):
+        return json.dumps({"version": version, "channel": "development"}).encode("utf-8")
+
+    def test_update_replaces_only_its_own_allowlisted_files(self):
+        archive_bytes = make_update_archive({
+            "example-project/UI-debug/ui_debug.py": "UPDATED_UI_DEBUG = True\n",
+            "example-project/UI-debug/version.json": self.version_manifest(),
+            "example-project/app/gui.py": "DO_NOT_TOUCH = True\n",
+            "example-project/UI-debug/random.exe": b"unrelated",
+        })
+        with tempfile.TemporaryDirectory() as directory:
+            app_dir = Path(directory)
+            (app_dir / "ui_debug.py").write_text("OLD_UI_DEBUG = True\n", encoding="utf-8")
+            (app_dir / "version.json").write_text(self.version_manifest("0.1.0-dev.1").decode("utf-8"), encoding="utf-8")
+            (app_dir / "preferences.json").write_text('{"keep": true}\n', encoding="utf-8")
+
+            ui_debug.install_self_update(app_dir, archive_bytes)
+
+            self.assertIn("UPDATED_UI_DEBUG", (app_dir / "ui_debug.py").read_text(encoding="utf-8"))
+            self.assertIn("0.1.1-dev.2", (app_dir / "version.json").read_text(encoding="utf-8"))
+            self.assertEqual((app_dir / "preferences.json").read_text(encoding="utf-8"), '{"keep": true}\n')
+            self.assertFalse((app_dir / "gui.py").exists())
+            self.assertFalse((app_dir / "random.exe").exists())
+
+    def test_traversal_archive_is_rejected_and_existing_files_are_preserved(self):
+        archive_bytes = make_update_archive({
+            "example-project/UI-debug/ui_debug.py": "MALICIOUS_REPLACEMENT = True\n",
+            "example-project/UI-debug/version.json": self.version_manifest(),
+            "example-project/UI-debug/../outside.py": "BAD = True\n",
+        })
+        with tempfile.TemporaryDirectory() as directory:
+            app_dir = Path(directory)
+            (app_dir / "ui_debug.py").write_text("SAFE_OLD_FILE = True\n", encoding="utf-8")
+            with self.assertRaises(RuntimeError):
+                ui_debug.install_self_update(app_dir, archive_bytes)
+            self.assertEqual((app_dir / "ui_debug.py").read_text(encoding="utf-8"), "SAFE_OLD_FILE = True\n")
+            self.assertFalse((Path(directory).parent / "outside.py").exists())
+
+    def test_duplicate_or_case_colliding_archive_paths_are_rejected(self):
+        buffer = io.BytesIO()
+        manifest = self.version_manifest()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("example-project/UI-debug/ui_debug.py", "first")
+            archive.writestr("example-project/UI-debug/UI_DEBUG.py", "second")
+            archive.writestr("example-project/UI-debug/version.json", manifest)
+        with tempfile.TemporaryDirectory() as directory:
+            app_dir = Path(directory)
+            with self.assertRaises(RuntimeError):
+                ui_debug.install_self_update(app_dir, buffer.getvalue())
+            self.assertFalse((app_dir / "ui_debug.py").exists())
+
+    def test_source_has_no_import_dependency_on_production_app_package(self):
+        source = (ROOT / "ui_debug.py").read_text(encoding="utf-8")
+        self.assertNotRegex(source, r"(?m)^\s*(?:from|import)\s+app(?:\.|\s|$)")
+        self.assertIn("MediaDownloader-UI-debug", source)
+        self.assertIn('UPDATE_BRANCH = "ui-debug"', source)
+
+
+if __name__ == "__main__":
+    unittest.main()
