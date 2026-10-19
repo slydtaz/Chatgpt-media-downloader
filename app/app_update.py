@@ -79,9 +79,12 @@ def _trusted_url(url: str, *, metadata: bool = False) -> bool:
     try:
         parts = urlsplit(url)
         host = (parts.hostname or "").lower()
-        if parts.scheme != "https":
-            return False
+        port = parts.port
     except ValueError:
+        return False
+    if parts.scheme.lower() != "https" or not host:
+        return False
+    if parts.username is not None or parts.password is not None or port not in {None, 443}:
         return False
     allowed = {"github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com", "codeload.github.com"}
     if metadata:
