@@ -78,6 +78,16 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("github.com/slydtaz/Chatgpt-media-downloader", version_info)
         self.assertIn("nao afiliado a OpenAI", version_info)
 
+    def test_release_workflow_prevents_tag_reuse_and_archives_built_commit(self):
+        workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        self.assertIn("Refuse release tag reuse from a branch", workflow)
+        self.assertIn('if: github.ref_type != \'tag\'', workflow)
+        self.assertIn("git tag --list \"$env:RELEASE_TAG\"", workflow)
+        self.assertIn("Refuse to overwrite an already published GitHub Release", workflow)
+        self.assertIn("releases/tags/$env:RELEASE_TAG", workflow)
+        self.assertIn("GH_TOKEN: ${{ github.token }}", workflow)
+        self.assertIn("git archive --format=zip --output=$sourceZip $env:GITHUB_SHA", workflow)
+        self.assertNotIn("$archiveRef = if ($listedTag -eq $env:RELEASE_TAG)", workflow)
     def test_versioned_release_title_and_hotfix_are_configured(self):
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         self.assertIn('tag_name: ${{ env.RELEASE_TAG }}', workflow)
