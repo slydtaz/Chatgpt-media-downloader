@@ -32,6 +32,9 @@ INSTALL_MARKER = ".chatgpt-media-downloader-install.json"
 MAX_DOWNLOAD_BYTES = 250 * 1024 * 1024
 MAX_SOURCE_UNPACKED_BYTES = 512 * 1024 * 1024
 MAX_SOURCE_ARCHIVE_MEMBERS = 10_000
+MAX_SOURCE_PATH_CHARS = 4_096
+MAX_SOURCE_PATH_DEPTH = 128
+MAX_SOURCE_COMPONENT_UTF16_UNITS = 255
 TRUSTED_UPDATE_HOSTS = frozenset({
     "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com",
     "codeload.github.com", "api.github.com", "raw.githubusercontent.com",
@@ -405,6 +408,8 @@ def _safe_extract_zip(archive: Path, destination: Path) -> Path:
                     or "\\" in path_text
                     or path_text.startswith("/")
                     or any(part in {"", ".", ".."} for part in raw_parts)
+                    or len(path_text) > MAX_SOURCE_PATH_CHARS
+                    or len(raw_parts) > MAX_SOURCE_PATH_DEPTH
                     or re.match(r"(?i)^[a-z]:", raw_parts[0])
                 ):
                     raise AppUpdateError("O pacote de origem contém um caminho inseguro.")
@@ -414,10 +419,12 @@ def _safe_extract_zip(archive: Path, destination: Path) -> Path:
                 # represented by PurePosixPath: ADS (colon), reserved device
                 # names, control characters, and trailing dots/spaces.
                 for part in pure.parts:
+                    component_length = sum(2 if ord(char) > 0xFFFF else 1 for char in part)
                     normalized_compat = unicodedata.normalize("NFKC", part)
                     reserved_stem = normalized_compat.split(".", 1)[0].rstrip(" .").upper()
                     if (
-                        part.endswith((".", " "))
+                        component_length > MAX_SOURCE_COMPONENT_UTF16_UNITS
+                        or part.endswith((".", " "))
                         or any(ord(char) < 32 or char in '<>:"|?*' for char in part)
                         or reserved_stem in {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
                         or re.fullmatch(r"(?:COM|LPT)[1-9]", reserved_stem)
