@@ -38,6 +38,27 @@ class VersionAndGeometryTests(unittest.TestCase):
         self.assertGreaterEqual(min(ys), 3)
         self.assertLessEqual(max(ys), 63)
 
+    def test_preview_url_validation_rejects_local_or_unsafe_targets(self):
+        valid = "https://www.youtube.com/watch?v=aqz-KE-bpKQ"
+        self.assertEqual(ui_debug.validate_preview_url(valid), valid)
+        for invalid in (
+            "file:///C:/private/video.mp4",
+            "https://localhost/video",
+            "http://127.0.0.1/video",
+            "http://192.168.0.10/media",
+            "https://user:password@youtube.com/watch?v=abc",
+            "https://server.local/media",
+            "https://youtube.com:8443/watch?v=abc",
+        ):
+            with self.subTest(url=invalid):
+                with self.assertRaises(ValueError):
+                    ui_debug.validate_preview_url(invalid)
+
+    def test_media_duration_formatter(self):
+        self.assertEqual(ui_debug.format_media_duration(90), "01:30")
+        self.assertEqual(ui_debug.format_media_duration(3671), "1:01:11")
+        self.assertEqual(ui_debug.format_media_duration(None), "Duração desconhecida")
+
     def test_adaptive_scale_supports_1440p_and_small_displays(self):
         self.assertEqual(ui_debug.adaptive_ui_scale(2560, 1440), 1.25)
         self.assertEqual(ui_debug.adaptive_ui_scale(1920, 1080), 1.0)
@@ -84,7 +105,7 @@ class VisualConceptTests(unittest.TestCase):
         self.assertIn("órbitas", " ".join(ui_debug.STARTUP_MESSAGES).lower())
 
     def test_prototype_has_independent_development_version(self):
-        self.assertEqual(ui_debug.APP_VERSION, "0.1.0-dev.6")
+        self.assertEqual(ui_debug.APP_VERSION, "0.1.0-dev.7")
         self.assertEqual(ui_debug.CHANNEL, "development")
         self.assertIn("ui-debug", ui_debug.UPDATE_BRANCH)
         self.assertNotIn("draw_orbit_icon", (ROOT / "ui_debug.py").read_text(encoding="utf-8"))
@@ -94,6 +115,11 @@ class VisualConceptTests(unittest.TestCase):
         self.assertIn('self.backdrop.tk.call("lower", self.backdrop._w)', source)
         self.assertIn('self.nav_gap.pack(side="left", fill="y")', source)
         self.assertNotIn('self.root.geometry("1280x830")', source)
+        self.assertIn("def preview_media_async", source)
+        self.assertIn("def preview_playlist_async", source)
+        self.assertIn("def _install_thumbnail", source)
+        self.assertIn("extractor.extract_info(url, download=False)", source)
+        self.assertIn('"skip_download": True', source)
 
 
 class SelfUpdaterTests(unittest.TestCase):
