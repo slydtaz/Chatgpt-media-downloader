@@ -29,6 +29,7 @@ from .app_update import (
     prepare_update, schedule_apply_update,
 )
 from .uninstall import launch_uninstaller
+from .brand_assets import load_brand_images
 
 
 PALETTES = {
@@ -333,6 +334,8 @@ class MediaDownloaderApp:
             self.style.theme_use("clam")
         except tk.TclError:
             pass
+        self.brand_images = load_brand_images(root)
+        self._install_button_skin()
         self.palette_name = "light"
         self.colors: dict[str, str] = {}
         self._apply_theme(self.config.get("theme", "system"))
@@ -414,6 +417,33 @@ class MediaDownloaderApp:
         # Small GPU-free Canvas animation inspired by SKlauncher 4.0's cosmic theme.
         self._hero_animation_job = self.root.after(180, self._animate_hero_visual)
         self.root.after(2200, self._maybe_start_update_check)
+
+    def _install_button_skin(self):
+        """Give native ttk buttons a resizable rounded gradient skin without replacing their behavior."""
+        try:
+            self.style.element_create(
+                "CosmicButton.border", "image", self.brand_images["button_normal"],
+                ("pressed", self.brand_images["button_pressed"]),
+                ("active", self.brand_images["button_hover"]),
+                border=(18, 14, 18, 14), sticky="nsew",
+            )
+
+            def replace_border(layout):
+                result = []
+                for element, options in layout:
+                    current = dict(options)
+                    if "children" in current:
+                        current["children"] = replace_border(current["children"])
+                    if element == "Button.border":
+                        element = "CosmicButton.border"
+                    result.append((element, current))
+                return result
+
+            base_layout = self.style.layout("TButton")
+            self.style.layout("TButton", replace_border(base_layout))
+        except tk.TclError:
+            # Retain native clickable controls if the platform theme lacks the clam border element.
+            self.logger.warning("Não foi possível aplicar o tema arredondado dos botões.", exc_info=True)
 
     # ---------- Theme ----------
     def _resolve_theme(self, requested: str) -> str:
@@ -522,7 +552,7 @@ class MediaDownloaderApp:
         self.sidebar=sidebar
         brand=ttk.Frame(sidebar,style="Sidebar.TFrame")
         brand.pack(fill="x",pady=(0,20))
-        mark=tk.Label(brand,text="✦",bg=self.colors["accent"],fg=self.colors["accent_fg"],font=("Segoe UI Symbol",19,"bold"),width=2,height=1,padx=2,pady=4)
+        mark=tk.Label(brand,image=self.brand_images["logo"],bg=self.colors["panel2"],bd=0,highlightthickness=0,padx=0,pady=0)
         mark.pack(anchor="center")
         ttk.Separator(sidebar).pack(fill="x",pady=(0,12))
         for key,glyph,label,tip in [
