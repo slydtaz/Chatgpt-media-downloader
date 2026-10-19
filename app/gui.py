@@ -118,10 +118,10 @@ def _render_nav_icon(root, cache: dict, page_key: str, size: int, color: str):
             radians = math.radians(angle)
             line([(math.cos(radians)*6.9, math.sin(radians)*6.9),
                   (math.cos(radians)*10.3, math.sin(radians)*10.3)])
-        circle(0, 0, 2.4, fill=None, width=max(1, scale*1.4))
+        circle(0, 0, 2.4, fill=None, width=max(1, round(scale * 1.4)))
     elif page_key == "dependencies":
         line([(0, -11), (10, 0), (0, 11), (-10, 0), (0, -11)])
-        line([(0, -5), (5, 0), (0, 5), (-5, 0), (0, -5)], width=max(1, scale*1.4))
+        line([(0, -5), (5, 0), (0, 5), (-5, 0), (0, -5)], width=max(1, round(scale * 1.4)))
         circle(0, 0, 1.3, fill=color, outline=None, width=1)
     elif page_key == "updates":
         box = (round(center-9*scale), round(center-9*scale),
