@@ -27,7 +27,7 @@ import tkinter.font as tkfont
 
 
 APP_NAME = "ChatGPT Media Downloader — UI-debug"
-APP_VERSION = "0.1.0-dev.1"
+APP_VERSION = "0.1.0-dev.2"
 CHANNEL = "development"
 REPO_OWNER = "slydtaz"
 REPO_NAME = "Chatgpt-media-downloader"
@@ -749,7 +749,7 @@ class SpaceUIPrototype:
         self.label(version_card, "CANAL DE DESENVOLVIMENTO", "muted", "panel", 7, "bold").pack(anchor="w")
         version_row = tk.Frame(version_card, bg=self.colors["panel"])
         version_row.pack(fill="x", pady=(6, 0))
-        self.label(version_row, "0.1.0-dev.1", "accent2", "panel", 9, "bold").pack(side="left")
+        self.label(version_row, APP_VERSION, "accent2", "panel", 9, "bold").pack(side="left")
         self.label(version_row, "sem release", "muted", "panel", 8, "normal").pack(side="right")
 
         self.main = tk.Frame(outer, bg=self.colors["bg"], bd=0, highlightthickness=0)
