@@ -1832,8 +1832,35 @@ class SpaceUIPrototype:
         self.label(inside, "LINK DE MÍDIA", "muted", "panel2", 8, "bold").pack(anchor="w", pady=(0, 5))
         url = RoundedField(inside, self, width=500)
         url.pack(fill="x")
-        url.entry.insert(0, "https://exemplo.com/video-ou-playlist")
-        url.entry.bind("<FocusIn>", lambda _event: self.toast("Entrada de exemplo — o protótipo não acessa este link."))
+        url.entry.insert(0, "https://www.youtube.com/watch?v=aqz-KE-bpKQ")
+        url.entry.bind("<FocusIn>", lambda _event: self.toast("A miniatura só é buscada quando você pede a prévia."))
+        self.media_url_entry = url.entry
+
+        preview_actions = self.frame(inside, "panel2")
+        preview_actions.pack(fill="x", pady=(self.scale_px(9), self.scale_px(10)))
+        self.button(preview_actions, "Pré-visualizar mídia", self.preview_media_async,
+                    "secondary", width=172).pack(side="left", padx=(0,self.scale_px(10)))
+        self.label(preview_actions, "Consulta título/miniatura; não baixa o arquivo.", "muted", "panel2", 8).pack(side="left", anchor="center")
+
+        media_preview = self.card(inside, background_key="surface", padding=12)
+        media_preview.pack(fill="x", pady=(0,self.scale_px(12)))
+        preview_row = self.frame(media_preview.body, "surface")
+        preview_row.pack(fill="x")
+        self.media_preview_canvas = tk.Canvas(
+            preview_row, width=self.scale_px(220), height=self.scale_px(124),
+            bg=self.colors["surface"], bd=0, highlightthickness=0,
+        )
+        self.media_preview_canvas.pack(side="left", padx=(0,self.scale_px(14)))
+        self._draw_thumbnail_placeholder(self.media_preview_canvas, "PRÉVIA DO VÍDEO", 0)
+        preview_details = self.frame(preview_row, "surface")
+        preview_details.pack(side="left", fill="both", expand=True)
+        self.media_preview_title = self.label(preview_details, "Nenhuma prévia carregada", "fg", "surface", 13, "bold", wraplength=800)
+        self.media_preview_title.pack(anchor="w")
+        self.media_preview_channel = self.label(preview_details, "Insira um link e pressione Pré-visualizar.", "muted", "surface", 9, "normal", wraplength=820)
+        self.media_preview_channel.pack(anchor="w", pady=(self.scale_px(7),0))
+        self.media_preview_status = self.label(preview_details, "Aguardando solicitação • downloads continuam simulados.", "accent2", "surface", 8)
+        self.media_preview_status.pack(anchor="w", pady=(self.scale_px(12),0))
+
         controls = self.frame(inside, "panel2")
         controls.pack(fill="x", pady=(14, 0))
         select_row = self.frame(controls, "panel2")
@@ -1859,7 +1886,7 @@ class SpaceUIPrototype:
             "primary", width=150,
         ).pack(side="right")
         self.button(
-            actions, "Analisar playlist", lambda: self._mock_action("Analisar playlist"),
+            actions, "Analisar playlist", self.preview_playlist_async,
             "secondary", width=140,
         ).pack(side="right", padx=(0, 8))
 
@@ -1935,8 +1962,9 @@ class SpaceUIPrototype:
         top = self.frame(intro.body, "panel")
         top.pack(fill="x")
         self.label(top, "Itens detectados na amostra", "fg", "panel", 12, "bold").pack(side="left")
-        self.label(top, "3 itens  ·  2 selecionados", "accent2", "panel", 9, "bold").pack(side="right")
-        self.label(intro.body, "Escolha o que entraria na fila. Botões de processamento estão desativados como operações reais.", "muted", "panel", 9, "normal").pack(anchor="w", pady=(8, 0))
+        self.playlist_count_label = self.label(top, "3 itens de demonstração  ·  2 selecionados", "accent2", "panel", 9, "bold")
+        self.playlist_count_label.pack(side="right")
+        self.label(intro.body, "Cada item tem miniatura; pressione Analisar playlist na página Início para carregar títulos e imagens reais quando a fonte for compatível.", "muted", "panel", 9, "normal", wraplength=900).pack(anchor="w", pady=(8, 0))
         toolbar = self.card(body, padding=10)
         toolbar.pack(fill="x", pady=(0, 12))
         self.label(toolbar.body, "Buscar itens", "muted", "panel", 8, "bold").pack(anchor="w", pady=(0, 5))
@@ -1949,26 +1977,19 @@ class SpaceUIPrototype:
         table = self.card(body, padding=12)
         table.pack(fill="x", pady=(0, 12))
         self.label(table.body, "Fila de exemplo", "fg", "panel", 12, "bold").pack(anchor="w", pady=(0, 8))
-        columns = self.frame(table.body, "panel2", padx=10, pady=10)
-        columns.pack(fill="x")
-        for text in ("OK", "TÍTULO", "DURAÇÃO", "FORMATO", "QUALIDADE", "ESTADO"):
-            self.label(columns, text, "muted", "panel2", 7, "bold").pack(side="left", padx=(4, 12))
-        self._divider(table.body, "panel")
-        sample_rows = [
-            ("☑", "Aurora — paisagem", "04:32", "Vídeo", "1080p", "Disponível"),
-            ("☑", "Noite orbital", "03:18", "MP3", "192 kbps", "Disponível"),
-            ("□", "Sinal distante", "05:11", "Vídeo", "720p", "Ignorado"),
+        self.label(table.body, "MINIATURA  •  TÍTULO  •  CANAL  •  DURAÇÃO", "muted", "panel", 8, "bold").pack(anchor="w", pady=(0,self.scale_px(8)))
+        self.playlist_rows_container = self.frame(table.body, "panel")
+        self.playlist_rows_container.pack(fill="x")
+        sample_items = [
+            {"title":"Aurora — paisagem","channel":"Vídeo demonstrativo","duration_text":"04:32","selected":True,"status":"Disponível","format":"Vídeo","quality":"1080p"},
+            {"title":"Noite orbital","channel":"Áudio demonstrativo","duration_text":"03:18","selected":True,"status":"Disponível","format":"MP3","quality":"192 kbps"},
+            {"title":"Sinal distante","channel":"Vídeo demonstrativo","duration_text":"05:11","selected":False,"status":"Ignorado","format":"Vídeo","quality":"720p"},
         ]
-        for idx, row_data in enumerate(sample_rows):
-            row = self.frame(table.body, "panel")
-            row.pack(fill="x", pady=2)
-            values = list(row_data)
-            for index, value in enumerate(values):
-                fg = "accent2" if index == 0 else ("fg" if index == 1 else "muted")
-                self.label(row, value, fg, "panel", 9, "bold" if index in (0, 1) else "normal").pack(side="left", padx=(4, 12), pady=10)
+        self._render_playlist_rows(sample_items)
         footer = self.frame(table.body, "panel")
         footer.pack(fill="x", pady=(8, 0))
-        self.label(footer, "2 itens selecionados", "muted", "panel", 9, "normal").pack(side="left")
+        self.playlist_selection_label = self.label(footer, "2 itens selecionados", "muted", "panel", 9, "normal")
+        self.playlist_selection_label.pack(side="left")
         self.button(footer, "↓  Baixar itens marcados", lambda: self._mock_action("Baixar itens marcados"), "primary", width=205).pack(side="right")
 
         editor = self.card(body, padding=14)
