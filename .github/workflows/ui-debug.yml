@@ -52,6 +52,8 @@ jobs:
           python-version: "3.12"
       - name: Install screenshot capture dependency
         run: python -m pip install Pillow==13.0.0
+      - name: Capture real UI-debug pages
+        run: python UI-debug/capture_preview.py --output ui-debug-preview-output
       - name: Package standalone UI-debug folder (not a release)
         shell: pwsh
         run: |
