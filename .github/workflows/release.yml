@@ -45,8 +45,18 @@ jobs:
           $refName = $env:GITHUB_REF_NAME
           $releaseTag = "v$version"
           if ($env:GITHUB_REF_TYPE -eq 'tag') {
-            if ($refName -notmatch '^v\d+\.\d+\.\d+
-          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch' -and $env:GITHUB_REF -ne 'refs/heads/main') { throw 'Manual releases must run from main.' }
+            if ($refName -notmatch '^v\d+\.\d+\.\d+$') {
+              throw "Release tag '$refName' is not a semantic version tag."
+            }
+            if ($refName -ne $releaseTag) {
+              throw "Release tag '$refName' does not match application version '$releaseTag'."
+            }
+            $releaseTag = $refName
+          }
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch' -and $env:GITHUB_REF -ne 'refs/heads/main') {
+            throw 'Manual releases must run from main.'
+          }
+
           $hotfixNumber = $env:HOTFIX_NUMBER
           if ([string]::IsNullOrWhiteSpace($hotfixNumber) -and $env:GITHUB_REF -eq 'refs/heads/main') {
             $commitSubject = git log -1 --format=%s
