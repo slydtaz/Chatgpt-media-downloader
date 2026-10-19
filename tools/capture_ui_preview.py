@@ -136,6 +136,9 @@ def main() -> int:
         capture_height = max(600, min(850, screen_height - 60, desktop_height - 60))
         root.geometry(f"{capture_width}x{capture_height}+4+4")
         app = MediaDownloaderApp(root)
+        # MediaDownloaderApp sets its normal 1220x820 default during construction;
+        # override it after initialization only for this bounded screenshot harness.
+        root.geometry(f"{capture_width}x{capture_height}+4+4")
         root.update_idletasks()
         root.deiconify()
         root.lift()
