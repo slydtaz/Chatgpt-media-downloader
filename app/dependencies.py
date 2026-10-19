@@ -307,11 +307,13 @@ def extract_archive(archive: Path, destination: Path) -> None:
                 if _is_reparse_directory(target) or (target.exists() and not target.is_file()):
                     raise ValueError("O destino da ferramenta contém um caminho inseguro.")
                 staging_path = destination_root / f".{candidate.name}.{uuid.uuid4().hex}.staged"
+                # Track the temporary path before copying so partial files are also
+                # removed if the disk fills or reading/writing fails mid-copy.
+                staged.append((staging_path, target))
                 with candidate.open("rb") as source, staging_path.open("xb") as output:
                     shutil.copyfileobj(source, output, length=1024 * 1024)
                 if os.name != "nt":
                     staging_path.chmod(staging_path.stat().st_mode | 0o111)
-                staged.append((staging_path, target))
 
             for _staging_path, target in staged:
                 if _is_reparse_directory(target) or (target.exists() and not target.is_file()):
