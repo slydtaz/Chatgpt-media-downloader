@@ -16,6 +16,9 @@ from .platform import SystemInfo
 from .process_utils import hidden_subprocess_kwargs
 from .security import safe_archive_member_path
 
+MAX_ARCHIVE_MEMBERS = 100_000
+MAX_ARCHIVE_UNPACKED_BYTES = 2 * 1024 * 1024 * 1024
+
 
 @dataclass
 class ToolInfo:
@@ -203,8 +206,13 @@ def extract_archive(archive: Path, destination: Path) -> None:
     try:
         if archive.suffix.lower() == ".zip":
             with zipfile.ZipFile(archive) as zf:
-                for member in zf.infolist():
+                members = zf.infolist()
+                if len(members) > MAX_ARCHIVE_MEMBERS or sum(max(0, item.file_size) for item in members) > MAX_ARCHIVE_UNPACKED_BYTES:
+                    raise ValueError("Arquivo compactado excede o limite de conteúdo permitido.")
+                for member in members:
                     safe_archive_member_path(temp_dir, member.filename)
+                    if member.flag_bits & 0x1:
+                        raise ValueError("Arquivo compactado criptografado não é aceito.")
                     mode = (member.external_attr >> 16) & 0xFFFF
                     file_type = stat.S_IFMT(mode)
                     if file_type == stat.S_IFLNK or (file_type and file_type not in {stat.S_IFREG, stat.S_IFDIR}):
@@ -212,7 +220,11 @@ def extract_archive(archive: Path, destination: Path) -> None:
                 zf.extractall(temp_dir)
         elif archive.name.endswith(".tar.xz"):
             with tarfile.open(archive, "r:xz") as tf:
-                for member in tf.getmembers():
+                members = tf.getmembers()
+                total_unpacked = sum(member.size for member in members if member.isreg())
+                if len(members) > MAX_ARCHIVE_MEMBERS or total_unpacked > MAX_ARCHIVE_UNPACKED_BYTES:
+                    raise ValueError("Arquivo compactado excede o limite de conteúdo permitido.")
+                for member in members:
                     safe_archive_member_path(temp_dir, member.name)
                     if not (member.isdir() or member.isreg()):
                         raise ValueError("Arquivo compactado contém link ou arquivo especial inseguro.")
