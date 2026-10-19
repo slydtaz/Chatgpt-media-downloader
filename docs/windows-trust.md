@@ -29,6 +29,12 @@ O workflow usa SignTool com SHA-256, timestamp e, em seguida, verifica a assinat
 
 Na ausência desses secrets, a compilação não simula assinatura: publica `Windows-Signature-Status.txt` declarando que o executável está sem assinatura Authenticode. Essa é a situação atual até o mantenedor fornecer um certificado válido.
 
+## Estado da assinatura e requisito para releases
+
+A pipeline verifica a assinatura com SignTool depois de assinar o aplicativo e o desinstalador. A release fica bloqueada se o relatório não confirmar uma assinatura Authenticode confiável. Para ativar a publicação, o mantenedor deve obter um certificado legítimo de assinatura de código emitido por uma autoridade confiável e configurar os secrets descritos acima. Certificado autoassinado não é substituto para confiança do Windows.
+
+A assinatura comprova a identidade vinculada ao certificado e ajuda a manter reputação consistente; não garante ausência de falhas, malware ou alertas SmartScreen. Consulte a documentação atual da Microsoft para opções de assinatura de código e custos.
+
 ## Como obter o executável correto
 
 1. Baixe o EXE apenas pela [Release oficial do repositório](https://github.com/slydtaz/Chatgpt-media-downloader/releases/latest).
