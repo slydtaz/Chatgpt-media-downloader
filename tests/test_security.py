@@ -54,7 +54,7 @@ class SecurityTests(unittest.TestCase):
                 "https://user@github.com/payload.exe",
             ):
                 with self.subTest(url=url):
-                    with self.assertRaises(Exception):
+                    with self.assertRaises(urllib.error.URLError):
                         trusted_urlopen(url, allowed_hosts={"github.com"})
             build_opener.assert_not_called()
 
