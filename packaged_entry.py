@@ -104,12 +104,99 @@ def _show_startup_error(message: str) -> None:
         pass
 
 
-def main(bootstrap_main=None) -> int:
-    """Run the real bootstrap and report any exception that escapes it.
 
-    The optional callable is a test seam; production runs import the bootstrap
-    lazily so even an import error is captured by this function.
-    """
+def _run_gui_smoke_test() -> int:
+    """Build the real GUI, render the orbit canvas and visit every page without downloads."""
+    original_local_app_data = os.environ.get("LOCALAPPDATA")
+    refresh_original = None
+    update_check_original = None
+    root = None
+    failure: str | None = None
+    try:
+        # Keep this smoke test completely isolated from the user's settings and tools.
+        with tempfile.TemporaryDirectory(prefix="cgmd-gui-smoke-") as isolated_data:
+            os.environ["LOCALAPPDATA"] = isolated_data
+            import time
+            import tkinter as tk
+            from app.gui import MediaDownloaderApp
+
+            # The smoke test must never inspect, install or download media tools and
+            # must never query GitHub for updates. Those flows are unrelated to GUI render.
+            refresh_original = MediaDownloaderApp._refresh_dependencies
+            update_check_original = MediaDownloaderApp._maybe_start_update_check
+            MediaDownloaderApp._refresh_dependencies = lambda self, force=False: None
+            MediaDownloaderApp._maybe_start_update_check = lambda self: None
+
+            root = tk.Tk()
+            root.geometry("1220x820")
+            app = MediaDownloaderApp(root)
+            root.update_idletasks()
+            root.deiconify()
+            root.update_idletasks()
+            root.update()
+
+            app._animate_hero_visual()
+            drawn_items = len(app.hero_visual.find_all())
+            if drawn_items < 12:
+                raise RuntimeError(
+                    f"A animação do painel inicial desenhou apenas {drawn_items} elementos; esperado pelo menos 12."
+                )
+
+            visited: list[str] = []
+            for page_name in ("playlist", "settings", "dependencies", "updates", "help", "developer", "home"):
+                app.show_page(page_name)
+                deadline = time.monotonic() + 0.19
+                while time.monotonic() < deadline:
+                    root.update()
+                    time.sleep(0.004)
+                root.update_idletasks()
+                if app.current_page != page_name or app._visible_page != page_name:
+                    raise RuntimeError(
+                        f"A navegação não concluiu a transição para a página {page_name!r}."
+                    )
+                visited.append(page_name)
+
+            root.destroy()
+            root = None
+    except Exception:
+        failure = traceback.format_exc()
+    finally:
+        if root is not None:
+            try:
+                root.destroy()
+            except Exception:
+                pass
+        try:
+            from app.gui import MediaDownloaderApp
+            if refresh_original is not None:
+                MediaDownloaderApp._refresh_dependencies = refresh_original
+            if update_check_original is not None:
+                MediaDownloaderApp._maybe_start_update_check = update_check_original
+        except Exception:
+            pass
+        if original_local_app_data is None:
+            os.environ.pop("LOCALAPPDATA", None)
+        else:
+            os.environ["LOCALAPPDATA"] = original_local_app_data
+
+    if failure:
+        _write_startup_log("GUI SMOKE TEST FALHOU.\\n" + failure)
+        try:
+            sys.stderr.write(failure + "\\n")
+            sys.stderr.flush()
+        except Exception:
+            pass
+        return 1
+
+    _write_startup_log(
+        "GUI SMOKE TEST OK: janela real criada; órbitas desenhadas; páginas navegadas sem downloads."
+    )
+    return 0
+
+def main(bootstrap_main=None) -> int:
+    """Run the application, isolated GUI smoke test, or startup diagnostics."""
+    if "--smoke-test-gui" in sys.argv[1:]:
+        return _run_gui_smoke_test()
     _write_startup_log("ENTRYPOINT: início do executável.")
     try:
         if bootstrap_main is None:

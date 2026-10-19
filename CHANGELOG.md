@@ -1,3 +1,11 @@
+## 5.1.5 - stable (hotfix-5)
+
+- Corrige a falha de inicialização: _strategy_label era chamado como método de instância, mas não aceitava o argumento implícito self. Agora o formatador é um método estático e tem teste de regressão.
+- Acrescenta smoke test ao EXE empacotado: abre a janela real da interface, verifica o desenho da animação orbital e navega por todas as páginas, sem baixar mídia, verificar atualizações ou instalar dependências.
+- Acrescenta GPT Media Uninstaller como executável independente, com remoção dos dados e instalações do aplicativo, identificação de cópias antigas/incompletas, remoção de atalhos e relatório de erros.
+- O desinstalador preserva músicas e vídeos por padrão; a exclusão de pastas de saída exige opção explícita e confirmação digitada. Cópias portáteis/fonte também são opcionais.
+- Publica o hash SHA-256 do EXE principal e do desinstalador na mesma lista de somas.
+
 ## 5.1.4 - stable (hotfix-4)
 
 - Adiciona diagnóstico de reserva no ponto de entrada do EXE para registrar falhas que ocorrem antes do logger principal e mostrar uma mensagem nativa do Windows em exceções inesperadas.
