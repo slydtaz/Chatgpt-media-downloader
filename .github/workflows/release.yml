@@ -77,7 +77,7 @@ jobs:
           "RELEASE_NAME=$releaseName" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Install build tool
         shell: cmd
-        run: python -m pip install pyinstaller==6.22.3
+        run: python -m pip install pyinstaller==6.22.3 Pillow==13.0.0
       - name: Compile source
         shell: cmd
         run: python -c "from pathlib import Path; import py_compile; files = list(Path('app').glob('*.py')) + [Path('packaged_entry.py'), Path('emergency_uninstaller.py')]; [py_compile.compile(str(p), doraise=True) for p in files]"
