@@ -127,11 +127,13 @@ def main() -> int:
 
         root = tk.Tk()
         root.title("ChatGPT Media Downloader 5.1.5 — prévia da interface")
-        # Fit the virtual desktop so ImageGrab does not crop the right/bottom edges.
-        screen_width = max(820, root.winfo_screenwidth())
-        screen_height = max(640, root.winfo_screenheight())
-        capture_width = min(1280, screen_width - 12)
-        capture_height = min(850, screen_height - 48)
+        # Tk may report logical dimensions that differ from the actual captured desktop
+        # on the hosted runner. Use ImageGrab's physical desktop size to avoid clipping.
+        desktop_width, desktop_height = ImageGrab.grab().size
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        capture_width = max(800, min(1280, screen_width - 16, desktop_width - 16))
+        capture_height = max(600, min(850, screen_height - 60, desktop_height - 60))
         root.geometry(f"{capture_width}x{capture_height}+4+4")
         app = MediaDownloaderApp(root)
         root.update_idletasks()
