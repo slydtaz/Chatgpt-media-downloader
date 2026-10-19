@@ -1188,8 +1188,16 @@ class SpaceUIPrototype:
             pass
         self.sidebar = tk.Frame(outer, bg=self.colors["panel"], width=self.scale_px(220),
                                 bd=0, highlightthickness=1, highlightbackground=self.colors["border"])
-        self.sidebar.pack(side="left", fill="y", padx=(0,self.scale_px(16)))
+        self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
+        # This opaque spacer masks the decorative glow in the gap; lowering the
+        # backdrop alone cannot hide pixels in empty space between packed widgets.
+        self.nav_gap = tk.Frame(
+            outer, bg=self.colors["bg"], width=self.scale_px(16),
+            bd=0, highlightthickness=0,
+        )
+        self.nav_gap._ui_bg_key = "bg"
+        self.nav_gap.pack(side="left", fill="y")
         brand = tk.Frame(self.sidebar, bg=self.colors["panel"], padx=self.scale_px(18), pady=self.scale_px(20))
         brand.pack(fill="x")
         mark = OrbitalAtom(brand, self, size=self.scale_px(42))
