@@ -860,7 +860,7 @@ class CosmicSplash:
         font = tkfont.Font(root=self.window, family="Segoe UI",
                            size=max(15, int(min(self.width,self.height)*.018)), weight="bold")
         widths = [font.measure(ch) for ch in text]
-        x, start_y = (self.width-sum(widths))/2, self.height*.695
+        x, start_y = (self.width-sum(widths))/2, self.height*.735
         glyphs, colors = [], []
         for i, character in enumerate(text):
             fill = blend_hex(palette[0], palette[1], i/max(1,len(text)-1))
@@ -874,19 +874,19 @@ class CosmicSplash:
             try: self.window.after_cancel(self._message_after)
             except tk.TclError: pass
         self._add_status(text)
-        self._message_after = self.window.after(1250 if not self.looping else 820, self._advance_message)
+        self._message_after = self.window.after(760 if not self.looping else 900, self._advance_message)
 
     def _advance_message(self):
         if self._closed: return
         if self.looping:
             self.message_index = (self.message_index+1) % len(self.messages)
             self._add_status(self.messages[self.message_index])
-            self._message_after = self.window.after(740, self._advance_message)
+            self._message_after = self.window.after(900, self._advance_message)
         else:
             self.message_index += 1
             if self.message_index < len(self.messages):
                 self._add_status(self.messages[self.message_index])
-                self._message_after = self.window.after(690, self._advance_message)
+                self._message_after = self.window.after(760, self._advance_message)
             else:
                 self._finish_after = self.window.after(950, self.close)
 
@@ -912,13 +912,13 @@ class CosmicSplash:
                 self.canvas.itemconfigure(glow,fill=blend_hex(SPLASH_BACKGROUND,p["color"],strength))
         for m in list(self.active_texts):
             m["age"] += 30; age = m["age"]
-            y = m["start_y"] - self.height*.078*min(1,age/850)
-            fade = max(0,min(.97,(age-650)/520))
-            appear = .18+.82*min(1,age/240)
+            y = m["start_y"] - self.height*.105*min(1,age/760)
+            fade = max(0,min(1,(age-520)/300))
+            appear = .10+.90*min(1,age/250)
             for (item,x),original in zip(m["glyphs"],m["colors"]):
                 self.canvas.coords(item,x,y)
                 self.canvas.itemconfigure(item,fill=blend_hex(SPLASH_BACKGROUND,original,appear*(1-fade)))
-            if age > 1520:
+            if age > 1080:
                 self.canvas.delete(m["tag"]); self.active_texts.remove(m)
                 m.pop("font", None)
         try: self._animation_after = self.window.after(30,self._animate)
