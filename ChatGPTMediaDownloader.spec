@@ -10,7 +10,7 @@ a = Analysis(
     [str(ROOT / "packaged_entry.py")],
     pathex=[str(ROOT)],
     binaries=[],
-    datas=[(str(ROOT / "PROJECT_ID"), ".")],
+    datas=[(str(ROOT / "PROJECT_ID"), "."), (str(ROOT / "assets" / "app-icon.png"), "assets")],
     hiddenimports=[
         "app.bootstrap",
         "app.main",

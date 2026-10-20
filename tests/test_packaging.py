@@ -14,6 +14,9 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('"PIL.ImageTk"', spec)
         self.assertIn("EXE(", spec)
         self.assertIn('icon=str(ROOT / "assets" / "app-icon.ico")', spec)
+        self.assertIn('"app-icon.png"), "assets")', spec)
+        gui = (ROOT / "app" / "gui.py").read_text(encoding="utf-8")
+        self.assertIn("self.root.iconphoto(True, self._window_icon)", gui)
         self.assertTrue((ROOT / "assets" / "app-icon.png").is_file())
 
     def test_windows_build_script_outputs_one_exe(self):

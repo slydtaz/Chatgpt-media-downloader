@@ -894,6 +894,15 @@ class MediaDownloaderApp:
         self.logger.info("Inicialização: %s", self.system.architecture_label)
 
         self.root.title(f"Media Downloader | v{VERSION}")
+        self._window_icon = None
+        try:
+            icon_path = Path(__file__).resolve().parents[1] / "assets" / "app-icon.png"
+            if icon_path.is_file() and Image is not None and ImageTk is not None:
+                with Image.open(icon_path) as icon_image:
+                    self._window_icon = ImageTk.PhotoImage(icon_image.convert("RGBA").resize((64, 64)))
+                self.root.iconphoto(True, self._window_icon)
+        except (OSError, tk.TclError) as exc:
+            self.logger.debug("Não foi possível carregar o ícone da janela: %s", exc)
         self.root.geometry("1220x820")
         self.root.minsize(1000, 680)
 
