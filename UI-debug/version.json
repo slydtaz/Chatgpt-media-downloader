@@ -1,8 +1,8 @@
 {
   "app_name": "ChatGPT Media Downloader UI-debug",
-  "version": "0.1.0-dev.8",
+  "version": "0.1.0-dev.9",
   "channel": "development",
   "update_branch": "ui-debug",
   "minimum_python": "3.10",
-  "description": "Violet-blue gradient refresh, subtle primary-button glow, softened space backdrop, and slightly brighter loader gradients. File downloads remain mocked; not a GitHub Release."
+  "description": "Violet-blue gradients, subtle primary-button halo, native Tk action icons, and slightly brighter loader gradients. File downloads remain mocked; not a GitHub Release."
 }
