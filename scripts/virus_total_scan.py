@@ -26,7 +26,7 @@ VT_UPLOAD_HOSTS = {"storage.googleapis.com"}
 SMALL_UPLOAD_LIMIT = 32 * 1024 * 1024
 MAX_UPLOAD_BYTES = 650 * 1024 * 1024
 REQUEST_INTERVAL_SECONDS = 16.5
-MAX_POLL_ROUNDS = 12
+MAX_POLL_ROUNDS = 48
 MAX_WAIT_SECONDS = 22 * 60
 _last_request_at = 0.0
 
@@ -177,7 +177,10 @@ def _existing_analysis(sha256: str, api_key: str) -> dict:
     results must never be interpreted as a clean verdict.
     """
     last_attributes: dict = {}
+    deadline = time.monotonic() + MAX_WAIT_SECONDS
     for attempt in range(MAX_POLL_ROUNDS):
+        if time.monotonic() >= deadline:
+            break
         response = _api_json(f"{API_ROOT}/files/{sha256}", api_key)
         data = response.get("data") or {}
         attributes = data.get("attributes") or {}

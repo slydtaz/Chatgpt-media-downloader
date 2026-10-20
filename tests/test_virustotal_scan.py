@@ -8,11 +8,14 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from scripts.virus_total_scan import (
-    VirusTotalAPIError, _is_trusted_upload_host, submit_file, summarize_analysis,
+    MAX_POLL_ROUNDS, VirusTotalAPIError, _is_trusted_upload_host, submit_file, summarize_analysis,
 )
 
 
 class VirusTotalReportTests(unittest.TestCase):
+    def test_pending_analysis_window_allows_large_file_scans_to_finish(self):
+        self.assertGreaterEqual(MAX_POLL_ROUNDS, 48)
+
     def test_detection_details_include_engine_and_signature_label(self):
         summary, detections, has_findings = summarize_analysis(
             "ChatGPTMediaDownloader.exe",

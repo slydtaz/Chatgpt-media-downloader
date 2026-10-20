@@ -16,6 +16,11 @@ on:
 
 permissions: {}
 
+# Keep VirusTotal submissions serialized for this branch/ref to avoid API-rate collisions.
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   release:
     if: >-

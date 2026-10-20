@@ -1,5 +1,10 @@
 ## 5.4.0-beta.2 - beta (pré-release)
 
+- Adiciona ícone do produto ao executável, à janela do aplicativo e ao desinstalador, com metadados PE específicos para o desinstalador.
+- Remove a autodeleção do desinstalador via script CMD oculto; agora usa a API nativa do Windows para agendar a remoção e informa falhas.
+- Corrige as capturas para refletir a versão real do aplicativo e melhora o diagnóstico sobre assinatura/SmartScreen.
+- Aumenta a tolerância de espera para relatórios pendentes do VirusTotal e serializa execuções futuras de release para evitar conflitos de limite de API.
+
 - Atualiza a beta após investigação dos alertas de antivírus e passa a registrar nomes dos mecanismos, rótulos de detecção, hash SHA-256 e link de relatório por arquivo.
 - Inclui na análise pública do VirusTotal o executável, o desinstalador, o ZIP do código-fonte e os binários de runtime `yt-dlp.exe`, `ffmpeg.exe` e `ffprobe.exe` obtidos por meio do atualizador oficial, com validação de manifesto SHA-256.
 - Permite publicar uma pré-release beta somente quando todos os seis scans forem concluídos; eventuais detecções permanecem visíveis na página da release e no relatório, sem serem apresentadas como falsos positivos confirmados.
