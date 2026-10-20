@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - "ui/**"
+      - "beta/**"
     paths:
       - ".github/workflows/ui-preview.yml"
       - "tools/capture_ui_preview.py"
