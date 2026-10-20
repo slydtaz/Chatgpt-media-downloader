@@ -1,0 +1,33 @@
+# Windows PE version resource for the standalone emergency uninstaller.
+# Descriptive metadata only; it is not a digital signature or publisher certificate.
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(5, 4, 0, 0),
+    prodvers=(5, 4, 0, 0),
+    mask=0x3F,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0),
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable(
+        '040904B0',
+        [
+          StringStruct('CompanyName', 'ChatGPT Media Downloader contributors'),
+          StringStruct('FileDescription', 'Desinstalador de emergência do ChatGPT Media Downloader'),
+          StringStruct('FileVersion', '5.4.0-beta.2'),
+          StringStruct('InternalName', 'GPT-Media-Uninstaller'),
+          StringStruct('LegalCopyright', 'Copyright (c) 2026 ChatGPT Media Downloader contributors'),
+          StringStruct('OriginalFilename', 'GPT-Media-Uninstaller.exe'),
+          StringStruct('ProductName', 'ChatGPT Media Downloader'),
+          StringStruct('ProductVersion', '5.4.0-beta.2'),
+          StringStruct('Comments', 'Projeto independente; nao afiliado a OpenAI. https://github.com/slydtaz/Chatgpt-media-downloader'),
+        ]
+      )
+    ]),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])])
+  ]
+)

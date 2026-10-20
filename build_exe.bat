@@ -1,6 +1,5 @@
 @echo off
 chcp 65001 >nul
-chcp 65001 >nul
 setlocal EnableExtensions
 cd /d "%~dp0"
 title Build ChatGPT Media Downloader - single EXE
@@ -31,6 +30,15 @@ echo [1/3] Instalando/atualizando PyInstaller...
 py -3 -m pip install pyinstaller==6.22.3 Pillow==13.0.0
 if errorlevel 1 (
   echo ERRO: nao foi possivel instalar PyInstaller.
+  if not defined BUILD_NO_PAUSE pause
+  exit /b 1
+)
+
+echo.
+echo Preparando o icone do aplicativo...
+py -3 -c "from PIL import Image; Image.open(r'assets\app-icon.png').save(r'assets\app-icon.ico', format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64)])"
+if errorlevel 1 (
+  echo ERRO: nao foi possivel gerar o icone Windows.
   if not defined BUILD_NO_PAUSE pause
   exit /b 1
 )

@@ -54,6 +54,7 @@ exe = EXE(
     a.datas,
     [],
     name="ChatGPTMediaDownloader",
+    icon=str(ROOT / "assets" / "app-icon.ico"),
     version=str(ROOT / "windows_version_info.txt"),
     debug=False,
     bootloader_ignore_signals=False,

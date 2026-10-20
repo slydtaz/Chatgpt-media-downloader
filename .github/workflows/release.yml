@@ -105,6 +105,9 @@ jobs:
       - name: Run tests before packaging
         shell: pwsh
         run: ./tests/run_unittest_ci.ps1
+      - name: Prepare Windows application icon
+        shell: cmd
+        run: python -c "from PIL import Image; Image.open(r'assets\\app-icon.png').save(r'assets\\app-icon.ico', format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64)])"
       - name: Build EXE
         shell: cmd
         run: python -m PyInstaller --noconfirm --clean ChatGPTMediaDownloader.spec
@@ -119,7 +122,7 @@ jobs:
       - name: Build standalone emergency uninstaller
         shell: cmd
         run: |
-          python -m PyInstaller --noconfirm --clean --onefile --noconsole --name GPT-Media-Uninstaller --distpath dist-uninstaller --workpath build/uninstaller emergency_uninstaller.py
+          python -m PyInstaller --noconfirm --clean --onefile --noconsole --icon assets/app-icon.ico --version-file windows_uninstaller_version_info.txt --name GPT-Media-Uninstaller --distpath dist-uninstaller --workpath build/uninstaller emergency_uninstaller.py
           if not exist "dist-uninstaller\GPT-Media-Uninstaller.exe" exit /b 1
           copy /y "dist-uninstaller\GPT-Media-Uninstaller.exe" "dist\GPT-Media-Uninstaller.exe"
       - name: Sign EXE with Authenticode when a trusted certificate is configured
@@ -220,7 +223,7 @@ jobs:
           if ($scan -match '(?m)^(NOT SCANNED|SCAN ERROR|ANALYSIS PENDING|OVERALL: SCAN ERROR|OVERALL: ANALYSIS PENDING)') {
             throw 'Release blocked: VirusTotal results are absent, incomplete, or erroneous.'
           }
-          if ($scan -notmatch '(?m)^ANALYSIS COMPLETE: 6/6 targets$') {
+          if ($scan -notmatch '(?m)^ANALYSIS COMPLETE:\s*6/6 targets\s*$') {
             throw 'Release blocked: all six required VirusTotal samples must finish analysis.'
           }
           $required = @('ChatGPTMediaDownloader.exe','GPT-Media-Uninstaller.exe','yt-dlp.exe','ffmpeg.exe','ffprobe.exe')

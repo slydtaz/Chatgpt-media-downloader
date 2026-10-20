@@ -2307,6 +2307,20 @@ class MediaDownloaderApp:
         info.pack(fill="x", pady=(12, 10))
         ttk.Label(info, text="O que o aplicativo executa localmente", style="CardTitle.TLabel").pack(anchor="w")
         ttk.Label(info, text="A interface executa apenas processos locais necessários para yt-dlp e FFmpeg/FFprobe, usando listas de argumentos em vez de comandos concatenados. URL, senhas, tokens e cookies não são gravados nos logs.", style="Card.TLabel", wraplength=760, justify="left").pack(anchor="w", pady=(4, 0))
+        security_card = self._card(body, 13)
+        security_card.pack(fill="x", pady=(0, 12))
+        ttk.Label(security_card, text="Distribuição e segurança do Windows", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            security_card,
+            text=(
+                "Esta é uma versão beta. Os metadados do arquivo e o ícone identificam o produto, "
+                "mas não substituem uma assinatura digital Authenticode confiável. Baixe apenas "
+                "pela página oficial de Releases, confira SHA256SUMS.txt e leia o relatório "
+                "VirusTotal-Status.txt antes de executar. O Windows pode exibir avisos de editor "
+                "desconhecido/SmartScreen ou bloquear o arquivo conforme a política de segurança."
+            ),
+            style="Card.TLabel", wraplength=760, justify="left",
+        ).pack(anchor="w", pady=(4, 0))
         RoundedGlowButton(body, text="Desinstalar", style="Danger.TButton", command=self._uninstall).pack(anchor="e", pady=(0, 25))
         self._update_developer_vars()
 

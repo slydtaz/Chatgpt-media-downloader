@@ -139,3 +139,10 @@ Você é responsável por respeitar direitos autorais, termos de serviço, priva
 ## 📜 Licença
 
 Este repositório é distribuído sob a licença MIT; consulte [`LICENSE`](LICENSE). Ferramentas de terceiros, como yt-dlp e FFmpeg, mantêm suas próprias licenças e termos.
+
+
+## Avisos de segurança do Windows (beta)
+
+Os executáveis beta incluem ícone e metadados de versão para identificar o produto nas propriedades do arquivo. **Isso não é uma assinatura digital.** Sem um certificado Authenticode confiável, o Windows ainda pode mostrar “Editor desconhecido”, exibir o SmartScreen ou bloquear a execução por Smart App Control/política corporativa. Não existe um ajuste de metadados capaz de remover legitimamente esses avisos. A assinatura confiável exige certificado de uma autoridade reconhecida ou distribuição aprovada pela Microsoft Store; mesmo assinados, novos aplicativos podem precisar construir reputação.
+
+Antes de executar, baixe apenas da página oficial de Releases, confira os hashes em `SHA256SUMS.txt` e leia `VirusTotal-Status.txt`. Os relatórios desta beta podem conter detecções; não as considere falsos positivos sem investigação independente.
