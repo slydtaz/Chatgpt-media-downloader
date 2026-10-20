@@ -35,7 +35,7 @@ import tkinter.font as tkfont
 
 
 APP_NAME = "ChatGPT Media Downloader — UI-debug"
-APP_VERSION = "0.1.0-dev.8"
+APP_VERSION = "0.1.0-dev.9"
 CHANNEL = "development"
 REPO_OWNER = "slydtaz"
 REPO_NAME = "Chatgpt-media-downloader"
@@ -754,15 +754,85 @@ class RoundedCard(tk.Frame):
         self._resize(None)
 
 
+def draw_action_icon(canvas: tk.Canvas, cx: float, cy: float, key: str, color: str, *, scale: float = 1.0):
+    """Draw a small, recognizable action icon with native Tk Canvas primitives."""
+    scale = max(0.7, min(1.3, float(scale)))
+    stroke = 1.8 * scale
+    items = []
+
+    def line(*coords):
+        item = canvas.create_line(
+            *coords, fill=color, width=stroke, capstyle=tk.ROUND, joinstyle=tk.ROUND,
+            smooth=False, tags=("button-action-icon",),
+        )
+        items.append((item, "line"))
+
+    def outline_oval(x1, y1, x2, y2):
+        item = canvas.create_oval(
+            x1, y1, x2, y2, fill="", outline=color, width=stroke,
+            tags=("button-action-icon",),
+        )
+        items.append((item, "outline"))
+
+    def filled_polygon(*coords):
+        item = canvas.create_polygon(
+            *coords, fill=color, outline=color, smooth=False,
+            tags=("button-action-icon",),
+        )
+        items.append((item, "filled"))
+
+    s = scale
+    if key == "download":
+        line(cx, cy-6*s, cx, cy+1*s)
+        line(cx-3*s, cy-2*s, cx, cy+1*s, cx+3*s, cy-2*s)
+        line(cx-6*s, cy+3*s, cx-6*s, cy+7*s, cx+6*s, cy+7*s, cx+6*s, cy+3*s)
+    elif key == "preview":
+        line(cx-7*s, cy-5*s, cx+3*s, cy-5*s, cx+3*s, cy+5*s, cx-7*s, cy+5*s, cx-7*s, cy-5*s)
+        filled_polygon(cx-1*s, cy-2.5*s, cx+4*s, cy, cx-1*s, cy+2.5*s)
+    elif key == "convert":
+        line(cx-7*s, cy-3.5*s, cx+5*s, cy-3.5*s)
+        line(cx+2*s, cy-6*s, cx+5*s, cy-3.5*s, cx+2*s, cy-1*s)
+        line(cx+7*s, cy+3.5*s, cx-5*s, cy+3.5*s)
+        line(cx-2*s, cy+1*s, cx-5*s, cy+3.5*s, cx-2*s, cy+6*s)
+    elif key == "settings":
+        for dy, knob in ((-4.5, -2), (0, 3), (4.5, -1)):
+            line(cx-7*s, cy+dy*s, cx+7*s, cy+dy*s)
+            outline_oval(cx+(knob-2)*s, cy+(dy-2)*s, cx+(knob+2)*s, cy+(dy+2)*s)
+    elif key == "save":
+        line(cx-6*s, cy-7*s, cx+4*s, cy-7*s, cx+7*s, cy-4*s, cx+7*s, cy+7*s,
+             cx-7*s, cy+7*s, cx-7*s, cy-7*s)
+        line(cx-3*s, cy-7*s, cx-3*s, cy-2*s, cx+3*s, cy-2*s, cx+3*s, cy-7*s)
+        line(cx-3*s, cy+3*s, cx-1*s, cy+5*s, cx+4*s, cy+1*s)
+    elif key == "refresh":
+        item = canvas.create_arc(
+            cx-6*s, cy-6*s, cx+6*s, cy+6*s, start=35, extent=285, style=tk.ARC,
+            outline=color, width=stroke, tags=("button-action-icon",),
+        )
+        items.append((item, "outline"))
+        filled_polygon(cx+2*s, cy-7*s, cx+7*s, cy-7*s, cx+6*s, cy-2*s)
+    elif key == "playlist":
+        for dy, length in ((-5, 10), (0, 13), (5, 8)):
+            outline_oval(cx-7*s, cy+(dy-1)*s, cx-5*s, cy+(dy+1)*s)
+            line(cx-2*s, cy+dy*s, cx+length/2*s, cy+dy*s)
+    elif key == "search":
+        outline_oval(cx-6*s, cy-6*s, cx+2*s, cy+2*s)
+        line(cx+1*s, cy+1*s, cx+7*s, cy+7*s)
+    else:
+        raise ValueError("Unsupported action icon: " + str(key))
+    return items
+
+
 class RoundedButton(tk.Canvas):
     """Fixed-layout vector button: only its drawing scales, never its widget geometry."""
-    def __init__(self, master, app, text, command=None, *, variant="secondary", width=None, height=40):
+    def __init__(self, master, app, text, command=None, *, variant="secondary", width=None, height=40, icon_key=None):
         self.app, self.text, self.command, self.variant = app, text, command, variant
+        self.icon_key = icon_key
         self.base_height = app.scale_px(height)
         self.font_size = app.scale_px(9 if height < 36 else 10)
         self.font = tkfont.Font(family="Segoe UI", size=self.font_size,
                                 weight="bold" if variant == "primary" else "normal")
-        desired = self.font.measure(text) + app.scale_px(34 if variant == "primary" else 30)
+        icon_padding = app.scale_px(18) if icon_key else 0
+        desired = self.font.measure(text) + app.scale_px(34 if variant == "primary" else 30) + icon_padding
         self.base_width = app.scale_px(width) if width is not None else max(app.scale_px(82), min(app.scale_px(300), desired))
         self.gutter_x, self.gutter_y = app.scale_px(5), app.scale_px(4)
         self.widget_width = self.base_width + self.gutter_x * 2
@@ -787,8 +857,15 @@ class RoundedButton(tk.Canvas):
             self._glow_ids.append((item, spread, width, strength))
         self._outline_id = self.create_polygon(0,0,0,0, fill="", outline=app.colors["border"],
             width=1.8 * app.ui_scale, smooth=True, splinesteps=20, tags=("button-shape","button-outline"))
-        self._text_id = self.create_text(self.widget_width/2,self.widget_height/2,text=text,
-            fill=app.colors["fg"],font=self.font,width=self.base_width-app.scale_px(18),tags="button-shape")
+        text_x = self.widget_width/2 + (app.scale_px(7) if self.icon_key else 0)
+        text_width = self.base_width-app.scale_px(18 + (16 if self.icon_key else 0))
+        self._text_id = self.create_text(text_x,self.widget_height/2,text=text,
+            fill=app.colors["fg"],font=self.font,width=text_width,tags="button-shape")
+        self._icon_items = draw_action_icon(
+            self, self.gutter_x + app.scale_px(14), self.widget_height/2,
+            self.icon_key, app.colors["fg"] if variant == "primary" else app.colors["accent2"],
+            scale=0.90 * app.ui_scale,
+        ) if self.icon_key else []
         self.bind("<Configure>", self._on_resize, add="+")
         self.bind("<Enter>", self._enter, add="+")
         self.bind("<Leave>", self._leave, add="+")
@@ -912,6 +989,17 @@ class RoundedButton(tk.Canvas):
         else:
             for item, _spread, _width, _strength in self._glow_ids:
                 self.itemconfigure(item, state=tk.HIDDEN, outline=c["bg"])
+        if self.icon_key:
+            icon_color = "#FFFFFF" if self.variant == "primary" else (
+                "#2B174E" if self.hovered else c["accent2"]
+            )
+            for item, item_kind in self._icon_items:
+                if item_kind == "line":
+                    self.itemconfigure(item, fill=icon_color)
+                elif item_kind == "outline":
+                    self.itemconfigure(item, outline=icon_color)
+                else:
+                    self.itemconfigure(item, fill=icon_color, outline=icon_color)
         self.itemconfigure(self._outline_id,outline=outline,width=1.8 * self.app.ui_scale)
         self.itemconfigure(self._text_id,fill=text_color)
         self.configure(bg=c.get(self.bg_key,c["bg"]))
@@ -1695,8 +1783,8 @@ class SpaceUIPrototype:
     def card(self, parent, *, background_key="panel", padding=16):
         return RoundedCard(parent, self, background_key=background_key, padding=padding)
 
-    def button(self, parent, text, command=None, variant="secondary", width=None):
-        return RoundedButton(parent, self, text, command, variant=variant, width=width)
+    def button(self, parent, text, command=None, variant="secondary", width=None, icon_key=None):
+        return RoundedButton(parent, self, text, command, variant=variant, width=width, icon_key=icon_key)
 
     def _divider(self, parent, bg_key):
         widget = tk.Frame(parent, bg=self.colors["border"], height=self.scale_px(2))
@@ -1973,7 +2061,7 @@ class SpaceUIPrototype:
         preview_actions = self.frame(inside, "panel2")
         preview_actions.pack(fill="x", pady=(self.scale_px(9), self.scale_px(10)))
         self.button(preview_actions, "Pré-visualizar mídia", self.preview_media_async,
-                    "secondary", width=172).pack(side="left", padx=(0,self.scale_px(10)))
+                    "secondary", width=172, icon_key="preview").pack(side="left", padx=(0,self.scale_px(10)))
         self.label(preview_actions, "Consulta título/miniatura; não baixa o arquivo.", "muted", "panel2", 8).pack(side="left", anchor="center")
 
         media_preview = self.card(inside, background_key="surface", padding=12)
@@ -2124,7 +2212,8 @@ class SpaceUIPrototype:
         footer.pack(fill="x", pady=(8, 0))
         self.playlist_selection_label = self.label(footer, "2 itens selecionados", "muted", "panel", 9, "normal")
         self.playlist_selection_label.pack(side="left")
-        self.button(footer, "↓  Baixar itens marcados", lambda: self._mock_action("Baixar itens marcados"), "primary", width=205).pack(side="right")
+        self.button(footer, "Baixar itens marcados", lambda: self._mock_action("Baixar itens marcados"),
+                    "primary", width=205, icon_key="download").pack(side="right")
 
         editor = self.card(body, padding=14)
         editor.pack(fill="x")
@@ -2134,7 +2223,8 @@ class SpaceUIPrototype:
         opts.pack(fill="x")
         Dropdown(opts, self, ["Vídeo", "Música — MP3"], "Vídeo", width=190).pack(side="left", padx=(0, 10))
         Dropdown(opts, self, ["720p", "1080p", "1440p", "2160p / 4K"], "1080p", width=180).pack(side="left")
-        self.button(opts, "Aplicar opções", lambda: self._mock_action("Aplicar opções"), "secondary", width=135).pack(side="right")
+        self.button(opts, "Aplicar opções", lambda: self._mock_action("Aplicar opções"),
+                    "secondary", width=135, icon_key="convert").pack(side="right")
 
     def _build_settings(self, body):
         self._title_block(body, "Personalização", "Aparência e preferências", "Estas configurações funcionam no UI-debug e são salvas em uma pasta própria, separada das preferências do aplicativo real.")
@@ -2209,8 +2299,10 @@ class SpaceUIPrototype:
             self.toggles.append(toggle)
         buttons = self.frame(preferences.body, "panel")
         buttons.pack(fill="x", pady=(14, 0))
-        self.button(buttons, "Restaurar padrão", self._load_settings_defaults, "secondary", width=150).pack(side="left")
-        self.button(buttons, "Salvar preferências", self.save_settings, "primary", width=165).pack(side="right")
+        self.button(buttons, "Restaurar padrão", self._load_settings_defaults,
+                    "secondary", width=150, icon_key="refresh").pack(side="left")
+        self.button(buttons, "Salvar preferências", self.save_settings,
+                    "primary", width=165, icon_key="save").pack(side="right")
 
         self._set_density(self.density_combo.get(), notify=False)
         self._draw_accent_preview()
@@ -2250,8 +2342,12 @@ class SpaceUIPrototype:
         self.update_status_label.pack(anchor="w", pady=(12, 12))
         row_buttons = self.frame(card.body, "panel2")
         row_buttons.pack(fill="x")
-        self.button(row_buttons, "Verificar agora", lambda: self.check_update_async(user_initiated=True), "primary", width=150).pack(side="left")
-        self.install_update_button = self.button(row_buttons, "Instalar versão de desenvolvimento", self._install_update_if_available, "secondary", width=250)
+        self.button(row_buttons, "Verificar agora", lambda: self.check_update_async(user_initiated=True),
+                    "primary", width=150, icon_key="refresh").pack(side="left")
+        self.install_update_button = self.button(
+            row_buttons, "Instalar versão de desenvolvimento", self._install_update_if_available,
+            "secondary", width=250, icon_key="download",
+        )
         self.install_update_button.pack(side="left", padx=(10, 0))
         self.label(body, "Não será criada uma Release do GitHub. O código ficará em uma branch/PR para revisão visual.", "muted", "bg", 9, wraplength=900).pack(anchor="w", pady=(0, 14))
         note = self.card(body, padding=16)
