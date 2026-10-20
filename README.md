@@ -9,7 +9,7 @@
 [Sugerir uma melhoria](https://github.com/slydtaz/chatgpt-media-downloader/issues/new?template=feature_request.yml)
 
 ![Sistema: Windows](https://img.shields.io/badge/SO-Windows-0078D6)
-![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.3.2-blue)
+![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.4.0--beta.1-orange)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green)
 
 </div>
@@ -18,17 +18,19 @@
 
 > **Aviso de nome:** “ChatGPT” no nome é apenas parte do identificador do projeto. Este software é independente e **não é afiliado, patrocinado, certificado ou distribuído pela OpenAI**.
 
-> **Interface 5.3.2:** adota uma identidade cósmica com gradientes violeta, magenta e ciano, a marca Media Lab redesenhada e ícones maiores com antialiasing. Ao colar um link de vídeo/áudio, o app consulta automaticamente título, canal, duração e miniatura sem baixar a mídia; playlists recebem miniaturas por item. A cor de destaque padrão migra para violeta, mas uma cor personalizada escolhida por você é preservada.
+> **UI customizada 5.4.0-beta.1:** traz contornos duplos em gradiente na passagem do cursor, preenchimento sincronizado e retorno suave ao repouso; corrige o scroll entre abas e a comparação de versões beta/stable. Os comandos reais de download, conversão, playlists, dependências e atualização continuam na aplicação de produção.
+>
+> **Pré-release:** a branch beta é destinada a testes. Não é recomendada para trabalhos importantes sem validação dos cenários usados no seu computador. A última release estável continua disponível separadamente.
 
 ## 🎨 Aparência e personalização
 
-A interface usa uma identidade cósmica com fundos escuros, realces violeta, gradientes magenta/ciano e ícones vetoriais renderizados com antialiasing. Personalize o tema **Escuro**, **Claro** ou **Preto OLED**, escolha outra cor de destaque, altere o espaçamento entre **Confortável** e **Compacto**, e ative/desative animações nas Configurações. O **Modo desenvolvedor** mostra a saída técnica dos comandos; por padrão, o painel exibe um resumo da atividade.
+A interface customizada combina fundos cósmicos com acentos violeta, azul, ciano e verde-menta. Os botões compatíveis apresentam dois contornos em gradientes distintos e preenchimento que acompanha a fase das bordas ao passar o cursor. A animação só fica ativa quando habilitada em Configurações; caso contrário, o estado de hover é estático e leve. Personalize os temas **Escuro**, **Claro** e **Preto OLED**, cores, densidade e modo de desenvolvedor.
 
 Ao colar uma URL pública de vídeo ou áudio, a prévia aparece automaticamente após uma breve pausa e mostra capa, título, canal e duração quando disponíveis. Essa etapa consulta somente metadados com `yt-dlp` e busca apenas a imagem da capa, nunca o arquivo de vídeo/áudio. O gerenciador de playlists também exibe miniaturas nos itens. Se o site bloquear metadados ou não fornecer capa, o app mantém um painel de fallback e informa a indisponibilidade sem interromper o download.
 
 ## 🛡️ Proteção de downloads e análise de segurança
 
-A versão 5.3.1 restringe redirecionamentos de atualizações e dependências a hosts HTTPS explicitamente autorizados e rejeita caminhos de extração inseguros. Os arquivos de dependências só são instalados quando o manifesto SHA-256 publicado pela origem corresponde ao download.
+A base de segurança valida os destinos de redirecionamento HTTPS, limita tamanhos, restringe a extração de arquivos compactados e confere SHA-256 para dependências. Esta beta também corrige a classificação de domínios usados no fallback de miniaturas. Essas proteções reduzem riscos conhecidos, mas não equivalem a auditoria independente.
 
 A pipeline de distribuição inclui análise CodeQL e pode submeter os executáveis públicos ao VirusTotal. A publicação de uma nova Release exige configuração de certificado Authenticode confiável e chave VirusTotal nos secrets do repositório. Esses requisitos não significam que esta versão já foi assinada ou analisada: confira os relatórios anexados à Release. Nunca desative o antivírus para executar o aplicativo.
 
@@ -40,7 +42,7 @@ A página hospedada de downloads só é publicada quando GitHub Pages estiver ha
 
 ## 📥 Download oficial para usuários
 
-**Aplicativo:** abra **[Releases estáveis — baixar](https://github.com/slydtaz/chatgpt-media-downloader/releases/latest)** e baixe `ChatGPTMediaDownloader.exe`. Confira o `SHA256SUMS.txt` da mesma Release. **Desinstalador emergencial:** baixe `GPT-Media-Uninstaller.exe` se precisar limpar instalações e configurações antigas. Ele é separado do aplicativo e não apaga músicas/vídeos por padrão.
+**Uso normal:** abra **[Releases estáveis — baixar](https://github.com/slydtaz/chatgpt-media-downloader/releases/latest)** e baixe `ChatGPTMediaDownloader.exe`. Confira o `SHA256SUMS.txt` da mesma Release. Para testar esta versão, use a **pré-release beta 5.4.0-beta.1** somente depois que a publicação aparecer na aba Releases; não confunda artefatos de CI com um instalador oficial. **Desinstalador emergencial:** baixe `GPT-Media-Uninstaller.exe` da release correspondente.
 
 1. Baixe `ChatGPTMediaDownloader.exe` da Release estável.
 2. (Recomendado) Compare o SHA-256 do arquivo com `SHA256SUMS.txt` da mesma Release.
