@@ -62,8 +62,9 @@ UPDATE_FILES = frozenset({
 
 DEFAULT_SETTINGS = {
     "theme": "dark",
-    "accent_color": "#7C5CFF",
-    "accent_color_2": "#20D8E7",
+    "accent_color": "#895CFA",
+    "accent_color_2": "#558FF4",
+    "visual_preset_version": 2,
     "ui_density": "comfortable",
     "animations_enabled": True,
     "reduce_motion": False,
@@ -74,22 +75,22 @@ PALETTES = {
     "dark": {
         "bg": "#080711", "panel": "#100E20", "panel2": "#17132A",
         "surface": "#201A36", "field": "#0C0B19", "fg": "#F4F2FF",
-        "muted": "#A6A0C3", "border": "#44345F", "accent": "#A064FF",
-        "accent2": "#58E8D8", "good": "#5BF0A5", "warn": "#F6C66A",
+        "muted": "#A6A0C3", "border": "#3B3157", "accent": "#986BFA",
+        "accent2": "#6EA2FA", "good": "#5BF0A5", "warn": "#F6C66A",
         "bad": "#FF7C97", "button": "#1B1730", "input_fg": "#F4F2FF",
     },
     "light": {
         "bg": "#F2F5FF", "panel": "#FFFFFF", "panel2": "#E7EDFF",
         "surface": "#F8FAFF", "field": "#FFFFFF", "fg": "#1B2442",
-        "muted": "#647293", "border": "#D6DDF1", "accent": "#6449E9",
-        "accent2": "#009EBD", "good": "#187F67", "warn": "#9A6500",
+        "muted": "#647293", "border": "#D6DDF1", "accent": "#6248DB",
+        "accent2": "#287FD0", "good": "#187F67", "warn": "#9A6500",
         "bad": "#B93658", "button": "#E7EBF8", "input_fg": "#1B2442",
     },
     "oled": {
         "bg": "#03050B", "panel": "#080D18", "panel2": "#0D1628",
         "surface": "#101B2F", "field": "#050912", "fg": "#F7FAFF",
-        "muted": "#8999BA", "border": "#1C2A45", "accent": "#946EFF",
-        "accent2": "#36E2F0", "good": "#51D6A5", "warn": "#FFD166",
+        "muted": "#8999BA", "border": "#1C2A45", "accent": "#906CFA",
+        "accent2": "#548FF5", "good": "#51D6A5", "warn": "#FFD166",
         "bad": "#FF7294", "button": "#0E192C", "input_fg": "#F7FAFF",
     },
 }
@@ -668,7 +669,7 @@ class GradientBackdrop(tk.Canvas):
             item = self.create_rectangle(0, 0, 1, 1, width=0, tags="gradient")
             self.strips.append(item)
         self.glow_items: list[tuple[int, str, float, str]] = []
-        for corner, tint in (("tl", "#D946EF"), ("tr", "#7C3AED"), ("bl", "#BE185D"), ("br", "#6D28D9")):
+        for corner, tint in (("tl", "#8B5CF6"), ("tr", "#6D28D9"), ("bl", "#6D28D9"), ("br", "#2563EB")):
             for level in range(22):
                 item = self.create_oval(0, 0, 1, 1, fill="", outline="", tags="corner-glow")
                 self.glow_items.append((item, corner, level / 21, tint))
@@ -700,7 +701,7 @@ class GradientBackdrop(tk.Canvas):
             cy = 0 if corner.startswith("t") else height
             rx, ry = width * (0.60 - 0.38 * level), height * (0.88 - 0.54 * level)
             self.coords(item, cx - rx, cy - ry, cx + rx, cy + ry)
-            self.itemconfigure(item, fill=blend_hex(colors["bg"], tint, 0.012 + 0.12 * (level ** 1.45)), outline="")
+            self.itemconfigure(item, fill=blend_hex(colors["bg"], tint, 0.010 + 0.105 * (level ** 1.45)), outline="")
         for index, (item, rx, ry) in enumerate(self.star_items):
             x, y = width * rx, height * ry
             r = 1.5 if index % 4 else 2.3
@@ -778,6 +779,12 @@ class RoundedButton(tk.Canvas):
             item = self.create_line(0,0,0,0,fill=app.colors["button"],width=2.0 * app.ui_scale,
                 capstyle=tk.ROUND,tags=("button-shape","button-fill"))
             self._gradient_ids.append(item)
+        self._glow_ids = []
+        for spread, width, strength in ((3.2 * app.ui_scale, 3.4 * app.ui_scale, 0.13),
+                                        (1.4 * app.ui_scale, 2.2 * app.ui_scale, 0.20)):
+            item = self.create_polygon(0,0,0,0, fill="", outline=app.colors["bg"],
+                width=width, smooth=True, splinesteps=20, tags=("button-shape","button-glow"))
+            self._glow_ids.append((item, spread, width, strength))
         self._outline_id = self.create_polygon(0,0,0,0, fill="", outline=app.colors["border"],
             width=1.8 * app.ui_scale, smooth=True, splinesteps=20, tags=("button-shape","button-outline"))
         self._text_id = self.create_text(self.widget_width/2,self.widget_height/2,text=text,
@@ -807,6 +814,13 @@ class RoundedButton(tk.Canvas):
             local_y = round((index+0.5)*inner_h/self._gradient_rows)
             span_l,span_r = rounded_span(local_y,round(inner_w),round(inner_h),round(radius))
             self.coords(item,left+span_l,y,left+max(span_l+0.1,span_r),y)
+        for item, spread, _width, _strength in self._glow_ids:
+            outer_left, outer_top = max(0, left-spread), max(0, top-spread)
+            outer_right = min(self.widget_width, left+inner_w+spread)
+            outer_bottom = min(self.widget_height, top+inner_h+spread)
+            self.coords(item, *rounded_points(
+                outer_left, outer_top, outer_right, outer_bottom, radius+spread, steps=18
+            ))
         self.coords(self._outline_id,*rounded_points(left,top,left+inner_w,top+inner_h,radius,steps=18))
         self.coords(self._text_id,self.widget_width/2,self.widget_height/2)
 
@@ -885,6 +899,19 @@ class RoundedButton(tk.Canvas):
             for item in self._gradient_ids:
                 self.itemconfigure(item,fill=c["button"])
             text_color,outline=c["fg"],c["border"]
+        if self.variant == "primary":
+            glow_base = blend_hex(c["accent"], c["accent2"], 0.42)
+            for item, _spread, width, strength in self._glow_ids:
+                glow_strength = min(0.34, strength + (0.045 if self.hovered else 0.0))
+                self.itemconfigure(
+                    item,
+                    outline=blend_hex(c["bg"], glow_base, glow_strength),
+                    width=width * (1.10 if self.hovered else 1.0),
+                    state=tk.NORMAL,
+                )
+        else:
+            for item, _spread, _width, _strength in self._glow_ids:
+                self.itemconfigure(item, state=tk.HIDDEN, outline=c["bg"])
         self.itemconfigure(self._outline_id,outline=outline,width=1.8 * self.app.ui_scale)
         self.itemconfigure(self._text_id,fill=text_color)
         self.configure(bg=c.get(self.bg_key,c["bg"]))
@@ -1094,10 +1121,10 @@ class OrbitalAtom(tk.Canvas):
 
 SPLASH_BACKGROUND = "#080713"
 SPLASH_PALETTES = (
-    ("#F9A8D4", "#A78BFA"), ("#C4B5FD", "#67E8F9"),
-    ("#F0ABFC", "#818CF8"), ("#FDA4AF", "#C084FC"),
-    ("#A5B4FC", "#F5D0FE"), ("#D8B4FE", "#7DD3FC"),
-    ("#FBCFE8", "#DDD6FE"), ("#E9D5FF", "#F0ABFC"),
+    ("#BCA8FF", "#829DFF"), ("#C4B5FD", "#75B5FF"),
+    ("#A78BFA", "#6FC9F2"), ("#C1A4FF", "#8079F5"),
+    ("#B4A7FF", "#8ACFFF"), ("#D2C1FF", "#79AFFF"),
+    ("#D7BDF8", "#9A91F7"), ("#BDA7FA", "#73B8F8"),
 )
 STARTUP_MESSAGES = (
     "Acendendo o núcleo visual", "Preparando seu espaço de trabalho",
@@ -1154,19 +1181,19 @@ class CosmicSplash:
         c, w, h = self.canvas, self.width, self.height
         for i in range(112):
             x0, x1 = w * i / 112, w * (i + 1) / 112 + 1
-            c.create_rectangle(x0, 0, x1, h, fill=blend_hex(SPLASH_BACKGROUND, "#20113B", .05 + .20*i/111), outline="")
-        for cx, cy, tint in ((0, 0, "#D946EF"), (w, 0, "#7C3AED"), (0, h, "#BE185D"), (w, h, "#6D28D9")):
+            c.create_rectangle(x0, 0, x1, h, fill=blend_hex(SPLASH_BACKGROUND, "#21143D", .05 + .21*i/111), outline="")
+        for cx, cy, tint in ((0, 0, "#8B5CF6"), (w, 0, "#6D28D9"), (0, h, "#7C3AED"), (w, h, "#2563EB")):
             for level in range(18):
                 t = level / 17
                 rx, ry = w * (.58 - .34*t), h * (.82 - .48*t)
                 c.create_oval(cx-rx, cy-ry, cx+rx, cy+ry,
-                    fill=blend_hex(SPLASH_BACKGROUND, tint, .010 + .14*t**1.65), outline="")
+                    fill=blend_hex(SPLASH_BACKGROUND, tint, .012 + .16*t**1.65), outline="")
         rng = random.Random(119 + w + h)
         for _ in range(38):
             x, y = rng.random()*w, rng.random()*h
             radius, tint = rng.choice((1, 1, 1.5, 2)), rng.choice(("#8D86B5", "#8E84D6", "#A58DCB", "#65CBDC"))
             c.create_oval(x-radius, y-radius, x+radius, y+radius,
-                fill=blend_hex(SPLASH_BACKGROUND, tint, .55), outline="")
+                fill=blend_hex(SPLASH_BACKGROUND, tint, .60), outline="")
 
     def _draw_orbit_loader(self):
         """Use a single smooth polyline for each particle trail; no old pixels are left behind."""
@@ -1174,9 +1201,9 @@ class CosmicSplash:
         cx, cy = self.width / 2, self.height * .315
         rx, ry = min(180 * self.scale, self.width * .145), min(88 * self.scale, self.height * .092)
         self.track_specs = (
-            (0.0, rx, ry, ("#E879F9", "#A78BFA")),
-            (math.pi / 3, rx * .93, ry * .88, ("#C084FC", "#67E8F9")),
-            (-math.pi / 3, rx * .72, ry * 1.22, ("#F472B6", "#A78BFA")),
+            (0.0, rx, ry, ("#A78BFA", "#8BA4FF")),
+            (math.pi / 3, rx * .93, ry * .88, ("#B29AFF", "#78BFFF")),
+            (-math.pi / 3, rx * .72, ry * 1.22, ("#9B8AF5", "#83B7FF")),
         )
         for rotation, orbit_rx, orbit_ry, palette in self.track_specs:
             points = [ellipse_point(cx, cy, orbit_rx, orbit_ry, 2 * math.pi * i / 96, rotation) for i in range(97)]
@@ -1190,10 +1217,10 @@ class CosmicSplash:
                 capstyle=tk.ROUND, joinstyle=tk.ROUND, tags="splash-orbit-accent")
         self.particles = []
         for orbit, angle, speed, color in (
-            (0, .7, .055, "#F9A8D4"), (1, 2.6, .047, "#A78BFA"), (2, 4.2, -.052, "#67E8F9")
+            (0, .7, .055, "#B9A4FF"), (1, 2.6, .047, "#9D91FF"), (2, 4.2, -.052, "#78B8FF")
         ):
             trail_glow = self.canvas.create_line(0, 0, 0, 0,
-                fill=blend_hex(SPLASH_BACKGROUND, color, .28), width=6 * self.scale,
+                fill=blend_hex(SPLASH_BACKGROUND, color, .31), width=6 * self.scale,
                 capstyle=tk.ROUND, joinstyle=tk.ROUND, smooth=True, splinesteps=16,
                 state=tk.HIDDEN, tags=("splash-trail", "splash-trail-glow"))
             trail = self.canvas.create_line(0, 0, 0, 0,
@@ -1212,7 +1239,7 @@ class CosmicSplash:
             })
         self.canvas.create_oval(cx - 12*self.scale, cy - 12*self.scale,
             cx + 12*self.scale, cy + 12*self.scale,
-            fill=blend_hex(SPLASH_BACKGROUND, "#C084FC", .55), outline="", tags="splash-nucleus-glow")
+            fill=blend_hex(SPLASH_BACKGROUND, "#BCA0FF", .59), outline="", tags="splash-nucleus-glow")
         self.canvas.create_oval(cx - 4*self.scale, cy - 4*self.scale,
             cx + 4*self.scale, cy + 4*self.scale,
             fill="#F5D0FE", outline="", tags="splash-nucleus")
@@ -1428,18 +1455,34 @@ class SpaceUIPrototype:
 
     def _load_settings(self) -> dict:
         data = dict(DEFAULT_SETTINGS)
+        loaded = {}
+        settings_found = False
         try:
             loaded = json.loads(self.settings_path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
+            settings_found = isinstance(loaded, dict)
+            if settings_found:
                 data.update({key: loaded[key] for key in DEFAULT_SETTINGS if key in loaded})
+                if "visual_preset_version" not in loaded:
+                    data["visual_preset_version"] = 1
         except (OSError, json.JSONDecodeError):
             pass
         if data.get("theme") not in PALETTES:
             data["theme"] = "dark"
-        for key, fallback in (("accent_color", "#7C5CFF"), ("accent_color_2", "#20D8E7")):
+        for key, fallback in (("accent_color", DEFAULT_SETTINGS["accent_color"]),
+                              ("accent_color_2", DEFAULT_SETTINGS["accent_color_2"])):
             if not re.fullmatch(r"#[0-9A-Fa-f]{6}", str(data.get(key, ""))):
                 data[key] = fallback
             data[key] = data[key].upper()
+        try:
+            preset_version = int(data.get("visual_preset_version", 1 if settings_found else 2))
+        except (TypeError, ValueError):
+            preset_version = 1
+        if preset_version < 2:
+            if data["accent_color"] == "#7C5CFF":
+                data["accent_color"] = DEFAULT_SETTINGS["accent_color"]
+            if data["accent_color_2"] == "#20D8E7":
+                data["accent_color_2"] = DEFAULT_SETTINGS["accent_color_2"]
+        data["visual_preset_version"] = 2
         if data.get("ui_density") not in {"comfortable", "compact"}:
             data["ui_density"] = "comfortable"
         return data
