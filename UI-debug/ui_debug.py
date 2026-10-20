@@ -35,7 +35,7 @@ import tkinter.font as tkfont
 
 
 APP_NAME = "ChatGPT Media Downloader — UI-debug"
-APP_VERSION = "0.1.0-dev.11"
+APP_VERSION = "0.1.0-dev.12"
 CHANNEL = "development"
 REPO_OWNER = "slydtaz"
 REPO_NAME = "Chatgpt-media-downloader"
@@ -98,11 +98,30 @@ PALETTES = {
 }
 
 BACKGROUND_GRADIENT_PALETTES = {
-    "violet_blue": ("Violeta + azul", "#895CFA", "#558FF4"),
-    "indigo_cyan": ("Índigo + ciano", "#5B52D9", "#36B9D4"),
-    "blue_teal": ("Azul + turquesa", "#337DE6", "#36BFA7"),
-    "violet_lilac": ("Violeta + lilás", "#7757D8", "#A58AF2"),
+    "violet_blue": ("Violeta + azul", "#9854FF", "#398BFF"),
+    "indigo_cyan": ("Índigo + ciano", "#655BFF", "#20D5F2"),
+    "blue_teal": ("Azul + turquesa", "#278BFF", "#20D9B0"),
+    "violet_lilac": ("Violeta + lilás", "#8754F7", "#C18BFF"),
 }
+
+# Button colours are intentionally separate from the background palette.
+# The fill is simulated as translucent by blending these colours into the
+# button surface; Tk Canvas does not provide per-item alpha transparency.
+BUTTON_FILL_PALETTE = ("#A855F7", "#497BFF", "#20CFE5", "#43DDAE", "#A855F7")
+BUTTON_OUTER_EDGE_PALETTE = ("#C05BFF", "#35D9FF", "#7A7BFF", "#C05BFF")
+BUTTON_INNER_EDGE_PALETTE = ("#F472D0", "#6B9CFF", "#48E9B7", "#F472D0")
+
+
+def cyclic_palette_color(palette, position: float) -> str:
+    """Sample a cyclic colour palette; positions 0 and 1 render identically."""
+    if not palette:
+        return "#FFFFFF"
+    position = float(position) % 1.0
+    if len(palette) == 1:
+        return palette[0]
+    scaled = position * (len(palette) - 1)
+    index = min(len(palette) - 2, int(scaled))
+    return blend_hex(palette[index], palette[index + 1], scaled - index)
 
 
 def blend_hex(first: str, second: str, amount: float) -> str:
@@ -667,7 +686,7 @@ def install_self_update(app_dir: Path, archive_bytes: bytes) -> None:
 
 
 class GradientBackdrop(tk.Canvas):
-    """Subtle background-only gradient. UI cards and controls remain opaque and stable."""
+    """Ambient translucent colour wash with a crisp, fully coloured edge."""
     def __init__(self, master, app, **kwargs):
         super().__init__(master, highlightthickness=0, bd=0, **kwargs)
         self.app = app
@@ -678,19 +697,32 @@ class GradientBackdrop(tk.Canvas):
         self._gradient_transition_start = self._current_gradient_pair
         self._gradient_transition_target = None
         self._gradient_transition_step = 0
-        self._gradient_transition_duration = random.randint(72, 112)
+        self._gradient_transition_duration = random.randint(54, 88)
         self._animation_after_id = None
 
-        # The base remains nearly black. Only these soft corner glows animate.
-        for index in range(96):
-            item = self.create_rectangle(0, 0, 1, 1, width=0, tags="gradient")
-            self.strips.append(item)
+        # The base stays dark: the coloured wash is blended into it, not painted
+        # as an opaque panel. The narrow perimeter remains fully saturated.
+        for _ in range(96):
+            self.strips.append(self.create_rectangle(0, 0, 1, 1, width=0, tags="gradient"))
 
         self.glow_items: list[tuple[int, str, float, int]] = []
         for corner, channel in (("tl", 0), ("tr", 1), ("bl", 0), ("br", 1)):
             for level in range(48):
                 item = self.create_oval(0, 0, 1, 1, fill="", outline="", tags="corner-glow")
                 self.glow_items.append((item, corner, level / 47, channel))
+
+        # Four segmented edges use opaque palette colours to give the wash a
+        # defined silhouette. Their colours follow the same transition as the glow.
+        self._edge_segment_count = 36
+        self.edge_items: list[list[int]] = []
+        for _side in range(4):
+            segments = []
+            for _index in range(self._edge_segment_count):
+                segments.append(self.create_line(
+                    0, 0, 0, 0, fill="#895CFA", width=1.25,
+                    capstyle=tk.ROUND, tags="gradient-edge",
+                ))
+            self.edge_items.append(segments)
 
         stars = [(0.13, 0.16), (0.31, 0.08), (0.46, 0.22), (0.69, 0.11),
                  (0.88, 0.27), (0.76, 0.42), (0.19, 0.56), (0.93, 0.68),
@@ -731,12 +763,39 @@ class GradientBackdrop(tk.Canvas):
             rx, ry = width * (0.48 - 0.32 * level), height * (0.62 - 0.43 * level)
             self.coords(item, cx - rx, cy - ry, cx + rx, cy + ry)
             tint = first if channel == 0 else second
-            # Low opacity keeps the glow at the edges; it never recolors cards/buttons.
-            self.itemconfigure(
-                item,
-                fill=blend_hex(colors["bg"], tint, 0.010 + 0.13 * (level ** 1.45)),
-                outline="",
-            )
+            # Stronger near the outer area; each layer is blended into the base
+            # so it looks like light spilling through the dark surface.
+            opacity = 0.025 + 0.22 * ((1.0 - level) ** 1.35)
+            self.itemconfigure(item, fill=blend_hex(colors["bg"], tint, opacity), outline="")
+
+        self._draw_edge_gradient(width, height, first, second)
+
+    def _draw_edge_gradient(self, width, height, first, second):
+        side_points = (
+            [(width * i / self._edge_segment_count, 0,
+              width * (i + 1) / self._edge_segment_count, 0)
+             for i in range(self._edge_segment_count)],
+            [(width, height * i / self._edge_segment_count,
+              width, height * (i + 1) / self._edge_segment_count)
+             for i in range(self._edge_segment_count)],
+            [(width * (1 - i / self._edge_segment_count), height,
+              width * (1 - (i + 1) / self._edge_segment_count), height)
+             for i in range(self._edge_segment_count)],
+            [(0, height * (1 - i / self._edge_segment_count),
+              0, height * (1 - (i + 1) / self._edge_segment_count))
+             for i in range(self._edge_segment_count)],
+        )
+        for side, segments in enumerate(side_points):
+            start, end = (first, second) if side in (0, 2) else (second, first)
+            for index, coords in enumerate(segments):
+                t = (index + 0.5) / self._edge_segment_count
+                self.coords(self.edge_items[side][index], *coords)
+                # Unlike the diffuse halo, the 1-pixel perimeter is opaque.
+                self.itemconfigure(
+                    self.edge_items[side][index],
+                    fill=blend_hex(start, end, t),
+                    width=max(1.0, 1.2 * getattr(self.app, "ui_scale", 1.0)),
+                )
 
     def _resize(self, _event):
         width, height = max(1, self.winfo_width()), max(1, self.winfo_height())
@@ -747,23 +806,22 @@ class GradientBackdrop(tk.Canvas):
         for index, item in enumerate(self.strips):
             x0 = width * index / len(self.strips)
             x1 = width * (index + 1) / len(self.strips) + 1
-            color = blend_hex(colors["bg"], colors["panel2"], index / max(1, len(self.strips) - 1) * 0.30)
+            color = blend_hex(colors["bg"], colors["panel2"], index / max(1, len(self.strips) - 1) * 0.24)
             self.coords(item, x0, 0, x1, height)
             self.itemconfigure(item, fill=color, outline=color)
         self._draw_glows()
         for index, (item, rx, ry) in enumerate(self.star_items):
             x, y = width * rx, height * ry
-            r = 1.5 if index % 4 else 2.3
-            self.coords(item, x - r, y - r, x + r, y + r)
+            radius = 1.5 if index % 4 else 2.3
+            self.coords(item, x - radius, y - radius, x + radius, y + radius)
             self.itemconfigure(item, fill=blend_hex(colors["muted"], colors["accent2"], 0.3), outline="")
 
     def refresh_gradient_settings(self):
         """Apply selected background palettes without changing the whole interface."""
         selected = self._selected_pairs()
-        if not self.app.settings.get("background_gradient_enabled", True):
-            self._current_gradient_pair = selected[0][1]
-            self._gradient_transition_target = None
-        elif self.app.settings.get("reduce_motion") or not self.app.settings.get("animations_enabled", True):
+        if (not self.app.settings.get("background_gradient_enabled", True)
+                or self.app.settings.get("reduce_motion")
+                or not self.app.settings.get("animations_enabled", True)):
             self._current_gradient_pair = selected[0][1]
             self._gradient_transition_target = None
         else:
@@ -806,7 +864,7 @@ class GradientBackdrop(tk.Canvas):
                 candidates = [tuple(reversed(pair))]
             self._gradient_transition_target = random.choice(candidates)
             self._gradient_transition_step = 0
-            self._gradient_transition_duration = random.randint(72, 112)
+            self._gradient_transition_duration = random.randint(54, 88)
 
         self._gradient_transition_step += 1
         progress = min(1.0, self._gradient_transition_step / self._gradient_transition_duration)
@@ -934,7 +992,7 @@ def draw_action_icon(canvas: tk.Canvas, cx: float, cy: float, key: str, color: s
 
 
 class RoundedButton(tk.Canvas):
-    """Fixed-layout vector button: only its drawing scales, never its widget geometry."""
+    """Fixed-layout vector button with a translucent fill and two animated borders."""
     def __init__(self, master, app, text, command=None, *, variant="secondary", width=None, height=40, icon_key=None):
         self.app, self.text, self.command, self.variant = app, text, command, variant
         self.icon_key = icon_key
@@ -956,24 +1014,67 @@ class RoundedButton(tk.Canvas):
         self.hovered = self.pressed = False
         self._gradient_ids = []
         self._gradient_rows = 24
-        for row in range(self._gradient_rows):
-            item = self.create_line(0,0,0,0,fill=app.colors["button"],width=2.0 * app.ui_scale,
-                capstyle=tk.ROUND,tags=("button-shape","button-fill"))
+        self._gradient_phase = 0.0
+        self._hover_amount = 0.0
+        self._gradient_state = "idle"
+        self._gradient_after_id = None
+        self._return_start_phase = 0.0
+        self._return_target_phase = 0.0
+        self._return_start_amount = 0.0
+        self._return_frame = 0
+        self._return_frames = 18
+
+        for _row in range(self._gradient_rows):
+            item = self.create_line(
+                0, 0, 0, 0, fill=app.colors["button"], width=2.0 * app.ui_scale,
+                capstyle=tk.ROUND, tags=("button-shape", "button-fill"),
+            )
             self._gradient_ids.append(item)
+
         self._glow_ids = []
-        for spread, width, strength in ((3.2 * app.ui_scale, 3.4 * app.ui_scale, 0.13),
-                                        (1.4 * app.ui_scale, 2.2 * app.ui_scale, 0.20)):
-            item = self.create_polygon(0,0,0,0, fill="", outline=app.colors["bg"],
-                width=width, smooth=True, splinesteps=20, tags=("button-shape","button-glow"))
-            self._glow_ids.append((item, spread, width, strength))
-        self._outline_id = self.create_polygon(0,0,0,0, fill="", outline=app.colors["border"],
-            width=1.8 * app.ui_scale, smooth=True, splinesteps=20, tags=("button-shape","button-outline"))
-        text_x = self.widget_width/2 + (app.scale_px(7) if self.icon_key else 0)
-        text_width = self.base_width-app.scale_px(18 + (16 if self.icon_key else 0))
-        self._text_id = self.create_text(text_x,self.widget_height/2,text=text,
-            fill=app.colors["fg"],font=self.font,width=text_width,tags="button-shape")
+        for spread, line_width, strength in (
+            (3.2 * app.ui_scale, 3.4 * app.ui_scale, 0.13),
+            (1.4 * app.ui_scale, 2.2 * app.ui_scale, 0.20),
+        ):
+            item = self.create_polygon(
+                0, 0, 0, 0, fill="", outline=app.colors["bg"],
+                width=line_width, smooth=True, splinesteps=20,
+                tags=("button-shape", "button-glow"),
+            )
+            self._glow_ids.append((item, spread, line_width, strength))
+
+        self._outline_id = self.create_polygon(
+            0, 0, 0, 0, fill="", outline=app.colors["border"],
+            width=0.8 * app.ui_scale, smooth=True, splinesteps=20,
+            tags=("button-shape", "button-outline"),
+        )
+
+        # Separate segment sets let each rounded outline carry its own colour
+        # gradient. The two outlines use alternative palettes but share one phase.
+        self._border_segment_count = 76
+        self._border_layers = []
+        for palette, width, inset in (
+            (BUTTON_OUTER_EDGE_PALETTE, 2.35 * app.ui_scale, -1.45 * app.ui_scale),
+            (BUTTON_INNER_EDGE_PALETTE, 1.25 * app.ui_scale, 1.45 * app.ui_scale),
+        ):
+            items = []
+            for _index in range(self._border_segment_count):
+                items.append(self.create_line(
+                    0, 0, 0, 0, fill=palette[0], width=width,
+                    capstyle=tk.ROUND, joinstyle=tk.ROUND, tags=("button-shape", "button-gradient-border"),
+                ))
+            self._border_layers.append({
+                "items": items, "palette": palette, "width": width, "inset": inset,
+            })
+
+        text_x = self.widget_width / 2 + (app.scale_px(7) if self.icon_key else 0)
+        text_width = self.base_width - app.scale_px(18 + (16 if self.icon_key else 0))
+        self._text_id = self.create_text(
+            text_x, self.widget_height / 2, text=text, fill=app.colors["fg"],
+            font=self.font, width=text_width, tags="button-shape",
+        )
         self._icon_items = draw_action_icon(
-            self, self.gutter_x + app.scale_px(14), self.widget_height/2,
+            self, self.gutter_x + app.scale_px(14), self.widget_height / 2,
             self.icon_key, app.colors["fg"] if variant == "primary" else app.colors["accent2"],
             scale=0.90 * app.ui_scale,
         ) if self.icon_key else []
@@ -989,109 +1090,244 @@ class RoundedButton(tk.Canvas):
         self.refresh_theme()
 
     def _on_resize(self, _event):
-        # Canvas geometry is intentionally fixed; Tk must not repack a button on hover.
+        # Canvas geometry is fixed; only its drawing changes during hover.
         pass
 
     def _apply_size(self, scale):
         self.current_scale = scale
-        inner_w, inner_h = self.base_width*scale, self.base_height*scale
-        left, top = (self.widget_width-inner_w)/2, (self.widget_height-inner_h)/2
-        radius = min(self.app.scale_px(12), inner_h*0.34)
-        for index,item in enumerate(self._gradient_ids):
-            y = top + (index+0.5)*inner_h/self._gradient_rows
-            local_y = round((index+0.5)*inner_h/self._gradient_rows)
-            span_l,span_r = rounded_span(local_y,round(inner_w),round(inner_h),round(radius))
-            self.coords(item,left+span_l,y,left+max(span_l+0.1,span_r),y)
+        inner_w, inner_h = self.base_width * scale, self.base_height * scale
+        left, top = (self.widget_width - inner_w) / 2, (self.widget_height - inner_h) / 2
+        radius = min(self.app.scale_px(12), inner_h * 0.34)
+        for index, item in enumerate(self._gradient_ids):
+            y = top + (index + 0.5) * inner_h / self._gradient_rows
+            local_y = round((index + 0.5) * inner_h / self._gradient_rows)
+            span_l, span_r = rounded_span(local_y, round(inner_w), round(inner_h), round(radius))
+            self.coords(item, left + span_l, y, left + max(span_l + 0.1, span_r), y)
+
         for item, spread, _width, _strength in self._glow_ids:
-            outer_left, outer_top = max(0, left-spread), max(0, top-spread)
-            outer_right = min(self.widget_width, left+inner_w+spread)
-            outer_bottom = min(self.widget_height, top+inner_h+spread)
+            outer_left, outer_top = max(0, left - spread), max(0, top - spread)
+            outer_right = min(self.widget_width, left + inner_w + spread)
+            outer_bottom = min(self.widget_height, top + inner_h + spread)
             self.coords(item, *rounded_points(
-                outer_left, outer_top, outer_right, outer_bottom, radius+spread, steps=18
+                outer_left, outer_top, outer_right, outer_bottom, radius + spread, steps=18
             ))
-        self.coords(self._outline_id,*rounded_points(left,top,left+inner_w,top+inner_h,radius,steps=18))
-        text_x = self.widget_width/2 + (self.app.scale_px(7) if self.icon_key else 0)
-        self.coords(self._text_id,text_x,self.widget_height/2)
+
+        self.coords(self._outline_id, *rounded_points(
+            left, top, left + inner_w, top + inner_h, radius, steps=18
+        ))
+        for layer in self._border_layers:
+            inset = layer["inset"]
+            border_points = rounded_points(
+                left + inset, top + inset,
+                left + inner_w - inset, top + inner_h - inset,
+                max(2.0, radius - inset), steps=18,
+            )
+            points = list(zip(border_points[0::2], border_points[1::2]))
+            if len(points) < 2:
+                continue
+            for index, item in enumerate(layer["items"]):
+                p0 = points[index % len(points)]
+                p1 = points[(index + 1) % len(points)]
+                self.coords(item, p0[0], p0[1], p1[0], p1[1])
+
+        text_x = self.widget_width / 2 + (self.app.scale_px(7) if self.icon_key else 0)
+        self.coords(self._text_id, text_x, self.widget_height / 2)
+        self._draw_gradient_visuals()
+
+    def _draw_gradient_visuals(self):
+        c = self.app.colors
+        # Low-opacity fill is simulated by mixing vivid hues into the surface.
+        # Fill, outer edge and inner edge all use the same phase while hovered.
+        idle_alpha = 0.39 if self.variant == "primary" else 0.19
+        active_alpha = 0.61 if self.variant == "primary" else 0.38
+        alpha = idle_alpha + (active_alpha - idle_alpha) * self._hover_amount
+        base = c["button"]
+        for row, item in enumerate(self._gradient_ids):
+            t = row / max(1, len(self._gradient_ids) - 1)
+            tint = cyclic_palette_color(BUTTON_FILL_PALETTE, t + self._gradient_phase)
+            self.itemconfigure(item, fill=blend_hex(base, tint, alpha))
+
+        for layer in self._border_layers:
+            palette = layer["palette"]
+            for index, item in enumerate(layer["items"]):
+                t = (index + 0.5) / len(layer["items"])
+                self.itemconfigure(
+                    item,
+                    fill=cyclic_palette_color(palette, t + self._gradient_phase),
+                    width=layer["width"],
+                )
+
+        glow_base = cyclic_palette_color(BUTTON_OUTER_EDGE_PALETTE, self._gradient_phase)
+        for item, _spread, width, strength in self._glow_ids:
+            glow_amount = strength * self._hover_amount
+            self.itemconfigure(
+                item,
+                outline=blend_hex(c["bg"], glow_base, glow_amount),
+                width=width,
+                state=tk.NORMAL,
+            )
+        self.itemconfigure(
+            self._outline_id,
+            outline=blend_hex(c["border"], glow_base, 0.28 + 0.38 * self._hover_amount),
+            width=0.8 * self.app.ui_scale,
+        )
+
+    def _animations_allowed(self):
+        return (
+            not self.app.settings.get("reduce_motion")
+            and self.app.settings.get("animations_enabled", True)
+        )
+
+    def _schedule_gradient_animation(self):
+        if self._gradient_after_id is None and self._gradient_state != "idle":
+            self._gradient_after_id = self.after(30, self._animate_hover_gradient)
+
+    def _animate_hover_gradient(self):
+        self._gradient_after_id = None
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            return
+
+        if not self._animations_allowed():
+            self._gradient_phase = 0.0
+            self._hover_amount = 1.0 if self.hovered else 0.0
+            self._gradient_state = "idle"
+            self._draw_gradient_visuals()
+            return
+
+        if self._gradient_state == "playing" and self.hovered:
+            self._gradient_phase = (self._gradient_phase + 0.012) % 1.0
+            self._hover_amount = min(1.0, self._hover_amount + (1.0 / 15.0))
+        elif self._gradient_state == "returning":
+            self._return_frame += 1
+            progress = min(1.0, self._return_frame / self._return_frames)
+            eased = progress * progress * (3.0 - 2.0 * progress)
+            self._gradient_phase = (
+                self._return_start_phase
+                + (self._return_target_phase - self._return_start_phase) * eased
+            )
+            self._hover_amount = self._return_start_amount * (1.0 - eased)
+            if self._return_frame >= self._return_frames:
+                # The endpoint is the same phase as the untouched PNG/rest state.
+                self._gradient_phase = 0.0
+                self._hover_amount = 0.0
+                self._gradient_state = "idle"
+        else:
+            self._gradient_phase = 0.0
+            self._hover_amount = 1.0 if self.hovered else 0.0
+            self._gradient_state = "idle"
+
+        self._draw_gradient_visuals()
+        if self._gradient_state != "idle":
+            self._schedule_gradient_animation()
+
+    def _begin_gradient_hover(self):
+        if not self._animations_allowed():
+            self._gradient_phase = 0.0
+            self._hover_amount = 1.0
+            self._gradient_state = "idle"
+            self._draw_gradient_visuals()
+            return
+        self._gradient_state = "playing"
+        self._schedule_gradient_animation()
+
+    def _return_gradient_to_rest(self):
+        if not self._animations_allowed():
+            self._gradient_phase = 0.0
+            self._hover_amount = 0.0
+            self._gradient_state = "idle"
+            if self._gradient_after_id is not None:
+                try:
+                    self.after_cancel(self._gradient_after_id)
+                except tk.TclError:
+                    pass
+                self._gradient_after_id = None
+            self._draw_gradient_visuals()
+            return
+
+        self._return_start_phase = self._gradient_phase
+        self._return_target_phase = 1.0 if self._gradient_phase > 0.001 else 0.0
+        self._return_start_amount = self._hover_amount
+        self._return_frame = 0
+        if self._gradient_phase <= 0.001 and self._hover_amount <= 0.001:
+            self._gradient_phase = 0.0
+            self._hover_amount = 0.0
+            self._gradient_state = "idle"
+        else:
+            self._gradient_state = "returning"
+            self._schedule_gradient_animation()
+        self._draw_gradient_visuals()
 
     def _animate_to(self, scale):
         self._target_scale = scale
-        if self.app.settings.get("reduce_motion") or not self.app.settings.get("animations_enabled",True):
+        if self.app.settings.get("reduce_motion") or not self.app.settings.get("animations_enabled", True):
             if self._scale_after_id is not None:
-                try:self.after_cancel(self._scale_after_id)
-                except tk.TclError:pass
-                self._scale_after_id=None
+                try:
+                    self.after_cancel(self._scale_after_id)
+                except tk.TclError:
+                    pass
+                self._scale_after_id = None
             self._apply_size(scale)
             return
         if self._scale_after_id is not None:
-            try:self.after_cancel(self._scale_after_id)
-            except tk.TclError:pass
-        start,frames=self.current_scale,4
+            try:
+                self.after_cancel(self._scale_after_id)
+            except tk.TclError:
+                pass
+        start, frames = self.current_scale, 10
+
         def frame(index=1):
-            if index>frames:
-                self._scale_after_id=None
+            if index > frames:
+                self._scale_after_id = None
                 self._apply_size(scale)
                 return
-            progress=index/frames
-            eased=1-(1-progress)**3
-            self._apply_size(start+(scale-start)*eased)
-            self._scale_after_id=self.after(18,lambda:frame(index+1))
+            progress = index / frames
+            eased = progress * progress * (3.0 - 2.0 * progress)
+            self._apply_size(start + (scale - start) * eased)
+            self._scale_after_id = self.after(20, lambda: frame(index + 1))
         frame()
 
-    def _enter(self,_event=None):
-        self.hovered=True
+    def _enter(self, _event=None):
+        self.hovered = True
         self._refresh_colors()
+        self._begin_gradient_hover()
         self._animate_to(1.035)
 
-    def _leave(self,_event=None):
-        self.hovered=self.pressed=False
+    def _leave(self, _event=None):
+        self.hovered = self.pressed = False
         self._refresh_colors()
+        self._return_gradient_to_rest()
         self._animate_to(1.0)
 
-    def _press(self,_event=None):
-        self.pressed=True
+    def _press(self, _event=None):
+        self.pressed = True
         self._refresh_colors()
-        self._animate_to(1.04 if self.hovered else 1.015)
+        # Pressing does not add a second scale pulse; hover remains one stable size.
+        self._animate_to(1.035 if self.hovered else 1.0)
         return "break"
 
-    def _release(self,event=None):
-        invoke=self.pressed and event is not None and 0<=event.x<=self.widget_width and 0<=event.y<=self.widget_height
-        self.pressed=False
+    def _release(self, event=None):
+        invoke = (
+            self.pressed and event is not None
+            and 0 <= event.x <= self.widget_width and 0 <= event.y <= self.widget_height
+        )
+        self.pressed = False
         self._refresh_colors()
         self._animate_to(1.035 if self.hovered else 1.0)
         if invoke and callable(self.command):
             self.command()
         return "break"
 
-    def _keyboard(self,_event=None):
-        if callable(self.command):self.command()
+    def _keyboard(self, _event=None):
+        if callable(self.command):
+            self.command()
         return "break"
 
     def _refresh_colors(self):
         c = self.app.colors
-        # Gradient fills are static. Hover only scales the button; hue does not shift.
-        if self.variant == "primary":
-            start, end = c["accent"], c["accent2"]
-            for row, item in enumerate(self._gradient_ids):
-                self.itemconfigure(item, fill=blend_hex(start, end, row / max(1, len(self._gradient_ids) - 1)))
-            text_color, outline = "#FFFFFF", blend_hex(end, "#FFFFFF", 0.22)
-        else:
-            for item in self._gradient_ids:
-                self.itemconfigure(item, fill=c["button"])
-            text_color, outline = c["fg"], c["border"]
-
-        if self.variant == "primary":
-            glow_base = blend_hex(c["accent"], c["accent2"], 0.42)
-            for item, _spread, width, strength in self._glow_ids:
-                self.itemconfigure(
-                    item,
-                    outline=blend_hex(c["bg"], glow_base, strength),
-                    width=width,
-                    state=tk.NORMAL,
-                )
-        else:
-            for item, _spread, _width, _strength in self._glow_ids:
-                self.itemconfigure(item, state=tk.HIDDEN, outline=c["bg"])
-
+        self._draw_gradient_visuals()
         if self.icon_key:
             icon_color = "#FFFFFF" if self.variant == "primary" else c["accent2"]
             for item, item_kind in self._icon_items:
@@ -1101,8 +1337,7 @@ class RoundedButton(tk.Canvas):
                     self.itemconfigure(item, outline=icon_color)
                 else:
                     self.itemconfigure(item, fill=icon_color, outline=icon_color)
-        self.itemconfigure(self._outline_id, outline=outline, width=1.8 * self.app.ui_scale)
-        self.itemconfigure(self._text_id, fill=text_color)
+        self.itemconfigure(self._text_id, fill="#FFFFFF" if self.variant == "primary" else c["fg"])
         self.configure(bg=c.get(self.bg_key, c["bg"]))
 
     def refresh_theme(self):
