@@ -165,7 +165,7 @@ class VisualConceptTests(unittest.TestCase):
             self.assertEqual(custom["accent_color_2"], "#33AADD")
 
     def test_prototype_has_independent_development_version(self):
-        self.assertEqual(ui_debug.APP_VERSION, "0.1.0-dev.10")
+        self.assertEqual(ui_debug.APP_VERSION, "0.1.0-dev.11")
         self.assertEqual(ui_debug.CHANNEL, "development")
         self.assertIn("ui-debug", ui_debug.UPDATE_BRANCH)
         self.assertNotIn("draw_orbit_icon", (ROOT / "ui_debug.py").read_text(encoding="utf-8"))
