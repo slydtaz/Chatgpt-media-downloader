@@ -777,6 +777,9 @@ class GradientBackdrop(tk.Canvas):
         try:
             if not self.winfo_exists():
                 return
+            if not self.winfo_ismapped():
+                self._animation_after_id = self.after(500, self._animate_gradient)
+                return
         except tk.TclError:
             return
 
@@ -1711,14 +1714,8 @@ class SpaceUIPrototype:
     def _build_shell(self):
         outer = tk.Frame(self.shell, bg=self.colors["bg"], padx=self.scale_px(18), pady=self.scale_px(16))
         outer.pack(fill="both", expand=True)
-        self.backdrop = GradientBackdrop(outer, self)
-        self.backdrop.place(x=0, y=0, relwidth=1, relheight=1)
-        # Force the decorative canvas behind real controls to prevent the odd
-        # purple seam appearing just to the right of the sidebar navigation.
-        try:
-            self.backdrop.tk.call("lower", self.backdrop._w)
-        except tk.TclError:
-            pass
+        # The animated background now lives behind scrollable page content.
+        # Keep the sidebar gap opaque so no decorative glow leaks beside navigation.
         self.sidebar = tk.Frame(outer, bg=self.colors["panel"], width=self.scale_px(220),
                                 bd=0, highlightthickness=1, highlightbackground=self.colors["border"])
         self.sidebar.pack(side="left", fill="y")
@@ -2378,6 +2375,7 @@ class SpaceUIPrototype:
         self.button(custom_row, "Escolher cor secundária…", self._choose_secondary_accent, "secondary", width=195).pack(side="left")
         self.accent_preview = tk.Canvas(accent.body, height=14, bg=self.colors["panel"], bd=0, highlightthickness=0)
         self.accent_preview.pack(fill="x", pady=(14, 0))
+        self.accent_preview.bind("<Configure>", lambda _event: self._draw_accent_preview(), add="+")
 
         background_gradient = self.card(body, padding=18)
         background_gradient.pack(fill="x", pady=(0, 12))
@@ -2615,8 +2613,8 @@ class SpaceUIPrototype:
 
     def _set_background_gradient_enabled(self):
         self.settings["background_gradient_enabled"] = bool(self.background_gradient_var.get())
-        if hasattr(self, "backdrop"):
-            self.backdrop.refresh_gradient_settings()
+        for pane in getattr(self, "scroll_panes", []):
+            pane.backdrop.refresh_gradient_settings()
         self.toast("Gradiente de fundo " + ("animado ativado." if self.settings["background_gradient_enabled"] else "parado na primeira paleta selecionada."))
 
     def _toggle_background_gradient_palette(self, name):
@@ -2634,8 +2632,8 @@ class SpaceUIPrototype:
             key for key in BACKGROUND_GRADIENT_PALETTES if key in selected
         ]
         self._draw_background_gradient_swatches()
-        if hasattr(self, "backdrop"):
-            self.backdrop.refresh_gradient_settings()
+        for pane in getattr(self, "scroll_panes", []):
+            pane.backdrop.refresh_gradient_settings()
         self.toast("Paletas do gradiente de fundo atualizadas. Salve para manter.")
 
     def _set_density(self, value, notify=True):
@@ -2652,8 +2650,8 @@ class SpaceUIPrototype:
         self.settings["animations_enabled"] = bool(self.anim_var.get())
         for toggle in self.toggles:
             toggle.refresh_theme()
-        if hasattr(self, "backdrop"):
-            self.backdrop.refresh_gradient_settings()
+        for pane in getattr(self, "scroll_panes", []):
+            pane.backdrop.refresh_gradient_settings()
         self.toast("Animações sutis " + ("ativadas." if self.settings["animations_enabled"] else "desativadas."))
 
     def _set_motion_pref(self):
@@ -2663,8 +2661,8 @@ class SpaceUIPrototype:
             self.anim_var.set(False)
         for toggle in self.toggles:
             toggle.refresh_theme()
-        if hasattr(self, "backdrop"):
-            self.backdrop.refresh_gradient_settings()
+        for pane in getattr(self, "scroll_panes", []):
+            pane.backdrop.refresh_gradient_settings()
         self.toast("Preferência de movimento atualizada.")
 
     def _set_update_pref(self):
@@ -2796,10 +2794,11 @@ class SpaceUIPrototype:
                 redraw()
             except tk.TclError:
                 pass
-        try:
-            self.backdrop.refresh_gradient_settings()
-        except (AttributeError, tk.TclError):
-            pass
+        for pane in getattr(self, "scroll_panes", []):
+            try:
+                pane.backdrop.refresh_gradient_settings()
+            except (AttributeError, tk.TclError):
+                pass
         if hasattr(self, "nav_items"):
             for key, (nav, shape, icon, label_id, indicator, plate) in self.nav_items.items():
                 active = key == self.current_page
@@ -2976,6 +2975,14 @@ class ScrollPane(tk.Frame):
             style="UI.Vertical.TScrollbar",
         )
         self.body = tk.Frame(self.canvas, bg=app.colors["bg"], bd=0, highlightthickness=0)
+        # Draw the animated backdrop inside the scrolling content, below all cards.
+        # This makes it visible only in the negative space between opaque UI surfaces.
+        self.backdrop = GradientBackdrop(self.body, app)
+        self.backdrop.place(x=0, y=0, relwidth=1, relheight=1)
+        try:
+            self.backdrop.tk.call("lower", self.backdrop._w)
+        except tk.TclError:
+            pass
         self.window = self.canvas.create_window((0, 0), window=self.body, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         self.canvas.pack(side="left", fill="both", expand=True)
@@ -3023,6 +3030,7 @@ class ScrollPane(tk.Frame):
         self.configure(bg=self.app.colors["bg"])
         self.canvas.configure(bg=self.app.colors["bg"])
         self.body.configure(bg=self.app.colors["bg"])
+        self.backdrop.refresh_gradient_settings()
 
 
 def run():
