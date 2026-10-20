@@ -35,7 +35,7 @@ import tkinter.font as tkfont
 
 
 APP_NAME = "ChatGPT Media Downloader — UI-debug"
-APP_VERSION = "0.1.0-dev.9"
+APP_VERSION = "0.1.0-dev.10"
 CHANNEL = "development"
 REPO_OWNER = "slydtaz"
 REPO_NAME = "Chatgpt-media-downloader"
@@ -68,6 +68,8 @@ DEFAULT_SETTINGS = {
     "ui_density": "comfortable",
     "animations_enabled": True,
     "reduce_motion": False,
+    "background_gradient_enabled": True,
+    "background_gradient_palettes": ["violet_blue", "indigo_cyan", "blue_teal"],
     "update_check_on_startup": True,
 }
 
@@ -93,6 +95,13 @@ PALETTES = {
         "accent2": "#548FF5", "good": "#51D6A5", "warn": "#FFD166",
         "bad": "#FF7294", "button": "#0E192C", "input_fg": "#F7FAFF",
     },
+}
+
+BACKGROUND_GRADIENT_PALETTES = {
+    "violet_blue": ("Violeta + azul", "#895CFA", "#558FF4"),
+    "indigo_cyan": ("Índigo + ciano", "#5B52D9", "#36B9D4"),
+    "blue_teal": ("Azul + turquesa", "#337DE6", "#36BFA7"),
+    "violet_lilac": ("Violeta + lilás", "#7757D8", "#A58AF2"),
 }
 
 
@@ -658,31 +667,76 @@ def install_self_update(app_dir: Path, archive_bytes: bytes) -> None:
 
 
 class GradientBackdrop(tk.Canvas):
-    """Fixed set of gradient strips updated in place to avoid full-window redraw flashes."""
+    """Subtle background-only gradient. UI cards and controls remain opaque and stable."""
     def __init__(self, master, app, **kwargs):
         super().__init__(master, highlightthickness=0, bd=0, **kwargs)
         self.app = app
         self.strips: list[int] = []
         self.star_items: list[tuple[int, float, float]] = []
         self._last_size = (0, 0)
+        self._current_gradient_pair = self._first_selected_pair()
+        self._gradient_transition_start = self._current_gradient_pair
+        self._gradient_transition_target = None
+        self._gradient_transition_step = 0
+        self._gradient_transition_duration = random.randint(72, 112)
+        self._animation_after_id = None
+
+        # The base remains nearly black. Only these soft corner glows animate.
         for index in range(96):
             item = self.create_rectangle(0, 0, 1, 1, width=0, tags="gradient")
             self.strips.append(item)
-        self.glow_items: list[tuple[int, str, float, str]] = []
-        for corner, tint in (("tl", "#8B5CF6"), ("tr", "#6D28D9"), ("bl", "#6D28D9"), ("br", "#2563EB")):
+
+        self.glow_items: list[tuple[int, str, float, int]] = []
+        for corner, channel in (("tl", 0), ("tr", 1), ("bl", 0), ("br", 1)):
             for level in range(22):
                 item = self.create_oval(0, 0, 1, 1, fill="", outline="", tags="corner-glow")
-                self.glow_items.append((item, corner, level / 21, tint))
-        # Deterministic, subtle star specks; static unless reduced-motion is disabled.
+                self.glow_items.append((item, corner, level / 21, channel))
+
         stars = [(0.13, 0.16), (0.31, 0.08), (0.46, 0.22), (0.69, 0.11),
                  (0.88, 0.27), (0.76, 0.42), (0.19, 0.56), (0.93, 0.68),
                  (0.58, 0.79), (0.36, 0.9), (0.08, 0.83), (0.82, 0.91)]
         for index, (rx, ry) in enumerate(stars):
-            radius = 1 if index % 4 else 2
             item = self.create_oval(0, 0, 0, 0, width=0, tags="stars")
             self.star_items.append((item, rx, ry))
+
         self.bind("<Configure>", self._resize, add="+")
         self._resize(None)
+        self._animation_after_id = self.after(85, self._animate_gradient)
+
+    def _selected_pairs(self):
+        names = self.app.settings.get("background_gradient_palettes", [])
+        selected = [(name, BACKGROUND_GRADIENT_PALETTES[name][1:])
+                    for name in names if name in BACKGROUND_GRADIENT_PALETTES]
+        if not selected:
+            selected = [("violet_blue", BACKGROUND_GRADIENT_PALETTES["violet_blue"][1:])]
+        return selected
+
+    def _first_selected_pair(self):
+        try:
+            names = self.app.settings.get("background_gradient_palettes", [])
+            for name in names:
+                if name in BACKGROUND_GRADIENT_PALETTES:
+                    return BACKGROUND_GRADIENT_PALETTES[name][1:]
+        except (AttributeError, TypeError):
+            pass
+        return BACKGROUND_GRADIENT_PALETTES["violet_blue"][1:]
+
+    def _draw_glows(self):
+        width, height = max(1, self.winfo_width()), max(1, self.winfo_height())
+        colors = self.app.colors if self.app.colors else PALETTES["dark"]
+        first, second = self._current_gradient_pair
+        for item, corner, level, channel in self.glow_items:
+            cx = 0 if corner.endswith("l") else width
+            cy = 0 if corner.startswith("t") else height
+            rx, ry = width * (0.60 - 0.38 * level), height * (0.88 - 0.54 * level)
+            self.coords(item, cx - rx, cy - ry, cx + rx, cy + ry)
+            tint = first if channel == 0 else second
+            # Low opacity keeps the glow at the edges; it never recolors cards/buttons.
+            self.itemconfigure(
+                item,
+                fill=blend_hex(colors["bg"], tint, 0.008 + 0.078 * (level ** 1.45)),
+                outline="",
+            )
 
     def _resize(self, _event):
         width, height = max(1, self.winfo_width()), max(1, self.winfo_height())
@@ -693,20 +747,74 @@ class GradientBackdrop(tk.Canvas):
         for index, item in enumerate(self.strips):
             x0 = width * index / len(self.strips)
             x1 = width * (index + 1) / len(self.strips) + 1
-            color = blend_hex(colors["bg"], colors["panel2"], index / max(1, len(self.strips) - 1) * 0.42)
+            color = blend_hex(colors["bg"], colors["panel2"], index / max(1, len(self.strips) - 1) * 0.30)
             self.coords(item, x0, 0, x1, height)
             self.itemconfigure(item, fill=color, outline=color)
-        for item, corner, level, tint in self.glow_items:
-            cx = 0 if corner.endswith("l") else width
-            cy = 0 if corner.startswith("t") else height
-            rx, ry = width * (0.60 - 0.38 * level), height * (0.88 - 0.54 * level)
-            self.coords(item, cx - rx, cy - ry, cx + rx, cy + ry)
-            self.itemconfigure(item, fill=blend_hex(colors["bg"], tint, 0.010 + 0.105 * (level ** 1.45)), outline="")
+        self._draw_glows()
         for index, (item, rx, ry) in enumerate(self.star_items):
             x, y = width * rx, height * ry
             r = 1.5 if index % 4 else 2.3
             self.coords(item, x - r, y - r, x + r, y + r)
             self.itemconfigure(item, fill=blend_hex(colors["muted"], colors["accent2"], 0.3), outline="")
+
+    def refresh_gradient_settings(self):
+        """Apply selected background palettes without changing the whole interface."""
+        selected = self._selected_pairs()
+        if not self.app.settings.get("background_gradient_enabled", True):
+            self._current_gradient_pair = selected[0][1]
+            self._gradient_transition_target = None
+        elif self.app.settings.get("reduce_motion") or not self.app.settings.get("animations_enabled", True):
+            self._current_gradient_pair = selected[0][1]
+            self._gradient_transition_target = None
+        else:
+            self._gradient_transition_target = None
+        self._last_size = (0, 0)
+        self._resize(None)
+        self._draw_glows()
+
+    def _animate_gradient(self):
+        self._animation_after_id = None
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            return
+
+        selected = self._selected_pairs()
+        enabled = (
+            self.app.settings.get("background_gradient_enabled", True)
+            and self.app.settings.get("animations_enabled", True)
+            and not self.app.settings.get("reduce_motion", False)
+        )
+        if not enabled:
+            target = selected[0][1]
+            if target != self._current_gradient_pair:
+                self._current_gradient_pair = target
+                self._draw_glows()
+            self._animation_after_id = self.after(180, self._animate_gradient)
+            return
+
+        if (self._gradient_transition_target is None
+                or self._gradient_transition_step >= self._gradient_transition_duration):
+            self._gradient_transition_start = self._current_gradient_pair
+            candidates = [pair for _name, pair in selected if pair != self._gradient_transition_target]
+            if not candidates:
+                pair = selected[0][1]
+                candidates = [tuple(reversed(pair))]
+            self._gradient_transition_target = random.choice(candidates)
+            self._gradient_transition_step = 0
+            self._gradient_transition_duration = random.randint(72, 112)
+
+        self._gradient_transition_step += 1
+        progress = min(1.0, self._gradient_transition_step / self._gradient_transition_duration)
+        eased = progress * progress * (3 - 2 * progress)
+        start, target = self._gradient_transition_start, self._gradient_transition_target
+        self._current_gradient_pair = (
+            blend_hex(start[0], target[0], eased),
+            blend_hex(start[1], target[1], eased),
+        )
+        self._draw_glows()
+        self._animation_after_id = self.after(75, self._animate_gradient)
 
 
 class RoundedCard(tk.Frame):
@@ -956,44 +1064,33 @@ class RoundedButton(tk.Canvas):
         return "break"
 
     def _refresh_colors(self):
-        c=self.app.colors
-        if self.variant=="primary":
-            start,end=c["accent"],c["accent2"]
-            if self.hovered:
-                start,end=blend_hex(start,"#FFFFFF",0.10),blend_hex(end,"#FFFFFF",0.08)
-            if self.pressed:
-                start,end=blend_hex(start,"#000000",0.12),blend_hex(end,"#000000",0.12)
-            for row,item in enumerate(self._gradient_ids):
-                self.itemconfigure(item,fill=blend_hex(start,end,row/max(1,len(self._gradient_ids)-1)))
-            text_color,outline="#FFFFFF",blend_hex(end,"#FFFFFF",0.22)
-        elif self.hovered:
-            start,end="#D8C7FF","#B9A5FF"
-            if self.pressed:
-                start,end=blend_hex(start,"#8B5CF6",0.18),blend_hex(end,"#8B5CF6",0.18)
-            for row,item in enumerate(self._gradient_ids):
-                self.itemconfigure(item,fill=blend_hex(start,end,row/max(1,len(self._gradient_ids)-1)))
-            text_color,outline="#2B174E","#E2D5FF"
+        c = self.app.colors
+        # Gradient fills are static. Hover only scales the button; hue does not shift.
+        if self.variant == "primary":
+            start, end = c["accent"], c["accent2"]
+            for row, item in enumerate(self._gradient_ids):
+                self.itemconfigure(item, fill=blend_hex(start, end, row / max(1, len(self._gradient_ids) - 1)))
+            text_color, outline = "#FFFFFF", blend_hex(end, "#FFFFFF", 0.22)
         else:
             for item in self._gradient_ids:
-                self.itemconfigure(item,fill=c["button"])
-            text_color,outline=c["fg"],c["border"]
+                self.itemconfigure(item, fill=c["button"])
+            text_color, outline = c["fg"], c["border"]
+
         if self.variant == "primary":
             glow_base = blend_hex(c["accent"], c["accent2"], 0.42)
             for item, _spread, width, strength in self._glow_ids:
-                glow_strength = min(0.34, strength + (0.045 if self.hovered else 0.0))
                 self.itemconfigure(
                     item,
-                    outline=blend_hex(c["bg"], glow_base, glow_strength),
-                    width=width * (1.10 if self.hovered else 1.0),
+                    outline=blend_hex(c["bg"], glow_base, strength),
+                    width=width,
                     state=tk.NORMAL,
                 )
         else:
             for item, _spread, _width, _strength in self._glow_ids:
                 self.itemconfigure(item, state=tk.HIDDEN, outline=c["bg"])
+
         if self.icon_key:
-            icon_color = "#FFFFFF" if self.variant == "primary" else (
-                "#2B174E" if self.hovered else c["accent2"]
-            )
+            icon_color = "#FFFFFF" if self.variant == "primary" else c["accent2"]
             for item, item_kind in self._icon_items:
                 if item_kind == "line":
                     self.itemconfigure(item, fill=icon_color)
@@ -1001,9 +1098,9 @@ class RoundedButton(tk.Canvas):
                     self.itemconfigure(item, outline=icon_color)
                 else:
                     self.itemconfigure(item, fill=icon_color, outline=icon_color)
-        self.itemconfigure(self._outline_id,outline=outline,width=1.8 * self.app.ui_scale)
-        self.itemconfigure(self._text_id,fill=text_color)
-        self.configure(bg=c.get(self.bg_key,c["bg"]))
+        self.itemconfigure(self._outline_id, outline=outline, width=1.8 * self.app.ui_scale)
+        self.itemconfigure(self._text_id, fill=text_color)
+        self.configure(bg=c.get(self.bg_key, c["bg"]))
 
     def refresh_theme(self):
         self._refresh_colors()
@@ -1574,6 +1671,16 @@ class SpaceUIPrototype:
         data["visual_preset_version"] = 2
         if data.get("ui_density") not in {"comfortable", "compact"}:
             data["ui_density"] = "comfortable"
+        valid_gradient_names = set(BACKGROUND_GRADIENT_PALETTES)
+        selected_gradients = data.get("background_gradient_palettes", list(DEFAULT_SETTINGS["background_gradient_palettes"]))
+        if not isinstance(selected_gradients, (list, tuple)):
+            selected_gradients = list(DEFAULT_SETTINGS["background_gradient_palettes"])
+        data["background_gradient_palettes"] = [
+            name for name in BACKGROUND_GRADIENT_PALETTES if name in selected_gradients and name in valid_gradient_names
+        ]
+        if not data["background_gradient_palettes"]:
+            data["background_gradient_palettes"] = list(DEFAULT_SETTINGS["background_gradient_palettes"])
+        data["background_gradient_enabled"] = bool(data.get("background_gradient_enabled", True))
         return data
 
     def save_settings(self, show_toast=True):
@@ -2272,6 +2379,39 @@ class SpaceUIPrototype:
         self.accent_preview = tk.Canvas(accent.body, height=14, bg=self.colors["panel"], bd=0, highlightthickness=0)
         self.accent_preview.pack(fill="x", pady=(14, 0))
 
+        background_gradient = self.card(body, padding=18)
+        background_gradient.pack(fill="x", pady=(0, 12))
+        self.label(background_gradient.body, "Gradiente animado do fundo", "fg", "panel", 13, "bold").pack(anchor="w")
+        self.label(
+            background_gradient.body,
+            "Só nas bordas e áreas vazias: cartões e botões não mudam de cor. Escolha quais paletas podem entrar no loop.",
+            "muted", "panel", 9,
+        ).pack(anchor="w", pady=(4, 12))
+        gradient_toggle_row = self.frame(background_gradient.body, "panel")
+        gradient_toggle_row.pack(fill="x", pady=(0, 10))
+        self.label(gradient_toggle_row, "Animar gradiente de fundo", "fg", "panel", 10, "bold").pack(side="left")
+        self.background_gradient_var = tk.BooleanVar(value=bool(self.settings.get("background_gradient_enabled", True)))
+        self.background_gradient_toggle = ToggleSwitch(
+            gradient_toggle_row, self, self.background_gradient_var, self._set_background_gradient_enabled
+        )
+        self.background_gradient_toggle.pack(side="right")
+        self.toggles.append(self.background_gradient_toggle)
+        self.background_gradient_swatches = {}
+        swatch_row = self.frame(background_gradient.body, "panel")
+        swatch_row.pack(fill="x")
+        for name, (label, first, second) in BACKGROUND_GRADIENT_PALETTES.items():
+            holder = self.frame(swatch_row, "panel")
+            holder.pack(side="left", padx=(0, 10), pady=(0, 2))
+            swatch = tk.Canvas(
+                holder, width=108, height=28, bg=self.colors["panel"],
+                bd=0, highlightthickness=0, cursor="hand2",
+            )
+            swatch.pack()
+            swatch.bind("<Button-1>", lambda _event, key=name: self._toggle_background_gradient_palette(key))
+            self.background_gradient_swatches[name] = swatch
+            self.label(holder, label, "muted", "panel", 8, "normal").pack(anchor="center", pady=(4, 0))
+        self._draw_background_gradient_swatches()
+
         preferences = self.card(body, padding=18)
         preferences.pack(fill="x", pady=(0, 12))
         self.label(preferences.body, "Preferências de interface", "fg", "panel", 13, "bold").pack(anchor="w", pady=(0, 12))
@@ -2473,6 +2613,31 @@ class SpaceUIPrototype:
         if color and color[1]:
             self._set_accent(self.settings["accent_color"], color[1])
 
+    def _set_background_gradient_enabled(self):
+        self.settings["background_gradient_enabled"] = bool(self.background_gradient_var.get())
+        if hasattr(self, "backdrop"):
+            self.backdrop.refresh_gradient_settings()
+        self.toast("Gradiente de fundo " + ("animado ativado." if self.settings["background_gradient_enabled"] else "parado na primeira paleta selecionada."))
+
+    def _toggle_background_gradient_palette(self, name):
+        if name not in BACKGROUND_GRADIENT_PALETTES:
+            return
+        selected = list(self.settings.get("background_gradient_palettes", []))
+        if name in selected:
+            if len(selected) == 1:
+                self.toast("Mantenha ao menos uma paleta selecionada.")
+                return
+            selected.remove(name)
+        else:
+            selected.append(name)
+        self.settings["background_gradient_palettes"] = [
+            key for key in BACKGROUND_GRADIENT_PALETTES if key in selected
+        ]
+        self._draw_background_gradient_swatches()
+        if hasattr(self, "backdrop"):
+            self.backdrop.refresh_gradient_settings()
+        self.toast("Paletas do gradiente de fundo atualizadas. Salve para manter.")
+
     def _set_density(self, value, notify=True):
         self.settings["ui_density"] = "compact" if str(value).lower().startswith("compact") else "comfortable"
         if hasattr(self, "density_combo") and self.density_combo.get() != ("Compacta" if self.settings["ui_density"] == "compact" else "Confortável"):
@@ -2487,6 +2652,8 @@ class SpaceUIPrototype:
         self.settings["animations_enabled"] = bool(self.anim_var.get())
         for toggle in self.toggles:
             toggle.refresh_theme()
+        if hasattr(self, "backdrop"):
+            self.backdrop.refresh_gradient_settings()
         self.toast("Animações sutis " + ("ativadas." if self.settings["animations_enabled"] else "desativadas."))
 
     def _set_motion_pref(self):
@@ -2496,6 +2663,8 @@ class SpaceUIPrototype:
             self.anim_var.set(False)
         for toggle in self.toggles:
             toggle.refresh_theme()
+        if hasattr(self, "backdrop"):
+            self.backdrop.refresh_gradient_settings()
         self.toast("Preferência de movimento atualizada.")
 
     def _set_update_pref(self):
@@ -2506,6 +2675,9 @@ class SpaceUIPrototype:
         if not hasattr(self, "density_combo"):
             return
         self.density_combo.set("Compacta" if self.settings["ui_density"] == "compact" else "Confortável")
+        if hasattr(self, "background_gradient_var"):
+            self.background_gradient_var.set(bool(self.settings.get("background_gradient_enabled", True)))
+            self._draw_background_gradient_swatches()
         for toggle in self.toggles:
             toggle.refresh_theme()
 
@@ -2519,6 +2691,28 @@ class SpaceUIPrototype:
             self.accent_preview.create_rectangle(x0, 0, x1, 14, fill=blend_hex(self.settings["accent_color"], self.settings["accent_color_2"], index / 59), outline="", tags="gradient")
         self.accent_preview.create_polygon(*rounded_points(1,1,width-1,13,6,steps=18),fill="",outline=self.colors["border"],width=1.8,smooth=True,splinesteps=18,tags="preview-outline")
         self.accent_preview.tag_raise("preview-outline")
+
+    def _draw_background_gradient_swatches(self):
+        if not hasattr(self, "background_gradient_swatches"):
+            return
+        selected = set(self.settings.get("background_gradient_palettes", []))
+        for name, swatch in self.background_gradient_swatches.items():
+            swatch.delete("all")
+            _label, first, second = BACKGROUND_GRADIENT_PALETTES[name]
+            width = max(1, int(float(swatch.cget("width"))))
+            height = max(1, int(float(swatch.cget("height"))))
+            steps = 44
+            for index in range(steps):
+                x0, x1 = width * index / steps, width * (index + 1) / steps + 1
+                swatch.create_rectangle(x0, 0, x1, height, fill=blend_hex(first, second, index / max(1, steps - 1)), outline="")
+            outline = self.colors["accent"] if name in selected else self.colors["border"]
+            thickness = 2.4 if name in selected else 1.0
+            swatch.create_polygon(
+                *rounded_points(1, 1, width - 1, height - 1, 7, steps=18),
+                fill="", outline=outline, width=thickness, smooth=True, splinesteps=18,
+                tags="swatch-outline",
+            )
+            swatch.tag_raise("swatch-outline")
 
     def _apply_scrollbar_style(self):
         """Use the same muted dark surface and accent as the rest of the prototype."""
@@ -2603,7 +2797,7 @@ class SpaceUIPrototype:
             except tk.TclError:
                 pass
         try:
-            self.backdrop._resize(None)
+            self.backdrop.refresh_gradient_settings()
         except (AttributeError, tk.TclError):
             pass
         if hasattr(self, "nav_items"):
