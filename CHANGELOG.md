@@ -1,3 +1,14 @@
+## 5.4.0-beta.1 - beta (pré-release)
+
+- Transfere para a interface real os contornos duplos em gradiente violeta/azul/ciano/menta, com preenchimento sincronizado; o efeito é acionado no hover, respeita a opção de animações e volta suavemente ao estado de repouso.
+- Corrige o roteamento de roda do mouse em páginas roláveis: abas ocultas deixam de consumir o mesmo evento e rolar junto com a página visível.
+- Corrige a ordenação semântica de versões para diferenciar versões beta/RC da versão estável; instalações beta podem consultar uma beta mais nova sem expor pré-releases às instalações estáveis.
+- Endurece a identificação dos domínios de fallback do YouTube, evitando tratar domínios com sufixos parecidos (como `notyoutube.com`) como o serviço legítimo.
+- Atualiza o User-Agent da prévia de miniaturas para acompanhar a versão do aplicativo, em vez de fixar um número antigo.
+- Mantém downloads, conversão, playlists, atualizações assinadas/verificadas e configuração real da aplicação. A interface não substitui comandos reais por ações demonstrativas.
+
+**Aviso beta:** esta é uma pré-release para teste e diagnóstico. Faça backup de suas configurações e valide os cenários de download/conversão antes de confiar nela para tarefas importantes. O canal está sujeito a mudanças.
+
 ## 5.3.2 - stable
 
 - Replaces the blue-gray default interface with a cosmic violet/magenta/cyan palette and a larger, locally drawn Media Lab orbital mark.
