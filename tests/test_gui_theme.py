@@ -1,10 +1,14 @@
 import unittest
 
 from app.gui import (
+    BUTTON_FILL_GRADIENT,
+    BUTTON_INNER_GRADIENT,
+    BUTTON_OUTER_GRADIENT,
     PALETTES,
     MediaDownloaderApp,
     _blend_hex,
     _contrast_text,
+    _cyclic_palette_color,
     _valid_hex_color,
     _rounded_polygon,
 )
@@ -36,6 +40,14 @@ class GuiThemeTests(unittest.TestCase):
     def test_palette_blending_produces_valid_hex_color(self):
         self.assertEqual(_blend_hex("#000000", "#FFFFFF", 0.5), "#808080")
         self.assertTrue(_valid_hex_color(_blend_hex("#3B82F6", "#FFFFFF", 0.18)))
+
+    def test_button_gradient_palettes_are_cyclic_and_distinct(self):
+        for palette in (BUTTON_FILL_GRADIENT, BUTTON_OUTER_GRADIENT, BUTTON_INNER_GRADIENT):
+            with self.subTest(palette=palette):
+                self.assertEqual(_cyclic_palette_color(palette, 0), _cyclic_palette_color(palette, 1))
+                self.assertTrue(_valid_hex_color(_cyclic_palette_color(palette, 0.37)))
+        self.assertNotEqual(BUTTON_OUTER_GRADIENT, BUTTON_INNER_GRADIENT)
+        self.assertNotEqual(BUTTON_FILL_GRADIENT, BUTTON_OUTER_GRADIENT)
 
     def test_theme_and_density_labels_round_trip(self):
         self.assertEqual(MediaDownloaderApp._display_setting_value("theme", "oled"), "Preto OLED")
