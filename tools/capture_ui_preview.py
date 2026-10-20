@@ -18,6 +18,7 @@ os.environ.setdefault("CGMD_PREVIEW_MODE", "1")
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
+from app.config import VERSION  # noqa: E402
 from app.gui import MediaDownloaderApp  # noqa: E402
 
 
@@ -89,7 +90,7 @@ def _make_contact_sheet(items: list[tuple[str, Image.Image]], target: Path) -> N
     draw = ImageDraw.Draw(canvas)
     title_font = _font(25)
     label_font = _font(17)
-    draw.text((margin, 10), "ChatGPT Media Downloader 5.3.2 — prévia real da interface", font=title_font, fill="#F3F6FC")
+    draw.text((margin, 10), f"ChatGPT Media Downloader {VERSION} — prévia real da interface", font=title_font, fill="#F3F6FC")
     top_offset = 50
     for index, (label, image) in enumerate(items):
         col, row = index % columns, index // columns
@@ -126,7 +127,7 @@ def main() -> int:
         import tkinter as tk
 
         root = tk.Tk()
-        root.title("ChatGPT Media Downloader 5.3.2 — prévia da interface")
+        root.title(f"ChatGPT Media Downloader {VERSION} — prévia da interface")
         # Tk may report logical dimensions that differ from the actual captured desktop
         # on the hosted runner. Use ImageGrab's physical desktop size to avoid clipping.
         desktop_width, desktop_height = ImageGrab.grab().size
@@ -210,7 +211,7 @@ def main() -> int:
         _make_contact_sheet(captured, output_dir / "visao-geral.png")
 
         report = {
-            "application_version": "5.3.2",
+            "application_version": VERSION,
             "media_preview_demo_file": "00-preview-automatica.png",
             "media_preview_demo_network_requests": 0,
             "capture_method": "Pillow ImageGrab from a real Tk window on a Windows GitHub Actions runner",
