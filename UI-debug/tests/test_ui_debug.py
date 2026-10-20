@@ -23,6 +23,28 @@ def make_update_archive(files: dict[str, bytes | str]) -> bytes:
 
 
 class VersionAndGeometryTests(unittest.TestCase):
+    def test_button_gradient_loops_back_to_the_same_rest_color(self):
+        for palette in (
+            ui_debug.BUTTON_FILL_PALETTE,
+            ui_debug.BUTTON_OUTER_EDGE_PALETTE,
+            ui_debug.BUTTON_INNER_EDGE_PALETTE,
+        ):
+            with self.subTest(palette=palette):
+                self.assertEqual(
+                    ui_debug.cyclic_palette_color(palette, 0.0),
+                    ui_debug.cyclic_palette_color(palette, 1.0),
+                )
+
+    def test_button_border_palettes_are_visually_distinct(self):
+        self.assertNotEqual(
+            ui_debug.BUTTON_OUTER_EDGE_PALETTE,
+            ui_debug.BUTTON_INNER_EDGE_PALETTE,
+        )
+        self.assertNotEqual(
+            ui_debug.BUTTON_FILL_PALETTE,
+            ui_debug.BACKGROUND_GRADIENT_PALETTES["violet_blue"][1:],
+        )
+
     def test_dev_versions_compare_numerically(self):
         self.assertGreater(ui_debug.version_key("0.1.0-dev.10"), ui_debug.version_key("0.1.0-dev.2"))
         self.assertGreater(ui_debug.version_key("0.1.1-dev.1"), ui_debug.version_key("0.1.0-dev.99"))
