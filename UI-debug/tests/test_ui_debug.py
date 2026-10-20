@@ -165,7 +165,7 @@ class VisualConceptTests(unittest.TestCase):
             self.assertEqual(custom["accent_color_2"], "#33AADD")
 
     def test_prototype_has_independent_development_version(self):
-        self.assertEqual(ui_debug.APP_VERSION, "0.1.0-dev.9")
+        self.assertEqual(ui_debug.APP_VERSION, "0.1.0-dev.10")
         self.assertEqual(ui_debug.CHANNEL, "development")
         self.assertIn("ui-debug", ui_debug.UPDATE_BRANCH)
         self.assertNotIn("draw_orbit_icon", (ROOT / "ui_debug.py").read_text(encoding="utf-8"))
@@ -183,6 +183,37 @@ class VisualConceptTests(unittest.TestCase):
         self.assertIn("extractor.extract_info(url, download=False)", source)
         self.assertIn('"skip_download": True', source)
 
+
+    def test_background_gradient_palettes_are_configurable_and_subtle(self):
+        self.assertTrue(ui_debug.DEFAULT_SETTINGS["background_gradient_enabled"])
+        self.assertEqual(
+            ui_debug.DEFAULT_SETTINGS["background_gradient_palettes"],
+            ["violet_blue", "indigo_cyan", "blue_teal"],
+        )
+        self.assertIn("violet_blue", ui_debug.BACKGROUND_GRADIENT_PALETTES)
+        self.assertIn("violet_lilac", ui_debug.BACKGROUND_GRADIENT_PALETTES)
+        for name, (_label, first, second) in ui_debug.BACKGROUND_GRADIENT_PALETTES.items():
+            with self.subTest(name=name):
+                self.assertRegex(first, r"^#[0-9A-Fa-f]{6}$")
+                self.assertRegex(second, r"^#[0-9A-Fa-f]{6}$")
+                self.assertNotEqual(first.lower(), second.lower())
+        source = (ROOT / "ui_debug.py").read_text(encoding="utf-8")
+        self.assertIn("def _animate_gradient(self):", source)
+        self.assertIn("def _toggle_background_gradient_palette(self, name):", source)
+        self.assertIn("# Gradient fills are static. Hover only scales the button; hue does not shift.", source)
+
+    def test_background_gradient_settings_reject_unknown_palette_names(self):
+        prototype = object.__new__(ui_debug.SpaceUIPrototype)
+        with tempfile.TemporaryDirectory() as directory:
+            prototype.settings_path = Path(directory) / "settings.json"
+            prototype.settings_path.write_text(json.dumps({
+                "background_gradient_enabled": False,
+                "background_gradient_palettes": ["unknown", "blue_teal"],
+                "theme": "dark",
+            }), encoding="utf-8")
+            loaded = prototype._load_settings()
+        self.assertFalse(loaded["background_gradient_enabled"])
+        self.assertEqual(loaded["background_gradient_palettes"], ["blue_teal"])
 
 class SelfUpdaterTests(unittest.TestCase):
     def version_manifest(self, version="0.1.1-dev.2"):
