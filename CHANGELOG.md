@@ -1,3 +1,13 @@
+## 5.4.0-beta.2 - beta (pré-release)
+
+- Atualiza a beta após investigação dos alertas de antivírus e passa a registrar nomes dos mecanismos, rótulos de detecção, hash SHA-256 e link de relatório por arquivo.
+- Inclui na análise pública do VirusTotal o executável, o desinstalador, o ZIP do código-fonte e os binários de runtime `yt-dlp.exe`, `ffmpeg.exe` e `ffprobe.exe` obtidos por meio do atualizador oficial, com validação de manifesto SHA-256.
+- Permite publicar uma pré-release beta somente quando todos os seis scans forem concluídos; eventuais detecções permanecem visíveis na página da release e no relatório, sem serem apresentadas como falsos positivos confirmados.
+- Mantém a publicação estável bloqueada quando houver detecções, análise ausente/incompleta ou assinatura Authenticode confiável ausente.
+- Informa claramente quando o executável beta não possui assinatura de publicador. Metadados PE e hashes ajudam na identificação/integridade, mas não substituem assinatura digital.
+
+**Aviso:** os arquivos enviados ao VirusTotal ficam disponíveis no conjunto de dados compartilhado do serviço. Esta análise envia apenas arquivos públicos de código, builds beta e dependências upstream públicas.
+
 ## 5.4.0-beta.1 - beta (pré-release)
 
 - Transfere para a interface real os contornos duplos em gradiente violeta/azul/ciano/menta, com preenchimento sincronizado; o efeito é acionado no hover, respeita a opção de animações e volta suavemente ao estado de repouso.

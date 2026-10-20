@@ -82,6 +82,22 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("github.com/slydtaz/Chatgpt-media-downloader", version_info)
         self.assertIn("nao afiliado a OpenAI", version_info)
 
+    def test_beta_release_scans_all_runtime_inputs_and_keeps_stable_gate_strict(self):
+        workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        scanner = (ROOT / "scripts" / "virus_total_scan.py").read_text(encoding="utf-8")
+        stager = (ROOT / "scripts" / "stage_runtime_dependencies_for_scan.py").read_text(encoding="utf-8")
+        self.assertIn("Stage runtime dependencies for VirusTotal review", workflow)
+        self.assertIn("yt-dlp.exe", workflow)
+        self.assertIn("ffmpeg.exe", workflow)
+        self.assertIn("ffprobe.exe", workflow)
+        self.assertIn("Security-Inventory.txt", workflow)
+        self.assertIn("if ($isPrerelease)", workflow)
+        self.assertIn("Stable release blocked", workflow)
+        self.assertIn("VirusTotal public analysis report", scanner)
+        self.assertIn("DETECTION:", scanner)
+        self.assertIn("install_tool_from_release", stager)
+        self.assertIn("_verify_checksum", (ROOT / "app" / "updater.py").read_text(encoding="utf-8"))
+
     def test_versioned_release_title_and_hotfix_are_configured(self):
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         self.assertIn('tag_name: ${{ env.RELEASE_TAG }}', workflow)

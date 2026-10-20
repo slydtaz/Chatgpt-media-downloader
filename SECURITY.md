@@ -15,3 +15,7 @@ Se o recurso não estiver habilitado, abra apenas um issue genérico solicitando
 ## Escopo e manutenção
 
 O aplicativo usa dependências externas, incluindo yt-dlp, FFmpeg e FFprobe. Uma vulnerabilidade pode estar no aplicativo, no empacotamento ou numa dependência; informe, quando possível, versão do programa, sistema operacional e versão da dependência afetada.
+
+## Beta e análise de arquivos
+
+A pipeline beta envia ao VirusTotal os executáveis públicos de avaliação, o ZIP público do código-fonte e as versões exatas dos binários oficiais de yt-dlp/FFmpeg/FFprobe que o instalador utiliza. Esses envios são para a base de dados pública/compartilhada do VirusTotal; não use o fluxo para arquivos confidenciais. A beta pode ser publicada com resultados sinalizados, mas o relatório por mecanismo será incluído para que os revisores investiguem as detecções. As releases estáveis exigem scans completos sem alertas e assinatura Authenticode confiável.
