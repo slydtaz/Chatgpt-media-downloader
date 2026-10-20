@@ -1,3 +1,29 @@
+## 5.4.0-beta.2 - beta (pré-release)
+
+- Adiciona ícone do produto ao executável, à janela do aplicativo e ao desinstalador, com metadados PE específicos para o desinstalador.
+- Remove a autodeleção do desinstalador via script CMD oculto; agora usa a API nativa do Windows para agendar a remoção e informa falhas.
+- Corrige as capturas para refletir a versão real do aplicativo e melhora o diagnóstico sobre assinatura/SmartScreen.
+- Aumenta a tolerância de espera para relatórios pendentes do VirusTotal e serializa execuções futuras de release para evitar conflitos de limite de API.
+
+- Atualiza a beta após investigação dos alertas de antivírus e passa a registrar nomes dos mecanismos, rótulos de detecção, hash SHA-256 e link de relatório por arquivo.
+- Inclui na análise pública do VirusTotal o executável, o desinstalador, o ZIP do código-fonte e os binários de runtime `yt-dlp.exe`, `ffmpeg.exe` e `ffprobe.exe` obtidos por meio do atualizador oficial, com validação de manifesto SHA-256.
+- Permite publicar uma pré-release beta somente quando todos os seis scans forem concluídos; eventuais detecções permanecem visíveis na página da release e no relatório, sem serem apresentadas como falsos positivos confirmados.
+- Mantém a publicação estável bloqueada quando houver detecções, análise ausente/incompleta ou assinatura Authenticode confiável ausente.
+- Informa claramente quando o executável beta não possui assinatura de publicador. Metadados PE e hashes ajudam na identificação/integridade, mas não substituem assinatura digital.
+
+**Aviso:** os arquivos enviados ao VirusTotal ficam disponíveis no conjunto de dados compartilhado do serviço. Esta análise envia apenas arquivos públicos de código, builds beta e dependências upstream públicas.
+
+## 5.4.0-beta.1 - beta (pré-release)
+
+- Transfere para a interface real os contornos duplos em gradiente violeta/azul/ciano/menta, com preenchimento sincronizado; o efeito é acionado no hover, respeita a opção de animações e volta suavemente ao estado de repouso.
+- Corrige o roteamento de roda do mouse em páginas roláveis: abas ocultas deixam de consumir o mesmo evento e rolar junto com a página visível.
+- Corrige a ordenação semântica de versões para diferenciar versões beta/RC da versão estável; instalações beta podem consultar uma beta mais nova sem expor pré-releases às instalações estáveis.
+- Endurece a identificação dos domínios de fallback do YouTube, evitando tratar domínios com sufixos parecidos (como `notyoutube.com`) como o serviço legítimo.
+- Atualiza o User-Agent da prévia de miniaturas para acompanhar a versão do aplicativo, em vez de fixar um número antigo.
+- Mantém downloads, conversão, playlists, atualizações assinadas/verificadas e configuração real da aplicação. A interface não substitui comandos reais por ações demonstrativas.
+
+**Aviso beta:** esta é uma pré-release para teste e diagnóstico. Faça backup de suas configurações e valide os cenários de download/conversão antes de confiar nela para tarefas importantes. O canal está sujeito a mudanças.
+
 ## 5.3.2 - stable
 
 - Replaces the blue-gray default interface with a cosmic violet/magenta/cyan palette and a larger, locally drawn Media Lab orbital mark.

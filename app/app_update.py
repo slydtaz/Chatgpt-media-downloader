@@ -77,10 +77,37 @@ def version_key(value: str) -> tuple[int, ...]:
         return (0,)
 
 
+def _version_order_key(value: str) -> tuple[tuple[int, ...], int, int, int]:
+    """Compare semantic versions, including alpha/beta/rc prerelease precedence.
+
+    Keep version_key() backwards-compatible for callers that only need the numeric
+    version. A stable release sorts after every prerelease of the same core version.
+    """
+    text = str(value or "").strip()
+    match = re.fullmatch(
+        r"(?i)v?(\d+(?:\.\d+){0,5})(?:-([a-z]+)(?:[.-]?(\d+))?)?",
+        text,
+    )
+    if not match:
+        numeric = version_key(text)
+        core = (numeric + (0,) * 6)[:6]
+        return core, 1, 0, 0
+    numeric = tuple(int(part) for part in match.group(1).split("."))
+    core = (numeric + (0,) * 6)[:6]
+    label = (match.group(2) or "").lower()
+    if not label:
+        return core, 1, 0, 0
+    rank = {"alpha": 0, "a": 0, "beta": 1, "b": 1, "rc": 2}.get(label, -1)
+    try:
+        sequence = int(match.group(3) or 0)
+    except ValueError:
+        sequence = 0
+    return core, 0, rank, sequence
+
+
 def is_newer_version(candidate: str, current: str) -> bool:
-    left, right = version_key(candidate), version_key(current)
-    width = max(len(left), len(right))
-    return left + (0,) * (width - len(left)) > right + (0,) * (width - len(right))
+    """Return True when candidate is semantically newer, including prereleases."""
+    return _version_order_key(candidate) > _version_order_key(current)
 
 
 def _trusted_url(url: str, *, metadata: bool = False) -> bool:
@@ -143,6 +170,18 @@ def _request_json(url: str, *, allow_404: bool = False) -> Optional[dict]:
     return result
 
 
+def _request_json_list(url: str) -> list[dict]:
+    """Fetch a bounded JSON list from a trusted GitHub metadata URL."""
+    raw = _request_bytes(url, timeout=20, maximum=5 * 1024 * 1024)
+    try:
+        result = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AppUpdateError("O GitHub retornou uma lista de Releases inválida.") from exc
+    if not isinstance(result, list) or any(not isinstance(item, dict) for item in result):
+        raise AppUpdateError("O GitHub retornou um formato de Releases inesperado.")
+    return result
+
+
 def _request_text(url: str) -> str:
     return _request_bytes(url, timeout=20, maximum=1024 * 1024).decode("utf-8", errors="replace")
 
@@ -190,7 +229,10 @@ def _release_version(release: dict) -> str:
     'stable' as a version number.
     """
     tag = str(release.get("tag_name") or "").strip()
-    match = re.fullmatch(r"v?(\d+(?:\.\d+){1,5})", tag, re.IGNORECASE)
+    match = re.fullmatch(
+        r"(?i)v?(\d+(?:\.\d+){1,5}(?:-(?:alpha|beta|rc)\.\d+)?)",
+        tag,
+    )
     if match:
         return match.group(1)
     title = str(release.get("name") or "").strip()
@@ -250,6 +292,29 @@ def check_for_update(current_version: str = VERSION, *, frozen: Optional[bool] =
                 raise
             release = None
         if release and not release.get("draft") and not release.get("prerelease"):
+            update = _release_candidate(current_version, release, frozen=frozen)
+            if update:
+                return update
+
+    # Beta builds may check later prereleases without exposing beta builds to
+    # stable installations. Stable builds never query or adopt prerelease tags.
+    if re.search(r"(?i)-(?:alpha|beta|rc)\.\d+$", str(current_version or "")):
+        try:
+            releases = _request_json_list(f"{API_ROOT}/releases?per_page=50")
+        except AppUpdateError:
+            if frozen:
+                raise
+            releases = []
+        prereleases = [
+            item for item in releases
+            if item.get("prerelease") and not item.get("draft")
+            and _release_version(item)
+        ]
+        prereleases.sort(
+            key=lambda item: _version_order_key(_release_version(item)),
+            reverse=True,
+        )
+        for release in prereleases:
             update = _release_candidate(current_version, release, frozen=frozen)
             if update:
                 return update

@@ -10,7 +10,7 @@ a = Analysis(
     [str(ROOT / "packaged_entry.py")],
     pathex=[str(ROOT)],
     binaries=[],
-    datas=[(str(ROOT / "PROJECT_ID"), ".")],
+    datas=[(str(ROOT / "PROJECT_ID"), "."), (str(ROOT / "assets" / "app-icon.png"), "assets")],
     hiddenimports=[
         "app.bootstrap",
         "app.main",
@@ -54,6 +54,7 @@ exe = EXE(
     a.datas,
     [],
     name="ChatGPTMediaDownloader",
+    icon=str(ROOT / "assets" / "app-icon.ico"),
     version=str(ROOT / "windows_version_info.txt"),
     debug=False,
     bootloader_ignore_signals=False,

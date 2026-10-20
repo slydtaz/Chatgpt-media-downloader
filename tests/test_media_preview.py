@@ -72,6 +72,10 @@ class PreviewUrlSafetyTests(unittest.TestCase):
             choose_thumbnail_url({"id": "../private"}, "https://example.org/video"),
             "",
         )
+        self.assertEqual(
+            choose_thumbnail_url({"id": "aqz-KE-bpKQ"}, "https://notyoutube.com/video"),
+            "",
+        )
 
     def test_preview_model_keeps_metadata_and_bytes(self):
         preview = MediaPreview("https://example.com/v", "Example", "Channel", 12.5, "", b"png")

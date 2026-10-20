@@ -18,6 +18,7 @@ from app.app_update import (
     API_ROOT,
     AppUpdateError,
     _release_candidate,
+    _release_version,
     _windows_update_helper_script,
     _safe_extract_zip,
     _stage_source_tree,
@@ -74,6 +75,37 @@ class VersionComparisonTests(unittest.TestCase):
         self.assertFalse(is_newer_version("4.9.0", "4.9.0"))
         self.assertFalse(is_newer_version("4.8.9", "4.9.0"))
         self.assertEqual(version_key("v5.12.3"), (5, 12, 3))
+        self.assertTrue(is_newer_version("5.4.0", "5.4.0-beta.1"))
+        self.assertTrue(is_newer_version("5.4.0-beta.2", "5.4.0-beta.1"))
+        self.assertFalse(is_newer_version("5.4.0-beta.1", "5.4.0"))
+        self.assertTrue(is_newer_version("5.4.0-rc.1", "5.4.0-beta.9"))
+        self.assertTrue(is_newer_version("5.4.0-beta.1", "5.3.2"))
+        self.assertTrue(is_newer_version("5.4.0-beta.10", "5.4.0-beta.2"))
+        self.assertEqual(
+            _release_version({"tag_name": "v5.4.0-beta.1"}),
+            "5.4.0-beta.1",
+        )
+
+    def test_beta_build_can_find_a_newer_beta_release(self):
+        stable = {
+            "tag_name": "v5.3.2",
+            "name": "5.3.2 - stable",
+            "prerelease": False,
+            "assets": [],
+        }
+        next_beta = {
+            "tag_name": "v5.4.0-beta.2",
+            "name": "5.4.0-beta.2 - beta",
+            "prerelease": True,
+            "draft": False,
+            "assets": [],
+        }
+        with patch("app.app_update._request_json", return_value=stable), patch("app.app_update._request_json_list", return_value=[next_beta]) as list_request:
+            update = check_for_update("5.4.0-beta.1", frozen=False)
+        self.assertIsNotNone(update)
+        self.assertEqual(update.version, "5.4.0-beta.2")
+        self.assertEqual(update.source_ref, "v5.4.0-beta.2")
+        list_request.assert_called_once_with(f"{API_ROOT}/releases?per_page=50")
 
 
 class AppUpdateDiscoveryTests(unittest.TestCase):

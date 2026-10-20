@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - "ui/**"
+      - "beta/**"
     paths:
       - ".github/workflows/ui-preview.yml"
       - "tools/capture_ui_preview.py"
@@ -46,7 +47,7 @@ jobs:
       - name: Upload screenshots and animations
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: chatgpt-media-downloader-ui-preview-5.3.2
+          name: chatgpt-media-downloader-ui-preview-${{ github.run_number }}
           path: ui-preview-output/
           if-no-files-found: error
           retention-days: 14

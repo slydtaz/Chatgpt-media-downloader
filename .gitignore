@@ -14,3 +14,6 @@ temp/*
 !temp/.gitkeep
 config/*
 !config/.gitkeep
+
+# Generated from assets/app-icon.png during Windows builds.
+assets/app-icon.ico

@@ -9,7 +9,7 @@
 [Sugerir uma melhoria](https://github.com/slydtaz/chatgpt-media-downloader/issues/new?template=feature_request.yml)
 
 ![Sistema: Windows](https://img.shields.io/badge/SO-Windows-0078D6)
-![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.3.2-blue)
+![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.4.0--beta.2-orange)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green)
 
 </div>
@@ -18,19 +18,21 @@
 
 > **Aviso de nome:** “ChatGPT” no nome é apenas parte do identificador do projeto. Este software é independente e **não é afiliado, patrocinado, certificado ou distribuído pela OpenAI**.
 
-> **Interface 5.3.2:** adota uma identidade cósmica com gradientes violeta, magenta e ciano, a marca Media Lab redesenhada e ícones maiores com antialiasing. Ao colar um link de vídeo/áudio, o app consulta automaticamente título, canal, duração e miniatura sem baixar a mídia; playlists recebem miniaturas por item. A cor de destaque padrão migra para violeta, mas uma cor personalizada escolhida por você é preservada.
+> **UI customizada 5.4.0-beta.2:** além das correções visuais, esta beta traz relatório por mecanismo do VirusTotal para o executável, desinstalador, ZIP do código-fonte e as versões exatas de `yt-dlp`, `ffmpeg.exe` e `ffprobe.exe` baixadas e validadas pelos mesmos verificadores usados pelo app.
+>
+> **Pré-release para avaliação:** a beta poderá ser publicada com detecções explícitas, desde que todos os scans terminem e o relatório completo seja anexado. Leia `VirusTotal-Status.txt` antes de executar qualquer binário. Uma publicação beta não significa que a versão foi aprovada como estável; a pipeline estável continua exigindo assinatura Authenticode confiável e ausência de detecções.
 
 ## 🎨 Aparência e personalização
 
-A interface usa uma identidade cósmica com fundos escuros, realces violeta, gradientes magenta/ciano e ícones vetoriais renderizados com antialiasing. Personalize o tema **Escuro**, **Claro** ou **Preto OLED**, escolha outra cor de destaque, altere o espaçamento entre **Confortável** e **Compacto**, e ative/desative animações nas Configurações. O **Modo desenvolvedor** mostra a saída técnica dos comandos; por padrão, o painel exibe um resumo da atividade.
+A interface customizada combina fundos cósmicos com acentos violeta, azul, ciano e verde-menta. Os botões compatíveis apresentam dois contornos em gradientes distintos e preenchimento que acompanha a fase das bordas ao passar o cursor. A animação só fica ativa quando habilitada em Configurações; caso contrário, o estado de hover é estático e leve. Personalize os temas **Escuro**, **Claro** e **Preto OLED**, cores, densidade e modo de desenvolvedor.
 
 Ao colar uma URL pública de vídeo ou áudio, a prévia aparece automaticamente após uma breve pausa e mostra capa, título, canal e duração quando disponíveis. Essa etapa consulta somente metadados com `yt-dlp` e busca apenas a imagem da capa, nunca o arquivo de vídeo/áudio. O gerenciador de playlists também exibe miniaturas nos itens. Se o site bloquear metadados ou não fornecer capa, o app mantém um painel de fallback e informa a indisponibilidade sem interromper o download.
 
 ## 🛡️ Proteção de downloads e análise de segurança
 
-A versão 5.3.1 restringe redirecionamentos de atualizações e dependências a hosts HTTPS explicitamente autorizados e rejeita caminhos de extração inseguros. Os arquivos de dependências só são instalados quando o manifesto SHA-256 publicado pela origem corresponde ao download.
+A base de segurança valida os destinos de redirecionamento HTTPS, limita tamanhos, restringe a extração de arquivos compactados e confere SHA-256 para dependências. Esta beta também corrige a classificação de domínios usados no fallback de miniaturas. Essas proteções reduzem riscos conhecidos, mas não equivalem a auditoria independente.
 
-A pipeline de distribuição inclui análise CodeQL e pode submeter os executáveis públicos ao VirusTotal. A publicação de uma nova Release exige configuração de certificado Authenticode confiável e chave VirusTotal nos secrets do repositório. Esses requisitos não significam que esta versão já foi assinada ou analisada: confira os relatórios anexados à Release. Nunca desative o antivírus para executar o aplicativo.
+A pipeline de distribuição inclui análise CodeQL e envia ao VirusTotal seis amostras públicas: aplicativo, desinstalador, ZIP do código-fonte e os binários exatos de `yt-dlp`, FFmpeg e FFprobe usados pelo app. O relatório lista hashes, resultados por mecanismo e links de cada arquivo. Os envios entram no conjunto de dados compartilhado do VirusTotal; nenhum arquivo confidencial deve ser enviado. A beta pode incluir detecções para investigação e pode ficar sem assinatura Authenticode, mas as releases estáveis continuam bloqueadas até que todos os scans estejam completos e limpos e o executável tenha assinatura confiável. Nunca desative o antivírus para executar o aplicativo.
 
 ## 🔎 Integridade e proveniência
 
@@ -40,7 +42,7 @@ A página hospedada de downloads só é publicada quando GitHub Pages estiver ha
 
 ## 📥 Download oficial para usuários
 
-**Aplicativo:** abra **[Releases estáveis — baixar](https://github.com/slydtaz/chatgpt-media-downloader/releases/latest)** e baixe `ChatGPTMediaDownloader.exe`. Confira o `SHA256SUMS.txt` da mesma Release. **Desinstalador emergencial:** baixe `GPT-Media-Uninstaller.exe` se precisar limpar instalações e configurações antigas. Ele é separado do aplicativo e não apaga músicas/vídeos por padrão.
+**Uso normal:** abra **[Releases estáveis — baixar](https://github.com/slydtaz/chatgpt-media-downloader/releases/latest)** e baixe `ChatGPTMediaDownloader.exe`. Confira o `SHA256SUMS.txt` da mesma Release. Para testar esta versão, use a **pré-release beta 5.4.0-beta.2** somente depois que a publicação aparecer na aba Releases; leia primeiro `VirusTotal-Status.txt` e verifique `SHA256SUMS.txt`. Não confunda artefatos de CI com um instalador oficial. **Desinstalador emergencial:** baixe `GPT-Media-Uninstaller.exe` da release correspondente.
 
 1. Baixe `ChatGPTMediaDownloader.exe` da Release estável.
 2. (Recomendado) Compare o SHA-256 do arquivo com `SHA256SUMS.txt` da mesma Release.
@@ -137,3 +139,10 @@ Você é responsável por respeitar direitos autorais, termos de serviço, priva
 ## 📜 Licença
 
 Este repositório é distribuído sob a licença MIT; consulte [`LICENSE`](LICENSE). Ferramentas de terceiros, como yt-dlp e FFmpeg, mantêm suas próprias licenças e termos.
+
+
+## Avisos de segurança do Windows (beta)
+
+Os executáveis beta incluem ícone e metadados de versão para identificar o produto nas propriedades do arquivo. **Isso não é uma assinatura digital.** Sem um certificado Authenticode confiável, o Windows ainda pode mostrar “Editor desconhecido”, exibir o SmartScreen ou bloquear a execução por Smart App Control/política corporativa. Não existe um ajuste de metadados capaz de remover legitimamente esses avisos. A assinatura confiável exige certificado de uma autoridade reconhecida ou distribuição aprovada pela Microsoft Store; mesmo assinados, novos aplicativos podem precisar construir reputação.
+
+Antes de executar, baixe apenas da página oficial de Releases, confira os hashes em `SHA256SUMS.txt` e leia `VirusTotal-Status.txt`. Os relatórios desta beta podem conter detecções; não as considere falsos positivos sem investigação independente.

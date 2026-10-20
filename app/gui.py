@@ -69,6 +69,22 @@ def _contrast_text(value: str) -> str:
         return "#FFFFFF"
 
 
+BUTTON_FILL_GRADIENT = ("#A855F7", "#497BFF", "#20CFE5", "#43DDAE")
+BUTTON_OUTER_GRADIENT = ("#C05BFF", "#35D9FF", "#7A7BFF")
+BUTTON_INNER_GRADIENT = ("#F472D0", "#6B9CFF", "#48E9B7")
+
+
+def _cyclic_palette_color(palette: tuple[str, ...], position: float) -> str:
+    """Interpolate a cyclic gradient continuously across its wrap point."""
+    if not palette:
+        return "#FFFFFF"
+    if len(palette) == 1:
+        return palette[0]
+    scaled = (float(position) % 1.0) * len(palette)
+    index = int(scaled)
+    return _blend_hex(palette[index], palette[(index + 1) % len(palette)], scaled - index)
+
+
 def _render_nav_icon(root, cache: dict, page_key: str, size: int, color: str):
     """Render crisp 4× supersampled navigation artwork when Pillow is available."""
     if Image is None or ImageDraw is None or ImageTk is None:
@@ -237,6 +253,8 @@ class Tooltip:
 
 
 class ScrollableFrame(ttk.Frame):
+    """Scrollable content whose wheel bindings only affect the visible, owning frame."""
+
     def __init__(self, parent, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
         self.canvas = tk.Canvas(self, highlightthickness=0, borderwidth=0)
@@ -248,16 +266,43 @@ class ScrollableFrame(ttk.Frame):
         self.scrollbar.pack(side="right", fill="y")
         self.body.bind("<Configure>", lambda _e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfigure(self.window_id, width=e.width))
+        # bind_all is application-wide; each frame must ignore events owned by
+        # another tab, otherwise every hidden scrollable page moves together.
         self.canvas.bind_all("<MouseWheel>", self._wheel, add="+")
-        self.canvas.bind_all("<Button-4>", lambda _e: self.canvas.yview_scroll(-1, "units"), add="+")
-        self.canvas.bind_all("<Button-5>", lambda _e: self.canvas.yview_scroll(1, "units"), add="+")
+        self.canvas.bind_all("<Button-4>", self._wheel_global, add="+")
+        self.canvas.bind_all("<Button-5>", self._wheel_global, add="+")
+
+    def _event_inside(self, event):
+        widget = getattr(event, "widget", None)
+        while widget is not None:
+            if widget is self.body or widget is self.canvas or widget is self.scrollbar:
+                return True
+            widget = getattr(widget, "master", None)
+        return False
 
     def _wheel(self, event):
-        try:
-            self.canvas.yview_scroll(int(-event.delta / 120), "units")
-        except (tk.TclError, ZeroDivisionError):
-            pass
+        if not self.winfo_ismapped() or not self._event_inside(event):
+            return None
+        delta = int(getattr(event, "delta", 0))
+        if not delta:
+            return None
+        units = int(-delta / 120)
+        if units == 0:
+            units = -1 if delta > 0 else 1
+        self.canvas.yview_scroll(units, "units")
+        return "break"
 
+    def _wheel_global(self, event):
+        if not self.winfo_ismapped() or not self._event_inside(event):
+            return None
+        button = getattr(event, "num", None)
+        if button == 4:
+            self.canvas.yview_scroll(-1, "units")
+        elif button == 5:
+            self.canvas.yview_scroll(1, "units")
+        else:
+            return self._wheel(event)
+        return "break"
 
 def _rounded_polygon(x1: float, y1: float, x2: float, y2: float, radius: float) -> list[float]:
     """Return points sampled along real quarter-circles for a crisp rounded rectangle."""
@@ -482,6 +527,9 @@ class RoundedGlowButton(tk.Canvas):
         self._pressed = False
         self._hovered = False
         self._focused = False
+        self._gradient_phase = 0.0
+        self._gradient_strength = 0.0
+        self._gradient_job = None
         self._textvariable = kwargs.pop("textvariable", None)
         self._font = tkfont.Font(
             root=self.app.root, family="Segoe UI",
@@ -592,6 +640,65 @@ class RoundedGlowButton(tk.Canvas):
             bottom = top
         return edge, top, bottom, text_color
 
+    def _draw_gradient_outline(self, width, height, inset, radius, palette, phase, line_width):
+        points = _rounded_polygon(inset, inset, width - inset, height - inset, radius)
+        point_count = len(points) // 2
+        if point_count < 3:
+            return
+        stride = max(1, point_count // 42)
+        for index in range(0, point_count, stride):
+            next_index = (index + stride) % point_count
+            color = _cyclic_palette_color(palette, phase + index / point_count)
+            self.create_line(
+                points[index * 2], points[index * 2 + 1],
+                points[next_index * 2], points[next_index * 2 + 1],
+                fill=color, width=max(0.5, line_width), capstyle=tk.ROUND,
+            )
+
+    def _gradient_is_available(self):
+        return self._state != "disabled" and self.style_name not in {"Danger.TButton", "Help.TButton"}
+
+    def _schedule_gradient_animation(self):
+        if self._gradient_job is None:
+            try:
+                self._gradient_job = self.after(40, self._animate_gradient)
+            except tk.TclError:
+                self._gradient_job = None
+
+    def _animate_gradient(self):
+        self._gradient_job = None
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        animations_enabled = bool(self.app.config.get("animations_enabled", False))
+        if self._hovered and self._gradient_is_available():
+            self._gradient_strength = min(1.0, self._gradient_strength + 0.22)
+            if animations_enabled:
+                self._gradient_phase = (self._gradient_phase + 0.016) % 1.0
+            else:
+                self._gradient_phase = 0.0
+        else:
+            self._gradient_strength *= 0.76
+            if animations_enabled:
+                delta = ((-self._gradient_phase + 0.5) % 1.0) - 0.5
+                self._gradient_phase = (self._gradient_phase + delta * 0.24) % 1.0
+            else:
+                self._gradient_phase = 0.0
+            if (self._gradient_strength < 0.008
+                    and min(self._gradient_phase, 1.0 - self._gradient_phase) < 0.003):
+                self._gradient_strength = 0.0
+                self._gradient_phase = 0.0
+        self._draw()
+        still_animating = (
+            (self._hovered and self._gradient_is_available() and animations_enabled)
+            or self._gradient_strength > 0.0
+            or self._gradient_phase != 0.0
+        )
+        if still_animating:
+            self._schedule_gradient_animation()
+
     def _draw(self):
         try:
             width = max(self._natural_width, self.winfo_width(), 38)
@@ -604,33 +711,56 @@ class RoundedGlowButton(tk.Canvas):
             )
             self.delete("all")
             edge, top, bottom, text_color = self._palette()
-            outer_radius = max(9, height / 2 - 1)
-            inner_radius = max(7, height / 2 - 3)
+            strength = self._gradient_strength if self._gradient_is_available() else 0.0
+            strength = max(0.0, min(1.0, strength))
+            outer_inset = max(0.35, 1.2 - 0.75 * strength)
+            outer_radius = max(9, height / 2 - outer_inset)
+            inner_inset = 3.0 - 0.5 * strength
+            inner_radius = max(7, height / 2 - inner_inset)
             self.create_polygon(
-                _rounded_polygon(1.2, 1.2, width - 1.2, height - 1.2, outer_radius),
+                _rounded_polygon(outer_inset, outer_inset, width - outer_inset,
+                                 height - outer_inset, outer_radius),
                 fill=_blend_hex(edge, bg, 0.24), outline=edge, width=1.4,
             )
-            x0, y0, x1, y1 = 3, 3, width - 3, height - 3
+            x0, y0, x1, y1 = inner_inset, inner_inset, width - inner_inset, height - inner_inset
             self.create_polygon(
                 _rounded_polygon(x0, y0, x1, y1, inner_radius),
                 fill=bottom, outline="",
             )
-            for y in range(y0 + 1, y1):
-                left, right = self._span(y, y0 + 1, y1 - 1, x0 + 1, x1 - 1, inner_radius - 1)
+            for y in range(int(y0 + 1), int(y1)):
+                left, right = self._span(
+                    y, y0 + 1, y1 - 1, x0 + 1, x1 - 1, inner_radius - 1
+                )
                 if left <= right:
                     t = (y - y0) / max(1, y1 - y0)
                     color = _blend_hex(top, bottom, max(0.0, min(1.0, t)))
+                    if strength > 0.0:
+                        tint = _cyclic_palette_color(
+                            BUTTON_FILL_GRADIENT, self._gradient_phase + t * 0.36
+                        )
+                        color = _blend_hex(color, tint, 0.28 * strength)
                     self.create_line(left, y, right, y, fill=color, width=1)
             self.create_polygon(
-                _rounded_polygon(1.2, 1.2, width - 1.2, height - 1.2, outer_radius),
+                _rounded_polygon(outer_inset, outer_inset, width - outer_inset,
+                                 height - outer_inset, outer_radius),
                 fill="", outline=edge, width=1.1,
             )
-            self.create_line(
-                min(width / 2 - 10, 26), 4,
-                max(width / 2 + 10, width - 26), 4,
-                fill=_blend_hex(edge, "#FFFFFF", 0.34 if self._hovered else 0.16),
-                width=1,
-            )
+            if strength > 0.0:
+                self._draw_gradient_outline(
+                    width, height, outer_inset, outer_radius,
+                    BUTTON_OUTER_GRADIENT, self._gradient_phase, 1.8 * strength,
+                )
+                self._draw_gradient_outline(
+                    width, height, inner_inset + 0.5, inner_radius,
+                    BUTTON_INNER_GRADIENT, self._gradient_phase + 0.27, 1.2 * strength,
+                )
+            else:
+                self.create_line(
+                    min(width / 2 - 10, 26), 4,
+                    max(width / 2 + 10, width - 26), 4,
+                    fill=_blend_hex(edge, "#FFFFFF", 0.34 if self._hovered else 0.16),
+                    width=1,
+                )
             self.create_text(
                 width / 2, height / 2 + (0.5 if self._pressed else 0),
                 text=self.text, fill=text_color, font=self._font,
@@ -641,11 +771,22 @@ class RoundedGlowButton(tk.Canvas):
 
     def _on_enter(self, _event=None):
         self._hovered = True
+        if self._gradient_is_available():
+            if self.app.config.get("animations_enabled", False):
+                self._schedule_gradient_animation()
+            else:
+                self._gradient_strength = 1.0
+                self._gradient_phase = 0.0
         self._draw()
 
     def _on_leave(self, _event=None):
         self._hovered = False
         self._pressed = False
+        if not self.app.config.get("animations_enabled", False):
+            self._gradient_strength = 0.0
+            self._gradient_phase = 0.0
+        elif self._gradient_strength > 0.0 or self._gradient_phase != 0.0:
+            self._schedule_gradient_animation()
         self._draw()
 
     def _on_press(self, _event=None):
@@ -753,6 +894,15 @@ class MediaDownloaderApp:
         self.logger.info("Inicialização: %s", self.system.architecture_label)
 
         self.root.title(f"Media Downloader | v{VERSION}")
+        self._window_icon = None
+        try:
+            icon_path = Path(__file__).resolve().parents[1] / "assets" / "app-icon.png"
+            if icon_path.is_file() and Image is not None and ImageTk is not None:
+                with Image.open(icon_path) as icon_image:
+                    self._window_icon = ImageTk.PhotoImage(icon_image.convert("RGBA").resize((64, 64)))
+                self.root.iconphoto(True, self._window_icon)
+        except (OSError, tk.TclError) as exc:
+            self.logger.debug("Não foi possível carregar o ícone da janela: %s", exc)
         self.root.geometry("1220x820")
         self.root.minsize(1000, 680)
 
@@ -2166,6 +2316,20 @@ class MediaDownloaderApp:
         info.pack(fill="x", pady=(12, 10))
         ttk.Label(info, text="O que o aplicativo executa localmente", style="CardTitle.TLabel").pack(anchor="w")
         ttk.Label(info, text="A interface executa apenas processos locais necessários para yt-dlp e FFmpeg/FFprobe, usando listas de argumentos em vez de comandos concatenados. URL, senhas, tokens e cookies não são gravados nos logs.", style="Card.TLabel", wraplength=760, justify="left").pack(anchor="w", pady=(4, 0))
+        security_card = self._card(body, 13)
+        security_card.pack(fill="x", pady=(0, 12))
+        ttk.Label(security_card, text="Distribuição e segurança do Windows", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            security_card,
+            text=(
+                "Esta é uma versão beta. Os metadados do arquivo e o ícone identificam o produto, "
+                "mas não substituem uma assinatura digital Authenticode confiável. Baixe apenas "
+                "pela página oficial de Releases, confira SHA256SUMS.txt e leia o relatório "
+                "VirusTotal-Status.txt antes de executar. O Windows pode exibir avisos de editor "
+                "desconhecido/SmartScreen ou bloquear o arquivo conforme a política de segurança."
+            ),
+            style="Card.TLabel", wraplength=760, justify="left",
+        ).pack(anchor="w", pady=(4, 0))
         RoundedGlowButton(body, text="Desinstalar", style="Danger.TButton", command=self._uninstall).pack(anchor="e", pady=(0, 25))
         self._update_developer_vars()
 
@@ -2193,7 +2357,48 @@ class MediaDownloaderApp:
             return
         launch_uninstaller(APP_DATA, INSTALL_ROOT)
         # The cleanup helper waits for this process before removing the installed EXE.
-        self.root.after(100, self.root.destroy)
+        self.root.after(100, self.close)
+
+    def close(self):
+        """Cancel transient work before closing the real application window."""
+        self._media_preview_generation = getattr(self, "_media_preview_generation", 0) + 1
+        for name in ("_media_preview_after", "_hero_animation_job", "_page_animation_job"):
+            job = getattr(self, name, None)
+            if job is not None:
+                try:
+                    self.root.after_cancel(job)
+                except tk.TclError:
+                    pass
+                setattr(self, name, None)
+
+        # A close action should not leave active media subprocesses running.
+        try:
+            self.cancel_requested.set()
+            with self.active_downloaders_lock:
+                active_downloaders = list(self.active_downloaders.values())
+            current_downloader = getattr(self, "downloader", None)
+            if current_downloader is not None and current_downloader not in active_downloaders:
+                active_downloaders.append(current_downloader)
+            for downloader in active_downloaders:
+                try:
+                    downloader.cancel()
+                except Exception:
+                    logger = getattr(self, "logger", None)
+                    if logger is not None:
+                        logger.debug("Não foi possível cancelar um downloader ao fechar.", exc_info=True)
+        except (AttributeError, RuntimeError):
+            pass
+
+        executor = getattr(self, "_thumbnail_executor", None)
+        if executor is not None:
+            try:
+                executor.shutdown(wait=False, cancel_futures=True)
+            except (RuntimeError, TypeError):
+                pass
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
 
     def _animate_hero_visual(self):
         """Render lightweight space particles and deforming orb shapes on the home hero."""
@@ -3189,7 +3394,7 @@ def run() -> None:
                 app.logger.warning("Não foi possível limpar o marcador de reparo após abrir a interface.")
         except Exception:
             app.logger.warning("Falha ao confirmar a abertura após reparo.", exc_info=True)
-        root.protocol("WM_DELETE_WINDOW", root.destroy)
+        root.protocol("WM_DELETE_WINDOW", app.close)
         root.update_idletasks()
         root.deiconify()
         try:

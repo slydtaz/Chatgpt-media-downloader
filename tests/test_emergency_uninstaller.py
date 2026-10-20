@@ -14,6 +14,7 @@ from emergency_uninstaller import (
     _safe_output_dir,
     discover_targets,
     perform_cleanup,
+    schedule_self_delete,
 )
 
 
@@ -85,6 +86,13 @@ class EmergencyUninstallerTests(unittest.TestCase):
             self.assertIn(legacy, [item.path for item in plan.install_dirs])
             candidate = next(item for item in plan.install_dirs if item.path == legacy)
             self.assertFalse(candidate.verified)
+
+    def test_self_delete_uses_native_windows_api_not_hidden_command_script(self):
+        source = (Path(__file__).resolve().parents[1] / "emergency_uninstaller.py").read_text(encoding="utf-8")
+        self.assertIn("MoveFileExW", source)
+        self.assertIn("MOVEFILE_DELAY_UNTIL_REBOOT", source)
+        self.assertNotIn('["cmd.exe", "/d", "/c", str(script)]', source)
+        self.assertFalse(schedule_self_delete())
 
     def test_safe_output_path_excludes_generic_downloads_folder(self):
         with tempfile.TemporaryDirectory() as td:
