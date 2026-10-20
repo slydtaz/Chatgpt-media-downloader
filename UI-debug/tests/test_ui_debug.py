@@ -93,6 +93,30 @@ class VersionAndGeometryTests(unittest.TestCase):
 
 
 class VisualConceptTests(unittest.TestCase):
+    def test_action_icons_use_native_canvas_shapes(self):
+        class FakeCanvas:
+            def __init__(self):
+                self.calls = []
+            def _add(self, kind, args, kwargs):
+                self.calls.append((kind, args, kwargs))
+                return len(self.calls)
+            def create_line(self, *args, **kwargs):
+                return self._add("line", args, kwargs)
+            def create_oval(self, *args, **kwargs):
+                return self._add("oval", args, kwargs)
+            def create_polygon(self, *args, **kwargs):
+                return self._add("polygon", args, kwargs)
+            def create_arc(self, *args, **kwargs):
+                return self._add("arc", args, kwargs)
+
+        for key in ("preview", "download", "convert", "settings", "save", "refresh", "playlist", "search"):
+            with self.subTest(key=key):
+                canvas = FakeCanvas()
+                items = ui_debug.draw_action_icon(canvas, 20, 20, key, "#FFFFFF")
+                self.assertTrue(items)
+                self.assertEqual(len(items), len(canvas.calls))
+                self.assertTrue(all(kind in {"line", "outline", "filled"} for _item, kind in items))
+
     def test_violet_blue_default_preset_and_soft_glow(self):
         self.assertEqual(ui_debug.DEFAULT_SETTINGS["accent_color"], "#895CFA")
         self.assertEqual(ui_debug.DEFAULT_SETTINGS["accent_color_2"], "#558FF4")
@@ -138,7 +162,7 @@ class VisualConceptTests(unittest.TestCase):
             self.assertEqual(custom["accent_color_2"], "#33AADD")
 
     def test_prototype_has_independent_development_version(self):
-        self.assertEqual(ui_debug.APP_VERSION, "0.1.0-dev.8")
+        self.assertEqual(ui_debug.APP_VERSION, "0.1.0-dev.9")
         self.assertEqual(ui_debug.CHANNEL, "development")
         self.assertIn("ui-debug", ui_debug.UPDATE_BRANCH)
         self.assertNotIn("draw_orbit_icon", (ROOT / "ui_debug.py").read_text(encoding="utf-8"))
