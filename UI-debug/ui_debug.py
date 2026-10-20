@@ -688,9 +688,9 @@ class GradientBackdrop(tk.Canvas):
 
         self.glow_items: list[tuple[int, str, float, int]] = []
         for corner, channel in (("tl", 0), ("tr", 1), ("bl", 0), ("br", 1)):
-            for level in range(22):
+            for level in range(48):
                 item = self.create_oval(0, 0, 1, 1, fill="", outline="", tags="corner-glow")
-                self.glow_items.append((item, corner, level / 21, channel))
+                self.glow_items.append((item, corner, level / 47, channel))
 
         stars = [(0.13, 0.16), (0.31, 0.08), (0.46, 0.22), (0.69, 0.11),
                  (0.88, 0.27), (0.76, 0.42), (0.19, 0.56), (0.93, 0.68),
