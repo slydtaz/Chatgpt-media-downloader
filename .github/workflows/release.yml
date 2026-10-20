@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - 'beta/**'
     tags:
       - 'v*'
   workflow_dispatch:
@@ -21,6 +22,7 @@ jobs:
       ${{ (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
           || github.ref_type == 'tag'
           || (github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release: publish ChatGPT Media Downloader')) }}
+          || startsWith(github.ref, 'refs/heads/beta/')
     permissions:
       contents: write
       attestations: write
@@ -47,7 +49,7 @@ jobs:
           $refName = $env:GITHUB_REF_NAME
           $releaseTag = "v$version"
           if ($env:GITHUB_REF_TYPE -eq 'tag') {
-            if ($refName -notmatch '^v\d+\.\d+\.\d+$') {
+            if ($refName -notmatch '^v\d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?$') {
               throw "Release tag '$refName' is not a semantic version tag."
             }
             if ($refName -ne $releaseTag) {
@@ -66,15 +68,34 @@ jobs:
               $hotfixNumber = $Matches[1]
             }
           }
-          if ([string]::IsNullOrWhiteSpace($hotfixNumber)) {
-            $releaseName = "$version - stable"
+          $isPrerelease = $version -match '(?i)-(alpha|beta|rc)\.\d+$'
+          if ($env:GITHUB_REF -like 'refs/heads/beta/*') {
+            if (!$isPrerelease) { throw 'Beta branches must use an alpha/beta/rc version suffix.' }
+            $branchVersion = $refName -replace '^beta/', ''
+            if ($branchVersion -ne $version) {
+              throw "Beta branch '$refName' must match VERSION '$version' after the beta/ prefix."
+            }
+          }
+
+          if ($isPrerelease) {
+            $releaseName = "$version - beta"
+            $releaseIsPrerelease = 'true'
+            $channelDescription = 'Esta é uma pré-release beta para testes; não é recomendada para uso estável.'
           } else {
-            if ($hotfixNumber -notmatch '^[1-9]\d*$') { throw 'hotfix_number deve ser um número inteiro positivo.' }
-            $releaseName = "$version - stable (hotfix-$hotfixNumber)"
+            if ([string]::IsNullOrWhiteSpace($hotfixNumber)) {
+              $releaseName = "$version - stable"
+            } else {
+              if ($hotfixNumber -notmatch '^[1-9]\d*$') { throw 'hotfix_number deve ser um número inteiro positivo.' }
+              $releaseName = "$version - stable (hotfix-$hotfixNumber)"
+            }
+            $releaseIsPrerelease = 'false'
+            $channelDescription = 'Esta é uma versão estável publicada após as verificações de compilação, assinatura e análise de segurança.'
           }
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "RELEASE_TAG=$releaseTag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "RELEASE_NAME=$releaseName" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "RELEASE_IS_PRERELEASE=$releaseIsPrerelease" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "RELEASE_CHANNEL_DESCRIPTION=$channelDescription" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Install build tool
         shell: cmd
         run: python -m pip install pyinstaller==6.22.3 Pillow==13.0.0
@@ -286,7 +307,7 @@ jobs:
           body: |
             ${{ env.RELEASE_NAME }}
 
-            Esta é a versão oficial estável ${{ env.APP_VERSION }}. O título só inclui `(hotfix-N)` quando a entrada manual declara uma correção crítica urgente.
+            ${{ env.RELEASE_CHANNEL_DESCRIPTION }} Versão: ${{ env.APP_VERSION }}.
 
             Recommended for users: download ChatGPTMediaDownloader.exe.
             SHA256SUMS.txt contains the SHA-256 checksum of the same build.
@@ -294,7 +315,8 @@ jobs:
             VirusTotal-Status.txt records antivirus analysis for both public executables. Publication requires trusted Authenticode and completed scans without malicious/suspicious detections.
             GPT-Media-Uninstaller.exe is a standalone emergency cleanup tool; downloaded media are preserved by default.
             The attached source ZIP is intended for developers, auditing and compilation.
-          make_latest: true
+          prerelease: ${{ env.RELEASE_IS_PRERELEASE == 'true' }}
+          make_latest: ${{ env.RELEASE_IS_PRERELEASE != 'true' }}
           overwrite_files: true
           files: |
             dist/ChatGPTMediaDownloader.exe
