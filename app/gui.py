@@ -2334,7 +2334,48 @@ class MediaDownloaderApp:
             return
         launch_uninstaller(APP_DATA, INSTALL_ROOT)
         # The cleanup helper waits for this process before removing the installed EXE.
-        self.root.after(100, self.root.destroy)
+        self.root.after(100, self.close)
+
+    def close(self):
+        """Cancel transient work before closing the real application window."""
+        self._media_preview_generation = getattr(self, "_media_preview_generation", 0) + 1
+        for name in ("_media_preview_after", "_hero_animation_job", "_page_animation_job"):
+            job = getattr(self, name, None)
+            if job is not None:
+                try:
+                    self.root.after_cancel(job)
+                except tk.TclError:
+                    pass
+                setattr(self, name, None)
+
+        # A close action should not leave active media subprocesses running.
+        try:
+            self.cancel_requested.set()
+            with self.active_downloaders_lock:
+                active_downloaders = list(self.active_downloaders.values())
+            current_downloader = getattr(self, "downloader", None)
+            if current_downloader is not None and current_downloader not in active_downloaders:
+                active_downloaders.append(current_downloader)
+            for downloader in active_downloaders:
+                try:
+                    downloader.cancel()
+                except Exception:
+                    logger = getattr(self, "logger", None)
+                    if logger is not None:
+                        logger.debug("Não foi possível cancelar um downloader ao fechar.", exc_info=True)
+        except (AttributeError, RuntimeError):
+            pass
+
+        executor = getattr(self, "_thumbnail_executor", None)
+        if executor is not None:
+            try:
+                executor.shutdown(wait=False, cancel_futures=True)
+            except (RuntimeError, TypeError):
+                pass
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
 
     def _animate_hero_visual(self):
         """Render lightweight space particles and deforming orb shapes on the home hero."""
@@ -3330,7 +3371,7 @@ def run() -> None:
                 app.logger.warning("Não foi possível limpar o marcador de reparo após abrir a interface.")
         except Exception:
             app.logger.warning("Falha ao confirmar a abertura após reparo.", exc_info=True)
-        root.protocol("WM_DELETE_WINDOW", root.destroy)
+        root.protocol("WM_DELETE_WINDOW", app.close)
         root.update_idletasks()
         root.deiconify()
         try:
