@@ -2794,11 +2794,6 @@ class SpaceUIPrototype:
                 redraw()
             except tk.TclError:
                 pass
-        for pane in getattr(self, "scroll_panes", []):
-            try:
-                pane.backdrop.refresh_gradient_settings()
-            except (AttributeError, tk.TclError):
-                pass
         if hasattr(self, "nav_items"):
             for key, (nav, shape, icon, label_id, indicator, plate) in self.nav_items.items():
                 active = key == self.current_page
