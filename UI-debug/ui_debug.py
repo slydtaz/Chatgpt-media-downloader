@@ -899,7 +899,8 @@ class RoundedButton(tk.Canvas):
                 outer_left, outer_top, outer_right, outer_bottom, radius+spread, steps=18
             ))
         self.coords(self._outline_id,*rounded_points(left,top,left+inner_w,top+inner_h,radius,steps=18))
-        self.coords(self._text_id,self.widget_width/2,self.widget_height/2)
+        text_x = self.widget_width/2 + (self.app.scale_px(7) if self.icon_key else 0)
+        self.coords(self._text_id,text_x,self.widget_height/2)
 
     def _animate_to(self, scale):
         self._target_scale = scale
