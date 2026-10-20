@@ -12,6 +12,14 @@ from urllib.parse import urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
+class VirusTotalAPIError(RuntimeError):
+    """HTTP failure from VirusTotal; the status code is retained for safe recovery."""
+
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = int(status_code)
+
+
 API_ROOT = "https://www.virustotal.com/api/v3"
 VT_HOSTS = {"www.virustotal.com", "virustotal.com"}
 VT_UPLOAD_HOSTS = {"storage.googleapis.com"}
@@ -96,8 +104,9 @@ def _api_json(
                     wait = 30.0
                 time.sleep(wait)
                 continue
-            raise RuntimeError(
-                f"VirusTotal API returned HTTP {exc.code}; response not interpreted as clean."
+            raise VirusTotalAPIError(
+                exc.code,
+                f"VirusTotal API returned HTTP {exc.code}; response not interpreted as clean.",
             ) from None
         except (URLError, TimeoutError, OSError) as exc:
             if attempt < max_retries:
@@ -152,7 +161,35 @@ def _upload_url(api_key: str) -> str:
     return destination
 
 
-def submit_file(path: Path, api_key: str) -> str:
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest().lower()
+
+
+def _existing_analysis(sha256: str, api_key: str) -> dict:
+    """Load an already indexed file report when VirusTotal answers HTTP 409."""
+    response = _api_json(f"{API_ROOT}/files/{sha256}", api_key)
+    data = response.get("data") or {}
+    attributes = data.get("attributes") or {}
+    stats = attributes.get("last_analysis_stats")
+    results = attributes.get("last_analysis_results")
+    if not isinstance(stats, dict) or not isinstance(results, dict) or not results:
+        raise RuntimeError(
+            "VirusTotal says this file already exists, but its file report has no completed analysis results."
+        )
+    return {
+        "status": "completed",
+        "stats": stats,
+        "results": results,
+        "last_analysis_date": attributes.get("last_analysis_date"),
+        "source": "existing-file-report",
+    }
+
+
+def submit_file(path: Path, api_key: str) -> tuple[str | None, dict | None]:
     if not path.is_file():
         raise RuntimeError(f"Required scan sample is missing: {path.name}")
     size = path.stat().st_size
@@ -160,15 +197,25 @@ def submit_file(path: Path, api_key: str) -> str:
         raise RuntimeError(f"{path.name} has size {size} bytes, outside the supported size range.")
     url = _upload_url(api_key) if size > SMALL_UPLOAD_LIMIT else f"{API_ROOT}/files"
     body, content_type = _multipart_body(path)
-    uploaded = _api_json(
-        url, api_key, method="POST", body=body, content_type=content_type,
-        timeout=max(180.0, size / (512 * 1024)),
-    )
+    try:
+        uploaded = _api_json(
+            url, api_key, method="POST", body=body, content_type=content_type,
+            timeout=max(180.0, size / (512 * 1024)),
+        )
+    except VirusTotalAPIError as exc:
+        if exc.status_code != 409:
+            raise
+        # HTTP 409 means the content may already be indexed. Resolve the exact
+        # SHA-256 through the official file-report endpoint; never assume a
+        # duplicate or failed upload means a clean scan.
+        digest = _sha256(path)
+        existing = _existing_analysis(digest, api_key)
+        return None, existing
     data = uploaded.get("data")
     analysis_id = data.get("id") if isinstance(data, dict) else None
     if not isinstance(analysis_id, str) or not analysis_id:
         raise RuntimeError(f"VirusTotal did not provide an analysis ID for {path.name}.")
-    return analysis_id
+    return analysis_id, None
 
 
 def summarize_analysis(name: str, attributes: dict) -> tuple[str, list[str], bool]:
@@ -262,17 +309,24 @@ def main() -> int:
     errors = []
     findings = False
     for name, path in targets:
-        digest = hashlib.sha256()
-        with path.open("rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                digest.update(chunk)
-        sample_hash = digest.hexdigest().lower()
+        sample_hash = _sha256(path)
         lines.append(f"SAMPLE: {name}; SHA256={sample_hash}; bytes={path.stat().st_size}")
         _write_report(args.report, lines)
         try:
-            analysis_id = submit_file(path, api_key)
-            pending.append({"name": name, "hash": sample_hash, "analysis_id": analysis_id})
-            lines.append(f"SUBMITTED: {name}; analysis_id={analysis_id}")
+            analysis_id, existing_attributes = submit_file(path, api_key)
+            pending.append({
+                "name": name,
+                "hash": sample_hash,
+                "analysis_id": analysis_id,
+                "existing_attributes": existing_attributes,
+            })
+            if existing_attributes is not None:
+                lines.append(
+                    f"REUSED: {name}; existing VirusTotal file report; "
+                    f"last_analysis_date={existing_attributes.get('last_analysis_date', 'unknown')}"
+                )
+            else:
+                lines.append(f"SUBMITTED: {name}; analysis_id={analysis_id}")
         except Exception as exc:
             errors.append(name)
             lines.append(f"SCAN ERROR: {name}; {exc}")
@@ -291,10 +345,13 @@ def main() -> int:
             if sample["name"] in completed:
                 continue
             try:
-                analysis = _api_json(f"{API_ROOT}/analyses/{sample['analysis_id']}", api_key)
-                attributes = (analysis.get("data") or {}).get("attributes") or {}
-                if attributes.get("status") != "completed":
-                    continue
+                if sample.get("existing_attributes") is not None:
+                    attributes = sample["existing_attributes"]
+                else:
+                    analysis = _api_json(f"{API_ROOT}/analyses/{sample['analysis_id']}", api_key)
+                    attributes = (analysis.get("data") or {}).get("attributes") or {}
+                    if attributes.get("status") != "completed":
+                        continue
                 result_line, detection_lines, sample_findings = summarize_analysis(sample["name"], attributes)
                 lines.append(result_line)
                 lines.append(f"REPORT: {sample['name']}; https://www.virustotal.com/gui/file/{sample['hash']}/detection")
