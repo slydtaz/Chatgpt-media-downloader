@@ -14,6 +14,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 API_ROOT = "https://www.virustotal.com/api/v3"
 VT_HOSTS = {"www.virustotal.com", "virustotal.com"}
+VT_UPLOAD_HOSTS = {"storage.googleapis.com"}
 SMALL_UPLOAD_LIMIT = 32 * 1024 * 1024
 MAX_UPLOAD_BYTES = 650 * 1024 * 1024
 REQUEST_INTERVAL_SECONDS = 16.5
@@ -22,10 +23,21 @@ MAX_WAIT_SECONDS = 22 * 60
 _last_request_at = 0.0
 
 
+def _is_virus_total_host(host: str | None) -> bool:
+    return bool(host) and (
+        host in VT_HOSTS or host.endswith(".virustotal.com")
+    )
+
+
+def _is_trusted_upload_host(host: str | None) -> bool:
+    """Accept VT upload URLs and Google's signed blob-upload host only."""
+    return _is_virus_total_host(host) or host in VT_UPLOAD_HOSTS
+
+
 class _VerifiedVirusTotalRedirects(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         parts = urlsplit(newurl)
-        if parts.scheme != "https" or parts.hostname not in VT_HOSTS or parts.port not in {None, 443}:
+        if parts.scheme != "https" or not _is_trusted_upload_host(parts.hostname) or parts.port not in {None, 443}:
             raise HTTPError(req.full_url, code, "Untrusted VirusTotal redirect destination blocked", headers, fp)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
@@ -49,21 +61,21 @@ def _api_json(
     max_retries: int = 3,
 ) -> dict:
     parsed = urlsplit(url)
-    if parsed.scheme != "https" or parsed.hostname not in VT_HOSTS or parsed.port not in {None, 443}:
-        raise RuntimeError("Refusing a VirusTotal request outside the verified HTTPS host.")
+    if parsed.scheme != "https" or not _is_trusted_upload_host(parsed.hostname) or parsed.port not in {None, 443}:
+        raise RuntimeError("Refusing a VirusTotal request outside the verified HTTPS/upload host.")
     opener = build_opener(_VerifiedVirusTotalRedirects())
     for attempt in range(max_retries + 1):
         _wait_for_rate_limit()
-        request = Request(
-            url,
-            data=body,
-            headers={
-                "x-apikey": api_key,
-                "accept": "application/json",
-                "Content-Type": content_type,
-            },
-            method=method,
-        )
+        headers = {
+            "accept": "application/json",
+            "Content-Type": content_type,
+        }
+        # VirusTotal API endpoints require the API key. A signed Google Cloud
+        # Storage upload URL authenticates by its own URL signature, so never
+        # forward the VirusTotal API key to that third-party upload host.
+        if _is_virus_total_host(parsed.hostname):
+            headers["x-apikey"] = api_key
+        request = Request(url, data=body, headers=headers, method=method)
         try:
             with opener.open(request, timeout=timeout) as response:
                 raw = response.read(8 * 1024 * 1024 + 1)
@@ -116,9 +128,24 @@ def _upload_url(api_key: str) -> str:
     if not isinstance(destination, str) or not destination:
         raise RuntimeError("VirusTotal did not return a large-file upload URL.")
     parts = urlsplit(destination)
-    if parts.hostname not in VT_HOSTS:
-        raise RuntimeError("VirusTotal returned an unexpected upload host; upload stopped.")
+    host = parts.hostname
+    if (
+        not _is_trusted_upload_host(host)
+        or parts.username is not None
+        or parts.password is not None
+        or parts.port not in {None, 80, 443}
+    ):
+        raise RuntimeError(
+            f"VirusTotal returned an unexpected upload host ({host or 'missing'}); upload stopped."
+        )
     if parts.scheme == "http":
+        # VirusTotal's official large-upload API currently documents an HTTP
+        # URL on its own host. Upgrade that official host to HTTPS. Do not
+        # silently upgrade or trust an HTTP URL on a third-party host.
+        if not _is_virus_total_host(host) or parts.port not in {None, 80}:
+            raise RuntimeError(
+                f"VirusTotal returned a non-HTTPS external upload URL ({host}); upload stopped."
+            )
         destination = urlunsplit(("https", parts.netloc, parts.path, parts.query, ""))
     elif parts.scheme != "https":
         raise RuntimeError("VirusTotal returned a non-HTTPS upload URL; upload stopped.")
