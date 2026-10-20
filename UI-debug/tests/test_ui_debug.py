@@ -93,6 +93,17 @@ class VersionAndGeometryTests(unittest.TestCase):
 
 
 class VisualConceptTests(unittest.TestCase):
+    def test_violet_blue_default_preset_and_soft_glow(self):
+        self.assertEqual(ui_debug.DEFAULT_SETTINGS["accent_color"], "#895CFA")
+        self.assertEqual(ui_debug.DEFAULT_SETTINGS["accent_color_2"], "#558FF4")
+        self.assertEqual(ui_debug.PALETTES["dark"]["accent2"], "#6EA2FA")
+        source = (ROOT / "ui_debug.py").read_text(encoding="utf-8")
+        self.assertIn("self._glow_ids = []", source)
+        self.assertIn('tags=("button-shape","button-glow")', source)
+        self.assertIn('blend_hex(SPLASH_BACKGROUND, tint, .012 + .16*t**1.65)', source)
+        self.assertIn('blend_hex(SPLASH_BACKGROUND, color, .31)', source)
+        self.assertNotIn('("#F472B6", "#A78BFA")', source)
+
     def test_splash_has_coordinated_gradient_pairs_and_status_sequences(self):
         self.assertGreaterEqual(len(ui_debug.SPLASH_PALETTES), 6)
         for first, second in ui_debug.SPLASH_PALETTES:
@@ -104,8 +115,30 @@ class VisualConceptTests(unittest.TestCase):
         self.assertGreaterEqual(len(ui_debug.UPDATE_MESSAGES), 6)
         self.assertIn("órbitas", " ".join(ui_debug.STARTUP_MESSAGES).lower())
 
+    def test_migrates_default_accent_pair_but_preserves_custom_color(self):
+        prototype = object.__new__(ui_debug.SpaceUIPrototype)
+        with tempfile.TemporaryDirectory() as directory:
+            prototype.settings_path = Path(directory) / "settings.json"
+            prototype.settings_path.write_text(json.dumps({
+                "theme": "dark",
+                "accent_color": "#7C5CFF",
+                "accent_color_2": "#20D8E7"
+            }), encoding="utf-8")
+            migrated = prototype._load_settings()
+            self.assertEqual(migrated["accent_color"], "#895CFA")
+            self.assertEqual(migrated["accent_color_2"], "#558FF4")
+            self.assertEqual(migrated["visual_preset_version"], 2)
+            prototype.settings_path.write_text(json.dumps({
+                "theme": "dark",
+                "accent_color": "#AA33DD",
+                "accent_color_2": "#33AADD"
+            }), encoding="utf-8")
+            custom = prototype._load_settings()
+            self.assertEqual(custom["accent_color"], "#AA33DD")
+            self.assertEqual(custom["accent_color_2"], "#33AADD")
+
     def test_prototype_has_independent_development_version(self):
-        self.assertEqual(ui_debug.APP_VERSION, "0.1.0-dev.7")
+        self.assertEqual(ui_debug.APP_VERSION, "0.1.0-dev.8")
         self.assertEqual(ui_debug.CHANNEL, "development")
         self.assertIn("ui-debug", ui_debug.UPDATE_BRANCH)
         self.assertNotIn("draw_orbit_icon", (ROOT / "ui_debug.py").read_text(encoding="utf-8"))
