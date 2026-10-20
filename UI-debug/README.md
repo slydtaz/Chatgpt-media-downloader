@@ -1,6 +1,6 @@
 # UI-debug — Cosmic interface prototype
 
-**Version:** 0.1.0-dev.7  
+**Version:** 0.1.0-dev.8  
 **Channel:** development  
 **Status:** visual prototype — not a production downloader and not a GitHub Release.
 
@@ -31,7 +31,7 @@ The updater reads \`UI-debug/version.json\` from the dedicated development branc
 
 ## Visual direction
 
-The Media Lab symbol is larger; navigation icons are rendered from 4× supersampled images with Lanczos downsampling when Pillow is installed, with larger round-capped vector strokes as a fallback. The Home page has an on-demand media poster preview, and each playlist row has its own thumbnail card. The layout keeps the current project's main sections (Home, Playlists, Appearance, Dependencies, Updates, Help and Diagnostics) and adopts the public OrionMacro dashboard's broader visual direction: near-black violet surfaces, neon-violet active cards, cyan/green status accents, a compact activity waveform and clearer selected navigation. UI assets and code were drawn for this prototype rather than copied. The startup loader uses each orbit as a smooth reusable vector path and reuses a small number of multi-point trail items, avoiding the old stack of independent trail segments. The app opens using the monitor's available work area and adaptively scales typography, controls and outlines (up to 125% on 2560×1440 displays), with a more conservative floor for smaller displays.
+The Media Lab symbol is larger; navigation icons use simple, smooth outline artwork that stays legible at small sizes, with 4× supersampling and Lanczos downsampling when Pillow is installed and a native vector fallback. The Home page has an on-demand media poster preview, and each playlist row has its own thumbnail card. The layout keeps the existing sections (Home, Playlists, Appearance, Dependencies, Updates, Help and Diagnostics) and now favors near-black violet surfaces, restrained violet-to-periwinkle/blue gradients, a soft halo around primary buttons, and clearer selected navigation. Saturated pink is reduced; cyan remains a supporting accent rather than the dominant endpoint. UI assets are original to this prototype rather than copied. The startup loader keeps its existing rotating atom and orbital motion; only the background gradient, orbit trails, stars, and nucleus glow are made slightly more luminous. App typography, controls, and outlines continue to scale to the available display.
 
 The two \`share.google\` reference links could not be resolved by the browsing environment, so the layout uses the current app's organization and public SKlauncher 4.0 documentation as general layout inspiration.
 
