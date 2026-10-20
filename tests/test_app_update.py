@@ -18,6 +18,7 @@ from app.app_update import (
     API_ROOT,
     AppUpdateError,
     _release_candidate,
+    _release_version,
     _windows_update_helper_script,
     _safe_extract_zip,
     _stage_source_tree,
@@ -74,6 +75,17 @@ class VersionComparisonTests(unittest.TestCase):
         self.assertFalse(is_newer_version("4.9.0", "4.9.0"))
         self.assertFalse(is_newer_version("4.8.9", "4.9.0"))
         self.assertEqual(version_key("v5.12.3"), (5, 12, 3))
+        self.assertTrue(is_newer_version("5.4.0", "5.4.0-beta.1"))
+        self.assertTrue(is_newer_version("5.4.0-beta.2", "5.4.0-beta.1"))
+        self.assertFalse(is_newer_version("5.4.0-beta.1", "5.4.0"))
+        self.assertTrue(is_newer_version("5.4.0-rc.1", "5.4.0-beta.9"))
+        self.assertTrue(is_newer_version("5.4.0-beta.1", "5.3.2"))
+        self.assertFalse(is_newer_version("5.4.0-beta.2", "5.4.0-beta.10"))
+        self.assertEqual(
+            _release_version({"tag_name": "v5.4.0-beta.1"}),
+            "5.4.0-beta.1",
+        )
+
         self.assertTrue(is_newer_version("5.4.0", "5.4.0-beta.1"))
         self.assertTrue(is_newer_version("5.4.0-beta.2", "5.4.0-beta.1"))
         self.assertFalse(is_newer_version("5.4.0-beta.1", "5.4.0"))
