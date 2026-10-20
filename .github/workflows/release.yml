@@ -21,8 +21,8 @@ jobs:
     if: >-
       ${{ (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
           || github.ref_type == 'tag'
-          || (github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release: publish ChatGPT Media Downloader')) }}
-          || startsWith(github.ref, 'refs/heads/beta/')
+          || (github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release: publish ChatGPT Media Downloader'))
+          || startsWith(github.ref, 'refs/heads/beta/') }}
     permissions:
       contents: write
       attestations: write
@@ -50,7 +50,7 @@ jobs:
           $releaseTag = "v$version"
           if ($env:GITHUB_REF_TYPE -eq 'tag') {
             if ($refName -notmatch '^v\d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?$') {
-              throw "Release tag '$refName' is not a semantic version tag."
+              throw "Release tag '$refName' is not a semantic version or prerelease tag."
             }
             if ($refName -ne $releaseTag) {
               throw "Release tag '$refName' does not match application version '$releaseTag'."
