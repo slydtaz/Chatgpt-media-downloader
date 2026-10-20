@@ -728,13 +728,13 @@ class GradientBackdrop(tk.Canvas):
         for item, corner, level, channel in self.glow_items:
             cx = 0 if corner.endswith("l") else width
             cy = 0 if corner.startswith("t") else height
-            rx, ry = width * (0.60 - 0.38 * level), height * (0.88 - 0.54 * level)
+            rx, ry = width * (0.48 - 0.32 * level), height * (0.62 - 0.43 * level)
             self.coords(item, cx - rx, cy - ry, cx + rx, cy + ry)
             tint = first if channel == 0 else second
             # Low opacity keeps the glow at the edges; it never recolors cards/buttons.
             self.itemconfigure(
                 item,
-                fill=blend_hex(colors["bg"], tint, 0.008 + 0.078 * (level ** 1.45)),
+                fill=blend_hex(colors["bg"], tint, 0.010 + 0.13 * (level ** 1.45)),
                 outline="",
             )
 
