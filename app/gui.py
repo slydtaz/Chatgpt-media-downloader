@@ -69,6 +69,22 @@ def _contrast_text(value: str) -> str:
         return "#FFFFFF"
 
 
+BUTTON_FILL_GRADIENT = ("#A855F7", "#497BFF", "#20CFE5", "#43DDAE")
+BUTTON_OUTER_GRADIENT = ("#C05BFF", "#35D9FF", "#7A7BFF")
+BUTTON_INNER_GRADIENT = ("#F472D0", "#6B9CFF", "#48E9B7")
+
+
+def _cyclic_palette_color(palette: tuple[str, ...], position: float) -> str:
+    """Interpolate a cyclic gradient continuously across its wrap point."""
+    if not palette:
+        return "#FFFFFF"
+    if len(palette) == 1:
+        return palette[0]
+    scaled = (float(position) % 1.0) * len(palette)
+    index = int(scaled)
+    return _blend_hex(palette[index], palette[(index + 1) % len(palette)], scaled - index)
+
+
 def _render_nav_icon(root, cache: dict, page_key: str, size: int, color: str):
     """Render crisp 4× supersampled navigation artwork when Pillow is available."""
     if Image is None or ImageDraw is None or ImageTk is None:
@@ -237,6 +253,8 @@ class Tooltip:
 
 
 class ScrollableFrame(ttk.Frame):
+    """Scrollable content whose wheel bindings only affect the visible, owning frame."""
+
     def __init__(self, parent, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
         self.canvas = tk.Canvas(self, highlightthickness=0, borderwidth=0)
@@ -248,16 +266,43 @@ class ScrollableFrame(ttk.Frame):
         self.scrollbar.pack(side="right", fill="y")
         self.body.bind("<Configure>", lambda _e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfigure(self.window_id, width=e.width))
+        # bind_all is application-wide; each frame must ignore events owned by
+        # another tab, otherwise every hidden scrollable page moves together.
         self.canvas.bind_all("<MouseWheel>", self._wheel, add="+")
-        self.canvas.bind_all("<Button-4>", lambda _e: self.canvas.yview_scroll(-1, "units"), add="+")
-        self.canvas.bind_all("<Button-5>", lambda _e: self.canvas.yview_scroll(1, "units"), add="+")
+        self.canvas.bind_all("<Button-4>", self._wheel_global, add="+")
+        self.canvas.bind_all("<Button-5>", self._wheel_global, add="+")
+
+    def _event_inside(self, event):
+        widget = getattr(event, "widget", None)
+        while widget is not None:
+            if widget is self.body or widget is self.canvas or widget is self.scrollbar:
+                return True
+            widget = getattr(widget, "master", None)
+        return False
 
     def _wheel(self, event):
-        try:
-            self.canvas.yview_scroll(int(-event.delta / 120), "units")
-        except (tk.TclError, ZeroDivisionError):
-            pass
+        if not self.winfo_ismapped() or not self._event_inside(event):
+            return None
+        delta = int(getattr(event, "delta", 0))
+        if not delta:
+            return None
+        units = int(-delta / 120)
+        if units == 0:
+            units = -1 if delta > 0 else 1
+        self.canvas.yview_scroll(units, "units")
+        return "break"
 
+    def _wheel_global(self, event):
+        if not self.winfo_ismapped() or not self._event_inside(event):
+            return None
+        button = getattr(event, "num", None)
+        if button == 4:
+            self.canvas.yview_scroll(-1, "units")
+        elif button == 5:
+            self.canvas.yview_scroll(1, "units")
+        else:
+            return self._wheel(event)
+        return "break"
 
 def _rounded_polygon(x1: float, y1: float, x2: float, y2: float, radius: float) -> list[float]:
     """Return points sampled along real quarter-circles for a crisp rounded rectangle."""
@@ -482,6 +527,9 @@ class RoundedGlowButton(tk.Canvas):
         self._pressed = False
         self._hovered = False
         self._focused = False
+        self._gradient_phase = 0.0
+        self._gradient_strength = 0.0
+        self._gradient_job = None
         self._textvariable = kwargs.pop("textvariable", None)
         self._font = tkfont.Font(
             root=self.app.root, family="Segoe UI",
@@ -592,6 +640,65 @@ class RoundedGlowButton(tk.Canvas):
             bottom = top
         return edge, top, bottom, text_color
 
+    def _draw_gradient_outline(self, width, height, inset, radius, palette, phase, line_width):
+        points = _rounded_polygon(inset, inset, width - inset, height - inset, radius)
+        point_count = len(points) // 2
+        if point_count < 3:
+            return
+        stride = max(1, point_count // 42)
+        for index in range(0, point_count, stride):
+            next_index = (index + stride) % point_count
+            color = _cyclic_palette_color(palette, phase + index / point_count)
+            self.create_line(
+                points[index * 2], points[index * 2 + 1],
+                points[next_index * 2], points[next_index * 2 + 1],
+                fill=color, width=max(0.5, line_width), capstyle=tk.ROUND,
+            )
+
+    def _gradient_is_available(self):
+        return self._state != "disabled" and self.style_name not in {"Danger.TButton", "Help.TButton"}
+
+    def _schedule_gradient_animation(self):
+        if self._gradient_job is None:
+            try:
+                self._gradient_job = self.after(40, self._animate_gradient)
+            except tk.TclError:
+                self._gradient_job = None
+
+    def _animate_gradient(self):
+        self._gradient_job = None
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        animations_enabled = bool(self.app.config.get("animations_enabled", False))
+        if self._hovered and self._gradient_is_available():
+            self._gradient_strength = min(1.0, self._gradient_strength + 0.22)
+            if animations_enabled:
+                self._gradient_phase = (self._gradient_phase + 0.016) % 1.0
+            else:
+                self._gradient_phase = 0.0
+        else:
+            self._gradient_strength *= 0.76
+            if animations_enabled:
+                delta = ((-self._gradient_phase + 0.5) % 1.0) - 0.5
+                self._gradient_phase = (self._gradient_phase + delta * 0.24) % 1.0
+            else:
+                self._gradient_phase = 0.0
+            if (self._gradient_strength < 0.008
+                    and min(self._gradient_phase, 1.0 - self._gradient_phase) < 0.003):
+                self._gradient_strength = 0.0
+                self._gradient_phase = 0.0
+        self._draw()
+        still_animating = (
+            (self._hovered and self._gradient_is_available() and animations_enabled)
+            or self._gradient_strength > 0.0
+            or self._gradient_phase != 0.0
+        )
+        if still_animating:
+            self._schedule_gradient_animation()
+
     def _draw(self):
         try:
             width = max(self._natural_width, self.winfo_width(), 38)
@@ -604,33 +711,56 @@ class RoundedGlowButton(tk.Canvas):
             )
             self.delete("all")
             edge, top, bottom, text_color = self._palette()
-            outer_radius = max(9, height / 2 - 1)
-            inner_radius = max(7, height / 2 - 3)
+            strength = self._gradient_strength if self._gradient_is_available() else 0.0
+            strength = max(0.0, min(1.0, strength))
+            outer_inset = max(0.35, 1.2 - 0.75 * strength)
+            outer_radius = max(9, height / 2 - outer_inset)
+            inner_inset = 3.0 - 0.5 * strength
+            inner_radius = max(7, height / 2 - inner_inset)
             self.create_polygon(
-                _rounded_polygon(1.2, 1.2, width - 1.2, height - 1.2, outer_radius),
+                _rounded_polygon(outer_inset, outer_inset, width - outer_inset,
+                                 height - outer_inset, outer_radius),
                 fill=_blend_hex(edge, bg, 0.24), outline=edge, width=1.4,
             )
-            x0, y0, x1, y1 = 3, 3, width - 3, height - 3
+            x0, y0, x1, y1 = inner_inset, inner_inset, width - inner_inset, height - inner_inset
             self.create_polygon(
                 _rounded_polygon(x0, y0, x1, y1, inner_radius),
                 fill=bottom, outline="",
             )
-            for y in range(y0 + 1, y1):
-                left, right = self._span(y, y0 + 1, y1 - 1, x0 + 1, x1 - 1, inner_radius - 1)
+            for y in range(int(y0 + 1), int(y1)):
+                left, right = self._span(
+                    y, y0 + 1, y1 - 1, x0 + 1, x1 - 1, inner_radius - 1
+                )
                 if left <= right:
                     t = (y - y0) / max(1, y1 - y0)
                     color = _blend_hex(top, bottom, max(0.0, min(1.0, t)))
+                    if strength > 0.0:
+                        tint = _cyclic_palette_color(
+                            BUTTON_FILL_GRADIENT, self._gradient_phase + t * 0.36
+                        )
+                        color = _blend_hex(color, tint, 0.28 * strength)
                     self.create_line(left, y, right, y, fill=color, width=1)
             self.create_polygon(
-                _rounded_polygon(1.2, 1.2, width - 1.2, height - 1.2, outer_radius),
+                _rounded_polygon(outer_inset, outer_inset, width - outer_inset,
+                                 height - outer_inset, outer_radius),
                 fill="", outline=edge, width=1.1,
             )
-            self.create_line(
-                min(width / 2 - 10, 26), 4,
-                max(width / 2 + 10, width - 26), 4,
-                fill=_blend_hex(edge, "#FFFFFF", 0.34 if self._hovered else 0.16),
-                width=1,
-            )
+            if strength > 0.0:
+                self._draw_gradient_outline(
+                    width, height, outer_inset, outer_radius,
+                    BUTTON_OUTER_GRADIENT, self._gradient_phase, 1.8 * strength,
+                )
+                self._draw_gradient_outline(
+                    width, height, inner_inset + 0.5, inner_radius,
+                    BUTTON_INNER_GRADIENT, self._gradient_phase + 0.27, 1.2 * strength,
+                )
+            else:
+                self.create_line(
+                    min(width / 2 - 10, 26), 4,
+                    max(width / 2 + 10, width - 26), 4,
+                    fill=_blend_hex(edge, "#FFFFFF", 0.34 if self._hovered else 0.16),
+                    width=1,
+                )
             self.create_text(
                 width / 2, height / 2 + (0.5 if self._pressed else 0),
                 text=self.text, fill=text_color, font=self._font,
@@ -641,11 +771,22 @@ class RoundedGlowButton(tk.Canvas):
 
     def _on_enter(self, _event=None):
         self._hovered = True
+        if self._gradient_is_available():
+            if self.app.config.get("animations_enabled", False):
+                self._schedule_gradient_animation()
+            else:
+                self._gradient_strength = 1.0
+                self._gradient_phase = 0.0
         self._draw()
 
     def _on_leave(self, _event=None):
         self._hovered = False
         self._pressed = False
+        if not self.app.config.get("animations_enabled", False):
+            self._gradient_strength = 0.0
+            self._gradient_phase = 0.0
+        elif self._gradient_strength > 0.0 or self._gradient_phase != 0.0:
+            self._schedule_gradient_animation()
         self._draw()
 
     def _on_press(self, _event=None):
