@@ -67,6 +67,33 @@ class VirusTotalReportTests(unittest.TestCase):
         self.assertEqual(existing["results"], attrs["last_analysis_results"])
         self.assertEqual(request.call_args_list[1].args[0], f"https://www.virustotal.com/api/v3/files/{expected}")
 
+    def test_http_409_waits_for_existing_report_to_finish(self):
+        attrs = {
+            "last_analysis_stats": {"malicious": 0, "suspicious": 0, "undetected": 70},
+            "last_analysis_results": {
+                "ExampleAV": {"category": "undetected", "result": None}
+            },
+            "last_analysis_date": 1792514000,
+        }
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ffprobe.exe"
+            path.write_bytes(b"duplicate pending executable")
+            expected = hashlib.sha256(path.read_bytes()).hexdigest()
+            with patch("scripts.virus_total_scan._api_json", side_effect=[
+                VirusTotalAPIError(409, "already exists"),
+                {"data": {"attributes": {}}},
+                {"data": {"attributes": attrs}},
+            ]) as request:
+                analysis_id, existing = submit_file(path, "unit-test-key")
+        self.assertIsNone(analysis_id)
+        self.assertEqual(existing["stats"], attrs["last_analysis_stats"])
+        self.assertEqual(existing["results"], attrs["last_analysis_results"])
+        self.assertEqual(request.call_count, 3)
+        self.assertEqual(
+            request.call_args_list[1].args[0],
+            f"https://www.virustotal.com/api/v3/files/{expected}",
+        )
+
     def test_clean_result_is_not_misclassified_as_a_detection(self):
         summary, detections, has_findings = summarize_analysis(
             "yt-dlp.exe",

@@ -170,23 +170,36 @@ def _sha256(path: Path) -> str:
 
 
 def _existing_analysis(sha256: str, api_key: str) -> dict:
-    """Load an already indexed file report when VirusTotal answers HTTP 409."""
-    response = _api_json(f"{API_ROOT}/files/{sha256}", api_key)
-    data = response.get("data") or {}
-    attributes = data.get("attributes") or {}
-    stats = attributes.get("last_analysis_stats")
-    results = attributes.get("last_analysis_results")
-    if not isinstance(stats, dict) or not isinstance(results, dict) or not results:
-        raise RuntimeError(
-            "VirusTotal says this file already exists, but its file report has no completed analysis results."
-        )
-    return {
-        "status": "completed",
-        "stats": stats,
-        "results": results,
-        "last_analysis_date": attributes.get("last_analysis_date"),
-        "source": "existing-file-report",
-    }
+    """Wait for the indexed file report to finish after an HTTP 409 duplicate upload.
+
+    Each request passes through _api_json's shared rate limiter. A 409 only means
+    the bytes are already indexed; the report may still be processing, so missing
+    results must never be interpreted as a clean verdict.
+    """
+    last_attributes: dict = {}
+    for attempt in range(MAX_POLL_ROUNDS):
+        response = _api_json(f"{API_ROOT}/files/{sha256}", api_key)
+        data = response.get("data") or {}
+        attributes = data.get("attributes") or {}
+        if isinstance(attributes, dict):
+            last_attributes = attributes
+        stats = last_attributes.get("last_analysis_stats")
+        results = last_attributes.get("last_analysis_results")
+        if isinstance(stats, dict) and isinstance(results, dict) and results:
+            return {
+                "status": "completed",
+                "stats": stats,
+                "results": results,
+                "last_analysis_date": last_attributes.get("last_analysis_date"),
+                "source": "existing-file-report",
+            }
+        if attempt + 1 < MAX_POLL_ROUNDS:
+            # The next _api_json call applies the configured VirusTotal rate limit.
+            continue
+    raise RuntimeError(
+        "VirusTotal says this file already exists, but its report did not expose "
+        f"completed analysis results after {MAX_POLL_ROUNDS} checks. No clean verdict is implied."
+    )
 
 
 def submit_file(path: Path, api_key: str) -> tuple[str | None, dict | None]:
