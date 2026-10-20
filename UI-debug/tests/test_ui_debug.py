@@ -116,6 +116,9 @@ class VisualConceptTests(unittest.TestCase):
                 self.assertTrue(items)
                 self.assertEqual(len(items), len(canvas.calls))
                 self.assertTrue(all(kind in {"line", "outline", "filled"} for _item, kind in items))
+        source = (ROOT / "ui_debug.py").read_text(encoding="utf-8")
+        self.assertIn("text_x = self.widget_width/2 + (self.app.scale_px(7) if self.icon_key else 0)", source)
+        self.assertIn("self.coords(self._text_id,text_x,self.widget_height/2)", source)
 
     def test_violet_blue_default_preset_and_soft_glow(self):
         self.assertEqual(ui_debug.DEFAULT_SETTINGS["accent_color"], "#895CFA")
