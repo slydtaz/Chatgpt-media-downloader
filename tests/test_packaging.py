@@ -13,6 +13,8 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('name="ChatGPTMediaDownloader"', spec)
         self.assertIn('"PIL.ImageTk"', spec)
         self.assertIn("EXE(", spec)
+        self.assertIn('icon=str(ROOT / "assets" / "app-icon.ico")', spec)
+        self.assertTrue((ROOT / "assets" / "app-icon.png").is_file())
 
     def test_windows_build_script_outputs_one_exe(self):
         script = (ROOT / "build_exe.bat").read_text(encoding="utf-8")
@@ -81,6 +83,9 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('version=str(ROOT / "windows_version_info.txt")', spec)
         self.assertIn("github.com/slydtaz/Chatgpt-media-downloader", version_info)
         self.assertIn("nao afiliado a OpenAI", version_info)
+        uninstaller_info = (ROOT / "windows_uninstaller_version_info.txt").read_text(encoding="utf-8")
+        self.assertIn("GPT-Media-Uninstaller.exe", uninstaller_info)
+        self.assertIn("5.4.0-beta.2", uninstaller_info)
 
     def test_beta_release_scans_all_runtime_inputs_and_keeps_stable_gate_strict(self):
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
@@ -93,6 +98,9 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("Security-Inventory.txt", workflow)
         self.assertIn("if ($isPrerelease)", workflow)
         self.assertIn("Stable release blocked", workflow)
+        self.assertIn("ANALYSIS COMPLETE:\\s*6/6 targets\\s*$", workflow)
+        self.assertIn("windows_uninstaller_version_info.txt", workflow)
+        self.assertIn("Prepare Windows application icon", workflow)
         self.assertIn("VirusTotal public analysis report", scanner)
         self.assertIn("DETECTION:", scanner)
         self.assertIn("install_tool_from_release", stager)
