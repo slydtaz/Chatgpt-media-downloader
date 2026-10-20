@@ -77,10 +77,37 @@ def version_key(value: str) -> tuple[int, ...]:
         return (0,)
 
 
+def _version_order_key(value: str) -> tuple[tuple[int, ...], int, int, int]:
+    """Compare semantic versions, including alpha/beta/rc prerelease precedence.
+
+    Keep version_key() backwards-compatible for callers that only need the numeric
+    version. A stable release sorts after every prerelease of the same core version.
+    """
+    text = str(value or "").strip()
+    match = re.fullmatch(
+        r"(?i)v?(\d+(?:\.\d+){0,5})(?:-([a-z]+)(?:[.-]?(\d+))?)?",
+        text,
+    )
+    if not match:
+        numeric = version_key(text)
+        core = (numeric + (0,) * 6)[:6]
+        return core, 1, 0, 0
+    numeric = tuple(int(part) for part in match.group(1).split("."))
+    core = (numeric + (0,) * 6)[:6]
+    label = (match.group(2) or "").lower()
+    if not label:
+        return core, 1, 0, 0
+    rank = {"alpha": 0, "a": 0, "beta": 1, "b": 1, "rc": 2}.get(label, -1)
+    try:
+        sequence = int(match.group(3) or 0)
+    except ValueError:
+        sequence = 0
+    return core, 0, rank, sequence
+
+
 def is_newer_version(candidate: str, current: str) -> bool:
-    left, right = version_key(candidate), version_key(current)
-    width = max(len(left), len(right))
-    return left + (0,) * (width - len(left)) > right + (0,) * (width - len(right))
+    """Return True when candidate is semantically newer, including prereleases."""
+    return _version_order_key(candidate) > _version_order_key(current)
 
 
 def _trusted_url(url: str, *, metadata: bool = False) -> bool:
