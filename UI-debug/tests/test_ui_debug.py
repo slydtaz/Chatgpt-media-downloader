@@ -139,8 +139,8 @@ class VisualConceptTests(unittest.TestCase):
                 self.assertEqual(len(items), len(canvas.calls))
                 self.assertTrue(all(kind in {"line", "outline", "filled"} for _item, kind in items))
         source = (ROOT / "ui_debug.py").read_text(encoding="utf-8")
-        self.assertIn("text_x = self.widget_width/2 + (self.app.scale_px(7) if self.icon_key else 0)", source)
-        self.assertIn("self.coords(self._text_id,text_x,self.widget_height/2)", source)
+        self.assertIn("text_x = self.widget_width / 2 + (self.app.scale_px(7) if self.icon_key else 0)", source)
+        self.assertIn("self.coords(self._text_id, text_x, self.widget_height / 2)", source)
 
     def test_violet_blue_default_preset_and_soft_glow(self):
         self.assertEqual(ui_debug.DEFAULT_SETTINGS["accent_color"], "#895CFA")
@@ -148,7 +148,7 @@ class VisualConceptTests(unittest.TestCase):
         self.assertEqual(ui_debug.PALETTES["dark"]["accent2"], "#6EA2FA")
         source = (ROOT / "ui_debug.py").read_text(encoding="utf-8")
         self.assertIn("self._glow_ids = []", source)
-        self.assertIn('tags=("button-shape","button-glow")', source)
+        self.assertIn('tags=("button-shape", "button-glow")', source)
         self.assertIn('blend_hex(SPLASH_BACKGROUND, tint, .012 + .16*t**1.65)', source)
         self.assertIn('blend_hex(SPLASH_BACKGROUND, color, .31)', source)
         self.assertNotIn('("#F472B6", "#A78BFA")', source)
@@ -187,7 +187,7 @@ class VisualConceptTests(unittest.TestCase):
             self.assertEqual(custom["accent_color_2"], "#33AADD")
 
     def test_prototype_has_independent_development_version(self):
-        self.assertEqual(ui_debug.APP_VERSION, "0.1.0-dev.11")
+        self.assertEqual(ui_debug.APP_VERSION, "0.1.0-dev.12")
         self.assertEqual(ui_debug.CHANNEL, "development")
         self.assertIn("ui-debug", ui_debug.UPDATE_BRANCH)
         self.assertNotIn("draw_orbit_icon", (ROOT / "ui_debug.py").read_text(encoding="utf-8"))
@@ -222,7 +222,9 @@ class VisualConceptTests(unittest.TestCase):
         source = (ROOT / "ui_debug.py").read_text(encoding="utf-8")
         self.assertIn("def _animate_gradient(self):", source)
         self.assertIn("def _toggle_background_gradient_palette(self, name):", source)
-        self.assertIn("# Gradient fills are static. Hover only scales the button; hue does not shift.", source)
+        self.assertIn("def _draw_gradient_visuals(self):", source)
+        self.assertIn("BUTTON_OUTER_EDGE_PALETTE", source)
+        self.assertIn("self._return_target_phase = 1.0 if", source)
 
     def test_background_gradient_settings_reject_unknown_palette_names(self):
         prototype = object.__new__(ui_debug.SpaceUIPrototype)
