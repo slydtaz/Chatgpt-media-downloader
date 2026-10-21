@@ -12,7 +12,7 @@ from typing import Sequence
 try:
     from PIL import Image, ImageChops, ImageDraw, ImageFilter
 except ImportError:  # The Canvas renderer remains available as a fallback.
-    Image = ImageChops = ImageDraw = None
+    Image = ImageChops = ImageDraw = ImageFilter = None
 
 
 def _rgb(value: str) -> tuple[int, int, int]:
