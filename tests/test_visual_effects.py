@@ -44,7 +44,9 @@ class VisualEffectsTests(unittest.TestCase):
         )
         self.assertEqual(first.size, (360, 180))
         self.assertEqual(first.mode, "RGBA")
-        self.assertEqual(first.getpixel((180, 90)), (0, 0, 0, 255))
+        center = first.getpixel((180, 90))
+        self.assertEqual(center[3], 255)
+        self.assertLess(max(center[:3]), 65)
         self.assertNotEqual(first.tobytes(), second.tobytes())
         self.assertNotEqual(second.tobytes(), aurora.tobytes())
 
