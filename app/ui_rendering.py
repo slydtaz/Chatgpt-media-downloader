@@ -10,7 +10,7 @@ from functools import lru_cache
 from typing import Sequence
 
 try:
-    from PIL import Image, ImageChops, ImageDraw
+    from PIL import Image, ImageChops, ImageDraw, ImageFilter
 except ImportError:  # The Canvas renderer remains available as a fallback.
     Image = ImageChops = ImageDraw = None
 
@@ -104,6 +104,8 @@ def render_rounded_button(
     inner_palette: Sequence[str] = (),
     hover_palette: Sequence[str] = (),
     hover: bool = False,
+    hover_strength: float = 1.0,
+    gradient_phase: float = 0.0,
     radius: int | None = None,
     scale: int = 4,
 ):
@@ -116,6 +118,8 @@ def render_rounded_button(
     scale = max(3, min(4, int(scale)))
     w, h = width * scale, height * scale
     base_radius = max(4, min(int(radius if radius is not None else height / 2 - 1), height // 2, width // 2))
+    hover_strength = max(0.0, min(1.0, float(hover_strength)))
+    gradient_phase = float(gradient_phase) % 1.0
     canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
 
     outer_inset = 0.7
@@ -136,8 +140,12 @@ def render_rounded_button(
     for y in range(h):
         amount = y / max(1, h - 1)
         color = _blend(top, bottom, amount)
-        if hover and hover_palette:
-            color = _blend(color, _cyclic_color(hover_palette, amount * 0.36), 0.36)
+        if hover and hover_palette and hover_strength > 0:
+            color = _blend(
+                color,
+                _cyclic_color(hover_palette, amount * 0.36 + gradient_phase),
+                0.48 * hover_strength,
+            )
         fill_draw.line((0, y, w - 1, y), fill=(*_rgb(color), 255))
     fill.putalpha(shape_mask(inner_inset))
     canvas.alpha_composite(fill)
@@ -147,6 +155,17 @@ def render_rounded_button(
     inner_mask = shape_mask(inner_inset)
     outer_ring = ImageChops.subtract(outer_mask, mid_mask)
     inner_ring = ImageChops.subtract(mid_mask, inner_mask)
+
+    if hover and hover_strength > 0 and ImageFilter is not None:
+        halo_mask = outer_ring.filter(ImageFilter.GaussianBlur(radius=max(1, round(scale * 2.0))))
+        halo_mask = halo_mask.point(lambda value: round(value * hover_strength * 0.52))
+        halo = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        halo_draw = ImageDraw.Draw(halo)
+        for x in range(w):
+            halo_color = _rgb(_cyclic_color(hover_palette or outer_palette, gradient_phase + x / max(1, w - 1)))
+            halo_draw.line((x, 0, x, h - 1), fill=(*halo_color, 255))
+        halo.putalpha(halo_mask)
+        canvas.alpha_composite(halo)
 
     def paint_ring(mask, palette: Sequence[str], phase: float, solid: str):
         layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
@@ -162,9 +181,9 @@ def render_rounded_button(
         layer.putalpha(mask)
         canvas.alpha_composite(layer)
 
-    paint_ring(outer_ring, outer_palette, 0.03, edge)
+    paint_ring(outer_ring, outer_palette, 0.03 + gradient_phase, edge)
     if inner_palette:
-        paint_ring(inner_ring, inner_palette, 0.39, edge)
+        paint_ring(inner_ring, inner_palette, 0.39 - gradient_phase * 0.73, edge)
     resampling = getattr(Image, "Resampling", Image).LANCZOS
     return canvas.resize((width, height), resampling)
 
