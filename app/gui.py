@@ -28,7 +28,7 @@ from .playlist import PlaylistInfo, format_duration, inspect_playlist
 from .updater import UpdateError, check_latest, install_tool_from_release
 from .app_update import (
     AppUpdate, AppUpdateError, check_for_update, check_repair_candidate,
-    prepare_update, schedule_apply_update,
+    list_available_releases, prepare_update, schedule_apply_update,
 )
 from .uninstall import launch_uninstaller
 from .brand_assets import load_brand_images
@@ -1031,6 +1031,8 @@ class MediaDownloaderApp:
         self.cancel_requested = threading.Event()
         self._playlist_title = "Playlist"
         self._app_update_info: AppUpdate | None = None
+        self._available_release_updates: dict[str, AppUpdate] = {}
+        self._release_list_loading = False
         self._app_update_checking = False
         self._app_update_busy = False
         self._app_update_prompt_open = False
@@ -2709,7 +2711,22 @@ class MediaDownloaderApp:
 
         options = self._card(body, 14)
         options.pack(fill="x", pady=(0, 12))
-        ttk.Label(options, text="Preferências", style="CardTitle.TLabel").pack(anchor="w", pady=(0, 7))
+        ttk.Label(options, text="Preferências e canal", style="CardTitle.TLabel").pack(anchor="w", pady=(0, 7))
+        installed_channel = "Pré-release (Beta/RC)" if re.search(r"(?i)-(?:alpha|beta|rc)\\.\\d+$", VERSION) else "Release estável"
+        ttk.Label(
+            options,
+            text=f"Canal instalado: {installed_channel}  ·  Versão {VERSION}",
+            style="Muted.TLabel", wraplength=740,
+        ).pack(anchor="w", pady=(0, 6))
+        self.update_include_prereleases_var = tk.BooleanVar(
+            value=bool(self.config.get("update_include_prereleases", False))
+        )
+        ttk.Checkbutton(
+            options,
+            text="Aceitar pré-releases (Alpha/Beta/RC) nas verificações automáticas",
+            variable=self.update_include_prereleases_var,
+            command=self._save_update_preferences,
+        ).pack(anchor="w", pady=(0, 5))
         ttk.Checkbutton(
             options, text="Abrir o aplicativo automaticamente depois de atualizar (recomendado)",
             variable=self.update_open_after_var, command=self._save_update_preferences,
@@ -2748,6 +2765,40 @@ class MediaDownloaderApp:
         self.app_update_progress_label_var = tk.StringVar(value="Nenhuma atualização em andamento.")
         ttk.Label(actions, textvariable=self.app_update_progress_label_var, style="Muted.TLabel", wraplength=740).pack(anchor="w", pady=(6, 0))
 
+        versions = self._card(body, 14)
+        versions.pack(fill="x", pady=(0, 12))
+        ttk.Label(versions, text="Todas as versões publicadas", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            versions,
+            text=("Consulte o histórico completo e instale uma versão específica. As pré-releases aparecem aqui mesmo "
+                  "quando o canal automático está configurado para versões estáveis. Executáveis só aparecem se "
+                  "a Release tiver o EXE e o manifesto SHA-256 exigidos."),
+            style="Card.TLabel", wraplength=740, justify="left",
+        ).pack(anchor="w", pady=(4, 9))
+        version_row = ttk.Frame(versions, style="Card.TFrame")
+        version_row.pack(fill="x")
+        self.release_version_var = tk.StringVar(value="")
+        self.release_version_combo = ttk.Combobox(
+            version_row, textvariable=self.release_version_var, values=(),
+            state="readonly", width=58,
+        )
+        self.release_version_combo.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.release_list_button = RoundedGlowButton(
+            version_row, text="Listar releases", style="Secondary.TButton",
+            command=self._start_release_list_load,
+        )
+        self.release_list_button.pack(side="left", padx=(0, 8))
+        self.release_install_button = RoundedGlowButton(
+            version_row, text="Instalar versão", style="Accent.TButton",
+            state="disabled", command=self._download_selected_release,
+        )
+        self.release_install_button.pack(side="left")
+        self.release_list_status_var = tk.StringVar(value="O catálogo ainda não foi carregado.")
+        ttk.Label(
+            versions, textvariable=self.release_list_status_var, style="Muted.TLabel",
+            wraplength=740, justify="left",
+        ).pack(anchor="w", pady=(7, 0))
+
         safety = self._card(body, 14)
         safety.pack(fill="x", pady=(0, 20))
         ttk.Label(safety, text="Como funciona a reparação", style="CardTitle.TLabel").pack(anchor="w")
@@ -2764,6 +2815,8 @@ class MediaDownloaderApp:
             updated = dict(self.config)
             updated["update_open_after"] = bool(self.update_open_after_var.get())
             updated["update_check_on_startup"] = bool(self.update_check_on_startup_var.get())
+            if hasattr(self, "update_include_prereleases_var"):
+                updated["update_include_prereleases"] = bool(self.update_include_prereleases_var.get())
             save_config(updated)
             self.config = updated
         except Exception as exc:
@@ -2783,11 +2836,15 @@ class MediaDownloaderApp:
         if hasattr(self, "app_update_check_button"):
             self.app_update_check_button.configure(state="disabled")
         self.app_update_status_var.set("Consultando o GitHub…")
-        self.app_update_progress_label_var.set("Verificando a versão do aplicativo.")
+        self.app_update_progress_label_var.set("Verificando o canal de atualização selecionado.")
+        include_prereleases = bool(self.config.get("update_include_prereleases", False))
 
         def worker():
             try:
-                update = check_for_update(VERSION, frozen=IS_FROZEN)
+                update = check_for_update(
+                    VERSION, frozen=IS_FROZEN,
+                    include_prereleases=include_prereleases,
+                )
                 self.ui_queue.put(("app_update_check_done", (update, None, user_initiated)))
             except Exception as exc:
                 self.ui_queue.put(("app_update_check_done", (None, exc, user_initiated)))
@@ -2811,7 +2868,9 @@ class MediaDownloaderApp:
             self._app_update_info = None
             self.app_update_install_button.configure(state="disabled")
             self.app_update_status_var.set(f"Você está usando a versão {VERSION}.")
-            self.app_update_latest_var.set("Não foi encontrada uma versão mais recente disponível para este tipo de instalação.")
+            channel = "Pré-release (Beta/RC)" if re.search(r"(?i)-(?:alpha|beta|rc)\\.\\d+$", VERSION) else "Release estável"
+            wanted = "estáveis e pré-releases" if self.config.get("update_include_prereleases", False) else "somente estáveis"
+            self.app_update_latest_var.set(f"Canal instalado: {channel}. Nenhuma versão mais nova encontrada no canal {wanted}.")
             self.app_update_notes_var.set("Consulte as Releases do GitHub para ver o histórico publicado. Antes da primeira Release estável, builds executáveis não podem ser atualizados automaticamente.")
             self.app_update_progress_label_var.set("Nenhum download foi iniciado.")
             if user_initiated:
@@ -2819,8 +2878,11 @@ class MediaDownloaderApp:
             return
         self._app_update_info = update
         self.app_update_status_var.set(f"Nova versão disponível: {update.version}")
-        channel = "Release oficial" if update.kind == "executable" or update.tag_name not in {"", "main"} else "Código-fonte da branch main"
-        self.app_update_latest_var.set(f"Versão instalada: {VERSION}  •  Disponível: {update.version}  •  Origem: {channel}")
+        release_channel = "Pré-release" if re.search(r"(?i)-(?:alpha|beta|rc)\\.\\d+$", update.version) else "Release estável"
+        artifact_kind = "Executável" if update.kind == "executable" else "Código-fonte"
+        self.app_update_latest_var.set(
+            f"Versão instalada: {VERSION}  •  Disponível: {update.version} ({release_channel})  •  {artifact_kind}"
+        )
         notes = update.notes.strip() or "Sem notas de versão publicadas."
         self.app_update_notes_var.set(notes[:1800])
         self.app_update_progress_label_var.set("Aguardando sua confirmação antes de baixar os arquivos.")
@@ -2828,24 +2890,103 @@ class MediaDownloaderApp:
         if not self._app_update_prompt_open:
             self._show_update_prompt(update)
 
+    def _start_release_list_load(self):
+        if self._release_list_loading or self._app_update_busy:
+            self.release_list_status_var.set("Aguarde a operação atual terminar.")
+            return
+        self._release_list_loading = True
+        self.release_list_button.configure(state="disabled")
+        self.release_install_button.configure(state="disabled")
+        self.release_list_status_var.set("Consultando versões publicadas no GitHub…")
+
+        def worker():
+            try:
+                updates = list_available_releases(
+                    VERSION, frozen=IS_FROZEN, include_prereleases=True, limit=100,
+                )
+                self.ui_queue.put(("app_release_list_done", (updates, None)))
+            except Exception as exc:
+                self.ui_queue.put(("app_release_list_done", (None, exc)))
+
+        threading.Thread(target=worker, name="CGMD-ReleaseCatalog", daemon=True).start()
+
+    def _handle_release_list_done(self, data):
+        updates, error = data
+        self._release_list_loading = False
+        self.release_list_button.configure(state="normal")
+        if error:
+            self.release_list_status_var.set(f"Não foi possível carregar o catálogo: {error}")
+            self._append_log(f"Falha ao consultar releases: {error}")
+            return
+        values = []
+        self._available_release_updates = {}
+        for update in updates or []:
+            prerelease = bool(re.search(r"(?i)-(?:alpha|beta|rc)\\.\\d+$", update.version))
+            channel = "Pré-release" if prerelease else "Estável"
+            label = f"{update.version}  ·  {channel}  ·  {update.tag_name}"
+            if label in self._available_release_updates:
+                continue
+            values.append(label)
+            self._available_release_updates[label] = update
+        self.release_version_combo.configure(values=values)
+        if values:
+            current = next(
+                (label for label, update in self._available_release_updates.items()
+                 if update.version == VERSION),
+                values[0],
+            )
+            self.release_version_var.set(current)
+            self.release_install_button.configure(state="normal")
+            self.release_list_status_var.set(
+                f"{len(values)} versões disponíveis. Escolha qualquer versão e confirme a instalação na próxima janela."
+            )
+        else:
+            self.release_version_var.set("")
+            self.release_install_button.configure(state="disabled")
+            self.release_list_status_var.set(
+                "Nenhuma versão elegível foi encontrada. Executáveis exigem EXE e SHA256SUMS.txt."
+            )
+
+    def _download_selected_release(self):
+        label = self.release_version_var.get()
+        update = self._available_release_updates.get(label)
+        if update is None:
+            messagebox.showinfo(
+                "Versões publicadas", "Carregue o catálogo e selecione uma versão primeiro.",
+                parent=self.root,
+            )
+            return
+        self._app_update_info = update
+        channel = "Pré-release" if re.search(r"(?i)-(?:alpha|beta|rc)\\.\\d+$", update.version) else "Release estável"
+        self.app_update_status_var.set(f"Versão selecionada: {update.version} ({channel})")
+        self.app_update_latest_var.set(
+            f"Tag: {update.tag_name}  •  Tipo de pacote: {'Executável' if update.kind == 'executable' else 'Código-fonte'}"
+        )
+        self.app_update_notes_var.set((update.notes or "Sem notas de versão publicadas.")[:1800])
+        self.app_update_progress_label_var.set(
+            "Confirme a versão e confira as notas antes de iniciar o download."
+        )
+        self._show_update_prompt(update, selected_version=True)
+
     def _show_cached_update_prompt(self):
         if self._app_update_info:
             self._show_update_prompt(self._app_update_info)
         else:
             self._start_app_update_check(user_initiated=True)
 
-    def _show_update_prompt(self, update: AppUpdate):
+    def _show_update_prompt(self, update: AppUpdate, *, selected_version: bool = False):
         if self._app_update_prompt_open or self._app_update_busy:
             return
         self._app_update_prompt_open = True
         dialog = tk.Toplevel(self.root)
-        dialog.title("Atualização disponível")
+        dialog.title("Instalar versão selecionada" if selected_version else "Atualização disponível")
         dialog.transient(self.root)
         dialog.resizable(False, False)
         dialog.configure(bg=self.colors["bg"])
         box = self._card(dialog, 18)
         box.pack(fill="both", expand=True, padx=14, pady=14)
-        ttk.Label(box, text=f"Nova versão {update.version} disponível", style="CardTitle.TLabel", font=("Segoe UI", 14, "bold")).pack(anchor="w")
+        prompt_label = "Versão selecionada" if selected_version else "Nova versão disponível"
+        ttk.Label(box, text=f"{prompt_label}: {update.version}", style="CardTitle.TLabel", font=("Segoe UI", 14, "bold")).pack(anchor="w")
         ttk.Label(box, text=f"Versão instalada: {VERSION}\nOrigem: {'Release oficial' if update.kind == 'executable' or update.tag_name not in {'', 'main'} else 'repositório main'}", style="Card.TLabel", justify="left").pack(anchor="w", pady=(8, 10))
         notes = update.notes.strip() or "Esta versão contém mudanças no repositório oficial."
         ttk.Label(box, text=notes[:1000], style="Card.TLabel", wraplength=470, justify="left").pack(anchor="w", pady=(0, 10))
@@ -2875,7 +3016,10 @@ class MediaDownloaderApp:
                 pass
             self._start_app_update(update, repair=False)
 
-        RoundedGlowButton(actions, text="Atualizar agora", style="Accent.TButton", command=start_update).pack(side="left")
+        RoundedGlowButton(
+            actions, text="Instalar versão" if selected_version else "Atualizar agora",
+            style="Accent.TButton", command=start_update,
+        ).pack(side="left")
         RoundedGlowButton(actions, text="Continuar nesta versão", style="Secondary.TButton", command=later).pack(side="right")
         dialog.protocol("WM_DELETE_WINDOW", later)
         dialog.update_idletasks()
@@ -3560,6 +3704,8 @@ class MediaDownloaderApp:
                     self.status_var.set(f"Instalando {tool}: {stage}")
                 elif kind == "app_update_check_done":
                     self._handle_app_update_check(data)
+                elif kind == "app_release_list_done":
+                    self._handle_release_list_done(data)
                 elif kind == "app_update_progress":
                     label, done, total = data
                     self.app_update_progress_label_var.set(str(label))
