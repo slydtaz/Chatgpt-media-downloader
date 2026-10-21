@@ -1386,7 +1386,7 @@ class MediaDownloaderApp:
         try:
             if canvas is None or not canvas.winfo_exists() or not self.root.winfo_exists():
                 return
-            if not self.root.winfo_viewable() or canvas.winfo_width() < 200 or canvas.winfo_height() < 200:
+            if canvas.winfo_width() < 200 or canvas.winfo_height() < 200:
                 self._loading_animation_job = self.root.after(60, self._animate_loading_splash)
                 return
             elapsed = max(0.0, time.monotonic() - self._loading_started_at)
