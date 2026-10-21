@@ -241,10 +241,17 @@ def _release_version(release: dict) -> str:
     return match.group(1) if match else ""
 
 
-def _release_candidate(current: str, release: dict, *, frozen: bool) -> Optional[AppUpdate]:
+def _release_candidate(
+    current: str,
+    release: dict,
+    *,
+    frozen: bool,
+    require_newer: bool = True,
+    allow_unavailable: bool = False,
+) -> Optional[AppUpdate]:
     tag = str(release.get("tag_name") or "").strip()
     candidate_version = _release_version(release)
-    if not tag or not candidate_version or not is_newer_version(candidate_version, current):
+    if not tag or not candidate_version or (require_newer and not is_newer_version(candidate_version, current)):
         return None
     html_url = str(release.get("html_url") or f"https://github.com/{OWNER}/{REPOSITORY}/releases")
     body = str(release.get("body") or "").strip()
@@ -253,6 +260,8 @@ def _release_candidate(current: str, release: dict, *, frozen: bool) -> Optional
         exe = _asset(release, "ChatGPTMediaDownloader.exe")
         sums = _asset(release, "SHA256SUMS.txt")
         if not exe or not sums:
+            if allow_unavailable:
+                return None
             raise AppUpdateError(
                 f"A Release {tag} não contém ChatGPTMediaDownloader.exe e SHA256SUMS.txt. "
                 "A atualização automática foi cancelada por segurança."
@@ -275,10 +284,73 @@ def _release_candidate(current: str, release: dict, *, frozen: bool) -> Optional
     )
 
 
-def check_for_update(current_version: str = VERSION, *, frozen: Optional[bool] = None) -> Optional[AppUpdate]:
-    """Choose the newest published release first, then fall back to stable alias/source."""
+def list_available_releases(
+    current_version: str = VERSION,
+    *,
+    frozen: Optional[bool] = None,
+    include_prereleases: bool = True,
+    limit: int = 100,
+) -> list[AppUpdate]:
+    """Return downloadable, versioned GitHub Releases newest-first.
+
+    Only real semantic-version tags are offered (not the mutable 'stable' alias).
+    Frozen installations list releases that contain both the executable and the
+    SHA256 manifest; source installations can select any published versioned tag.
+    """
     if frozen is None:
         frozen = bool(getattr(sys, "frozen", False))
+    try:
+        limit = max(1, min(100, int(limit)))
+    except (TypeError, ValueError):
+        limit = 100
+    releases = _request_json_list(f"{API_ROOT}/releases?per_page=100")
+    candidates: list[AppUpdate] = []
+    seen_tags: set[str] = set()
+    versioned_tag = re.compile(r"(?i)^v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$")
+    for release in releases:
+        if release.get("draft"):
+            continue
+        tag = str(release.get("tag_name") or "").strip()
+        if not versioned_tag.fullmatch(tag) or tag.casefold() in seen_tags:
+            continue
+        seen_tags.add(tag.casefold())
+        version = _release_version(release)
+        if not version:
+            continue
+        prerelease = bool(release.get("prerelease")) or bool(re.search(r"(?i)-(?:alpha|beta|rc)\.\d+$", version))
+        if prerelease and not include_prereleases:
+            continue
+        candidate = _release_candidate(
+            current_version, release, frozen=frozen,
+            require_newer=False, allow_unavailable=True,
+        )
+        if candidate is not None:
+            candidates.append(candidate)
+    candidates.sort(key=lambda update: (_version_order_key(update.version), update.published_at), reverse=True)
+    return candidates[:limit]
+
+
+def check_for_update(
+    current_version: str = VERSION,
+    *,
+    frozen: Optional[bool] = None,
+    include_prereleases: bool = False,
+) -> Optional[AppUpdate]:
+    """Find the newest applicable release; prereleases are opt-in for every channel."""
+    if frozen is None:
+        frozen = bool(getattr(sys, "frozen", False))
+
+    if include_prereleases:
+        try:
+            for candidate in list_available_releases(
+                current_version, frozen=frozen, include_prereleases=True,
+            ):
+                if is_newer_version(candidate.version, current_version):
+                    return candidate
+        except AppUpdateError:
+            # A failed all-releases query must not prevent a stable-only fallback.
+            if frozen:
+                raise
 
     # Versioned releases are the historical source of truth. Prefer GitHub's
     # latest versioned stable release; only use the mutable stable alias when
