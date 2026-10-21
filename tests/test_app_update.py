@@ -28,6 +28,7 @@ from app.app_update import (
     AppUpdate,
     check_for_update,
     check_repair_candidate,
+    list_available_releases,
     is_newer_version,
     version_key,
 )
@@ -102,7 +103,7 @@ class VersionComparisonTests(unittest.TestCase):
             "assets": [],
         }
         with patch("app.app_update._request_json", return_value=stable), patch("app.app_update._request_json_list", return_value=[next_beta]) as list_request:
-            update = check_for_update("5.4.0-beta.1", frozen=False)
+            update = check_for_update("5.4.0-beta.1", frozen=False, include_prereleases=True)
         self.assertIsNotNone(update)
         self.assertEqual(update.version, "5.4.0-beta.2")
         self.assertEqual(update.source_ref, "v5.4.0-beta.2")
@@ -110,6 +111,72 @@ class VersionComparisonTests(unittest.TestCase):
 
 
 class AppUpdateDiscoveryTests(unittest.TestCase):
+    def test_release_catalog_lists_stable_and_prerelease_versions_newest_first(self):
+        releases = [
+            {"tag_name": "v5.3.0", "name": "5.3.0 stable", "draft": False,
+             "prerelease": False, "published_at": "2026-01-01T00:00:00Z",
+             "body": "stable notes", "assets": []},
+            {"tag_name": "v5.4.0-beta.3", "name": "5.4.0-beta.3 beta", "draft": False,
+             "prerelease": True, "published_at": "2026-02-01T00:00:00Z",
+             "body": "beta notes", "assets": []},
+            {"tag_name": "stable", "name": "Stable alias", "draft": False,
+             "prerelease": False, "body": "alias", "assets": []},
+            {"tag_name": "v9.9.9", "name": "draft", "draft": True,
+             "prerelease": False, "body": "draft", "assets": []},
+        ]
+        with patch("app.app_update._request_json_list", return_value=releases):
+            updates = list_available_releases("5.2.0", frozen=False, include_prereleases=True)
+        self.assertEqual([item.version for item in updates], ["5.4.0-beta.3", "5.3.0"])
+        self.assertEqual([item.tag_name for item in updates], ["v5.4.0-beta.3", "v5.3.0"])
+
+    def test_release_catalog_can_hide_prereleases_without_hiding_stable_versions(self):
+        releases = [
+            {"tag_name": "v5.4.0-beta.3", "draft": False, "prerelease": True,
+             "body": "beta notes", "assets": []},
+            {"tag_name": "v5.3.0", "draft": False, "prerelease": False,
+             "body": "stable notes", "assets": []},
+        ]
+        with patch("app.app_update._request_json_list", return_value=releases):
+            updates = list_available_releases("5.2.0", frozen=False, include_prereleases=False)
+        self.assertEqual([item.version for item in updates], ["5.3.0"])
+
+    def test_specific_older_release_can_be_selected_without_semver_upgrade_check(self):
+        release = {
+            "tag_name": "v5.2.0", "name": "5.2.0 stable", "draft": False,
+            "prerelease": False, "body": "old release notes", "assets": [],
+        }
+        selected = _release_candidate("5.4.0-beta.3", release, frozen=False, require_newer=False)
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.version, "5.2.0")
+        self.assertEqual(selected.source_ref, "v5.2.0")
+
+    def test_opt_in_allows_stable_install_to_find_newer_prerelease(self):
+        releases = [
+            {"tag_name": "v5.4.0-beta.3", "name": "5.4.0-beta.3 beta",
+             "draft": False, "prerelease": True, "body": "beta notes", "assets": []},
+            {"tag_name": "v5.3.0", "name": "5.3.0 stable",
+             "draft": False, "prerelease": False, "body": "stable notes", "assets": []},
+        ]
+        with patch("app.app_update._request_json_list", return_value=releases):
+            update = check_for_update("5.3.0", frozen=False, include_prereleases=True)
+        self.assertIsNotNone(update)
+        self.assertEqual(update.version, "5.4.0-beta.3")
+        self.assertEqual(update.source_ref, "v5.4.0-beta.3")
+
+    def test_default_update_check_does_not_query_prereleases(self):
+        stable = {
+            "tag_name": "v5.3.0", "name": "5.3.0 stable",
+            "draft": False, "prerelease": False, "body": "stable notes", "assets": [],
+        }
+        with patch("app.app_update._request_json", return_value=stable), \
+             patch("app.app_update._source_version", return_value="5.3.0"), \
+             patch("app.app_update._request_json_list") as release_list:
+            update = check_for_update("5.3.0", frozen=False, include_prereleases=False)
+        self.assertIsNone(update)
+        release_list.assert_not_called()
+
+
+
     def test_source_install_uses_main_branch_when_no_release_is_published(self):
         with patch("app.app_update._request_json", return_value=None), \
              patch("app.app_update._source_version", return_value="5.0.0"), \
