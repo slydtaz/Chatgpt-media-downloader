@@ -21,7 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 from app.config import VERSION  # noqa: E402
-from app.gui import MediaDownloaderApp  # noqa: E402
+from app.gui import MediaDownloaderApp, RoundedGlowButton  # noqa: E402
 
 
 class _POINTL(ctypes.Structure):
@@ -198,6 +198,9 @@ def main() -> int:
         # override it after initialization only for this bounded screenshot harness.
         root.geometry(f"{capture_width}x{capture_height}+0+0")
         root.attributes("-fullscreen", True)
+        # Reset the visual-only stopwatch immediately before the harness begins
+        # pumping events, so the real splash remains visible long enough to capture.
+        app._loading_started_at = time.monotonic()
         root.update_idletasks()
         root.deiconify()
         root.lift()
@@ -240,6 +243,67 @@ def main() -> int:
             captured.append((label, image))
             print(f"CAPTURED {filename} {image.width}x{image.height}", flush=True)
 
+        # Capture two real fullscreen moments of the same running ambient layer.
+        _wait_for_page(root, app, "home")
+        deadline = time.monotonic() + 0.16
+        while time.monotonic() < deadline:
+            root.update()
+            time.sleep(0.01)
+        phase_a = _capture_window(root)
+        phase_a_file = "08-fundo-animado-fase-a.png"
+        phase_a.save(output_dir / phase_a_file, format="PNG", optimize=True)
+        captured.append(("Fundo animado · fase A", phase_a))
+        print(f"CAPTURED {phase_a_file} {phase_a.width}x{phase_a.height}", flush=True)
+
+        deadline = time.monotonic() + 0.62
+        while time.monotonic() < deadline:
+            root.update()
+            time.sleep(0.01)
+        phase_b = _capture_window(root)
+        phase_b_file = "09-fundo-animado-fase-b.png"
+        phase_b.save(output_dir / phase_b_file, format="PNG", optimize=True)
+        captured.append(("Fundo animado · fase B", phase_b))
+        print(f"CAPTURED {phase_b_file} {phase_b.width}x{phase_b.height}", flush=True)
+
+        # Drive the same enter/fade loop that the actual rounded button uses. This
+        # captures a still photo after the configured one-second gradient reveal.
+        def walk_widgets(widget):
+            try:
+                children = widget.winfo_children()
+            except Exception:
+                return
+            for child in children:
+                yield child
+                yield from walk_widgets(child)
+
+        hover_candidates = [
+            widget for widget in walk_widgets(root)
+            if isinstance(widget, RoundedGlowButton)
+            and widget.winfo_exists()
+            and widget.winfo_ismapped()
+            and widget._state != "disabled"
+            and widget._gradient_is_available()
+        ]
+        if hover_candidates:
+            hover_button = next(
+                (button for button in hover_candidates
+                 if "baixar" in button.text.casefold() or button.style_name == "Accent.TButton"),
+                hover_candidates[0],
+            )
+            hover_button._on_enter()
+            deadline = time.monotonic() + 1.12
+            while time.monotonic() < deadline:
+                root.update()
+                time.sleep(0.01)
+            hover_image = _capture_window(root)
+            hover_file = "10-hover-botao-gradiente.png"
+            hover_image.save(output_dir / hover_file, format="PNG", optimize=True)
+            captured.append(("Botão após 1 s de hover", hover_image))
+            print(f"CAPTURED {hover_file} {hover_image.width}x{hover_image.height}", flush=True)
+            hover_button._on_leave()
+        else:
+            raise RuntimeError("Não foi encontrado um botão ativo para validar o hover.")
+
         _make_contact_sheet(captured, output_dir / "visao-geral.png")
 
         report = {
@@ -249,6 +313,9 @@ def main() -> int:
             "capture_method": "Pillow ImageGrab from the real fullscreen Tk window at 1440x900 on a Windows GitHub Actions runner",
             "capture_resolution": "1440x900",
             "loading_screen_file": "00-tela-carregamento.png",
+            "background_phase_files": ["08-fundo-animado-fase-a.png", "09-fundo-animado-fase-b.png"],
+            "button_hover_file": "10-hover-botao-gradiente.png",
+            "screenshots": [path.name for path in sorted(output_dir.glob("*.png"))],
             "pages": [{"key": key, "file": filename, "label": label} for key, filename, label in PAGES],
             "media_downloads_started": False,
             "dependency_scans_started": False,
