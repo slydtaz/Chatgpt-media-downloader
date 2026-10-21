@@ -5,6 +5,8 @@ import json
 import os
 import sys
 import tempfile
+import ctypes
+from ctypes import wintypes
 import time
 from pathlib import Path
 
@@ -20,6 +22,62 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from app.config import VERSION  # noqa: E402
 from app.gui import MediaDownloaderApp  # noqa: E402
+
+
+class _POINTL(ctypes.Structure):
+    _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
+
+
+class _DEVMODEW(ctypes.Structure):
+    _fields_ = [
+        ("dmDeviceName", wintypes.WCHAR * 32),
+        ("dmSpecVersion", wintypes.WORD), ("dmDriverVersion", wintypes.WORD),
+        ("dmSize", wintypes.WORD), ("dmDriverExtra", wintypes.WORD),
+        ("dmFields", wintypes.DWORD), ("dmPosition", _POINTL),
+        ("dmDisplayOrientation", wintypes.DWORD), ("dmDisplayFixedOutput", wintypes.DWORD),
+        ("dmColor", wintypes.SHORT), ("dmDuplex", wintypes.SHORT),
+        ("dmYResolution", wintypes.SHORT), ("dmTTOption", wintypes.SHORT),
+        ("dmCollate", wintypes.SHORT), ("dmFormName", wintypes.WCHAR * 32),
+        ("dmLogPixels", wintypes.WORD), ("dmBitsPerPel", wintypes.DWORD),
+        ("dmPelsWidth", wintypes.DWORD), ("dmPelsHeight", wintypes.DWORD),
+        ("dmDisplayFlags", wintypes.DWORD), ("dmDisplayFrequency", wintypes.DWORD),
+        ("dmICMMethod", wintypes.DWORD), ("dmICMIntent", wintypes.DWORD),
+        ("dmMediaType", wintypes.DWORD), ("dmDitherType", wintypes.DWORD),
+        ("dmReserved1", wintypes.DWORD), ("dmReserved2", wintypes.DWORD),
+        ("dmPanningWidth", wintypes.DWORD), ("dmPanningHeight", wintypes.DWORD),
+    ]
+
+
+def _set_capture_resolution(width: int = 1440, height: int = 900) -> bytes | None:
+    """Ask the Windows CI desktop for the target capture size; keep the original mode."""
+    if os.name != "nt":
+        return None
+    user32 = ctypes.windll.user32
+    current = _DEVMODEW()
+    current.dmSize = ctypes.sizeof(_DEVMODEW)
+    if not user32.EnumDisplaySettingsW(None, -1, ctypes.byref(current)):
+        raise RuntimeError("Não foi possível consultar a resolução de tela do runner Windows.")
+    snapshot = bytes(current)
+    if current.dmPelsWidth == width and current.dmPelsHeight == height:
+        return None
+    desired = _DEVMODEW.from_buffer_copy(snapshot)
+    desired.dmFields = 0x00080000 | 0x00100000  # DM_PELSWIDTH | DM_PELSHEIGHT
+    desired.dmPelsWidth = width
+    desired.dmPelsHeight = height
+    result = user32.ChangeDisplaySettingsW(ctypes.byref(desired), 0)
+    if result != 0:
+        raise RuntimeError(f"O runner não aceitou a resolução de captura {width}x{height} (código {result}).")
+    return snapshot
+
+
+def _restore_capture_resolution(snapshot: bytes | None) -> None:
+    if os.name != "nt" or snapshot is None:
+        return
+    try:
+        original = _DEVMODEW.from_buffer_copy(snapshot)
+        ctypes.windll.user32.ChangeDisplaySettingsW(ctypes.byref(original), 0)
+    except Exception:
+        pass
 
 
 PAGES = [
@@ -42,7 +100,7 @@ def _font(size: int) -> ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-def _capture_window(root, *, width_limit: int = 1280) -> Image.Image:
+def _capture_window(root, *, width_limit: int = 1440) -> Image.Image:
     root.update_idletasks()
     root.update()
     x = root.winfo_rootx()
@@ -116,9 +174,11 @@ def main() -> int:
     original_uninstall = MediaDownloaderApp._uninstall
 
     root = None
+    original_display_mode = None
     captured: list[tuple[str, Image.Image]] = []
     animation_frames: list[Image.Image] = []
     try:
+        original_display_mode = _set_capture_resolution(1440, 900)
         # Never scan/install media tools, check for updates or trigger uninstall/downloads.
         MediaDownloaderApp._refresh_dependencies = lambda self, force=False: None
         MediaDownloaderApp._maybe_start_update_check = lambda self: None
@@ -128,18 +188,17 @@ def main() -> int:
 
         root = tk.Tk()
         root.title(f"ChatGPT Media Downloader {VERSION} — prévia da interface")
-        # Tk may report logical dimensions that differ from the actual captured desktop
-        # on the hosted runner. Use ImageGrab's physical desktop size to avoid clipping.
+        # Match the requested review canvas using the real Windows desktop mode.
         desktop_width, desktop_height = ImageGrab.grab().size
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
-        capture_width = max(800, min(1280, screen_width - 16, desktop_width - 16))
-        capture_height = max(600, min(850, screen_height - 60, desktop_height - 60))
-        root.geometry(f"{capture_width}x{capture_height}+4+4")
+        if (desktop_width, desktop_height) != (1440, 900):
+            raise RuntimeError(f"Resolução física inesperada do desktop: {desktop_width}x{desktop_height}; esperado 1440x900.")
+        capture_width, capture_height = 1440, 900
+        root.geometry(f"{capture_width}x{capture_height}+0+0")
         app = MediaDownloaderApp(root)
         # MediaDownloaderApp sets its normal 1220x820 default during construction;
         # override it after initialization only for this bounded screenshot harness.
-        root.geometry(f"{capture_width}x{capture_height}+4+4")
+        root.geometry(f"{capture_width}x{capture_height}+0+0")
+        root.attributes("-fullscreen", True)
         root.update_idletasks()
         root.deiconify()
         root.lift()
@@ -214,7 +273,8 @@ def main() -> int:
             "application_version": VERSION,
             "media_preview_demo_file": "00-preview-automatica.png",
             "media_preview_demo_network_requests": 0,
-            "capture_method": "Pillow ImageGrab from a real Tk window on a Windows GitHub Actions runner",
+            "capture_method": "Pillow ImageGrab from the real fullscreen Tk window at 1440x900 on a Windows GitHub Actions runner",
+            "capture_resolution": "1440x900",
             "pages": [{"key": key, "file": filename, "label": label} for key, filename, label in PAGES],
             "animation_frames": len(animation_frames),
             "media_downloads_started": False,
@@ -237,6 +297,7 @@ def main() -> int:
         MediaDownloaderApp._refresh_dependencies = original_refresh
         MediaDownloaderApp._maybe_start_update_check = original_update_check
         MediaDownloaderApp._uninstall = original_uninstall
+        _restore_capture_resolution(original_display_mode)
         # We intentionally do not delete ISOLATED_PROFILE during the process lifetime:
         # the application logger may still hold an open file handle on Windows.
 
