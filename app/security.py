@@ -136,23 +136,41 @@ def trusted_urlopen(
 
 
 def safe_archive_member_path(root: Path, member_name: str) -> Path:
-    """Resolve an archive member beneath root and reject absolute/traversal paths."""
-    raw = str(member_name or "")
+    """Resolve a portable archive member beneath root and reject traversal/Windows ADS names."""
+    if not isinstance(member_name, str):
+        raise ValueError("Arquivo compactado contém caminho inseguro.")
+    raw = member_name
+    if not raw or "\x00" in raw or any(ord(char) < 32 or ord(char) == 127 for char in raw):
+        raise ValueError("Arquivo compactado contém caminho inseguro.")
     normalized = raw.replace("\\", "/")
-    if not normalized or "\x00" in normalized or normalized.startswith("/") or re.match(r"^[a-zA-Z]:", normalized):
+    # Archive directory names commonly end in one slash; do not otherwise
+    # normalize empty or dot components away before validating them.
+    if normalized.endswith("/"):
+        normalized = normalized[:-1]
+    if not normalized or normalized.startswith("/") or re.match(r"^[a-zA-Z]:", normalized):
         raise ValueError("Arquivo compactado contém caminho inseguro.")
-    parts = PurePosixPath(normalized).parts
-    if not parts or any(part in {"", ".", ".."} for part in parts):
+    parts = normalized.split("/")
+    if any(part in {"", ".", ".."} for part in parts):
         raise ValueError("Arquivo compactado contém caminho inseguro.")
-    root_path = root.resolve()
+    for part in parts:
+        # Reject alternate data streams, invalid Windows separators/names, and
+        # reserved device names even when extracting on a non-Windows host.
+        if any(char in part for char in '<>:"|?*') or part.endswith((" ", ".")):
+            raise ValueError("Arquivo compactado contém nome de arquivo inseguro.")
+        device_stem = part.split(".", 1)[0].rstrip(" .").upper()
+        if (device_stem in {"CON", "PRN", "AUX", "NUL"}
+                or re.fullmatch(r"COM[1-9]", device_stem)
+                or re.fullmatch(r"LPT[1-9]", device_stem)):
+            raise ValueError("Arquivo compactado contém nome de dispositivo reservado.")
+    root_path = Path(root).resolve()
     target = root_path.joinpath(*parts).resolve(strict=False)
     try:
-        if os.path.commonpath((str(root_path), str(target))) != str(root_path):
+        common = os.path.commonpath((str(root_path), str(target)))
+        if os.path.normcase(common) != os.path.normcase(str(root_path)):
             raise ValueError("Arquivo compactado contém caminho inseguro.")
     except ValueError as exc:
         raise ValueError("Arquivo compactado contém caminho inseguro.") from exc
     return target
-
 
 _INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]+')
 
