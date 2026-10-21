@@ -44,7 +44,7 @@ except ImportError:  # Source runs without Pillow; the stable Windows build bund
 PALETTES = {
     "dark": {"bg":"#090A18","panel":"#111226","panel2":"#18182F","field":"#0B0C1A","fg":"#F5F3FF","muted":"#9EA3C7","border":"#302A4E","accent":"#8B5CF6","accent2":"#A78BFA","accent_fg":"#FFFFFF","good":"#34D399","warn":"#FBBF24","bad":"#FB7185","button":"#211C3A","button_hover":"#30234F","input_fg":"#F5F3FF","space":"#22D3EE","pink":"#EC4899"},
     "light": {"bg":"#F5F3FF","panel":"#FFFFFF","panel2":"#EEEBFF","field":"#FFFFFF","fg":"#21183D","muted":"#71688E","border":"#D9D1F2","accent":"#7C3AED","accent2":"#8B5CF6","accent_fg":"#FFFFFF","good":"#047857","warn":"#B45309","bad":"#BE123C","button":"#E9E3FA","button_hover":"#DCD2F7","input_fg":"#21183D","space":"#0891B2","pink":"#DB2777"},
-    "oled": {"bg":"#000000","panel":"#090814","panel2":"#111022","field":"#05040A","fg":"#F5F3FF","muted":"#A5A0C7","border":"#27213D","accent":"#8B5CF6","accent2":"#A78BFA","accent_fg":"#FFFFFF","good":"#34D399","warn":"#FBBF24","bad":"#FB7185","button":"#100D21","button_hover":"#21173A","input_fg":"#F5F3FF","space":"#22D3EE","pink":"#EC4899"},
+    "oled": {"bg":"#000000","panel":"#0B0D20","panel2":"#10142C","field":"#050617","fg":"#F5F3FF","muted":"#A5A0C7","border":"#30245A","accent":"#8B5CF6","accent2":"#A78BFA","accent_fg":"#FFFFFF","good":"#34D399","warn":"#FBBF24","bad":"#FB7185","button":"#15102E","button_hover":"#282052","input_fg":"#F5F3FF","space":"#22D3EE","pink":"#D946EF"},
 }
 
 
