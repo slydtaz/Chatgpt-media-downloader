@@ -33,7 +33,7 @@ from .app_update import (
 from .uninstall import launch_uninstaller
 from .brand_assets import load_brand_images
 from .media_preview import fetch_thumbnail_bytes, inspect_media_preview
-from .visual_effects import PALETTES as EFFECT_PALETTES, render_atom_art, render_gradient_preview, palette_colors
+from .visual_effects import PALETTES as EFFECT_PALETTES, render_atom_art, render_gradient_preview, render_ambient_gradient, palette_colors
 from .ui_rendering import render_rounded_panel, render_rounded_button
 
 try:
@@ -940,6 +940,19 @@ class MediaDownloaderApp:
         self._page_animation_job = None
         self._page_animation_target: str | None = None
         self._hero_visual_phase = 0.0
+        self._atom_phase = 0.0
+        self._ambient_phase = 0.0
+        self._ambient_last_tick = time.monotonic()
+        self._ambient_job = None
+        self._ambient_started = False
+        self._ambient_photo = None
+        self._ambient_size: tuple[int, int] | None = None
+        self._ambient_canvases: list[tk.Canvas] = []
+        self._loading_overlay_canvas = None
+        self._loading_animation_job = None
+        self._loading_started_at = 0.0
+        self._loading_background_photo = None
+        self._loading_atom_photo = None
         self.page_frames: dict[str, ttk.Frame] = {}
         self.settings_vars: dict[str, tk.StringVar] = {}
         self.nav_buttons: dict[str, tk.Widget] = {}
@@ -1008,9 +1021,11 @@ class MediaDownloaderApp:
         self._refresh_dependencies()
         self.root.report_callback_exception = self._report_callback_exception
         self._poll_queue()
-        # Optional low-motion orbit animation drawn with Canvas; disabled for new profiles.
-        self._hero_animation_job = self.root.after(180, self._animate_hero_visual)
-        self.root.after(2200, self._maybe_start_update_check)
+        # The translucent light layer and the rotating-atom startup screen are
+        # local Pillow/Tk visuals. They perform no network calls.
+        self._start_ambient_animation()
+        self._start_loading_splash()
+        self.root.after(2600, self._maybe_start_update_check)
 
     # ---------- Theme ----------
     def _resolve_theme(self, requested: str) -> str:
@@ -1169,6 +1184,7 @@ class MediaDownloaderApp:
         outer = ttk.Frame(self.root, padding=13)
         outer.pack(fill="both", expand=True)
         self.shell = outer
+        self._attach_ambient_layer(outer)
         sidebar = ttk.Frame(outer, style="Sidebar.TFrame", padding=(10, 13, 10, 12), width=216)
         sidebar.pack(side="left", fill="y", padx=(0, 13))
         sidebar.pack_propagate(False)
@@ -1210,6 +1226,7 @@ class MediaDownloaderApp:
         content_wrap = ttk.Frame(outer)
         content_wrap.pack(side="left", fill="both", expand=True)
         self.content_wrap = content_wrap
+        self._attach_ambient_layer(content_wrap)
         header = ttk.Frame(content_wrap, style="Topbar.TFrame")
         header.pack(fill="x", pady=(4, 13))
         header_left = ttk.Frame(header, style="Topbar.TFrame")
@@ -1226,6 +1243,7 @@ class MediaDownloaderApp:
         self.header_update_btn.pack(side="left")
         self.pages_area = ttk.Frame(content_wrap)
         self.pages_area.pack(fill="both", expand=True)
+        self._attach_ambient_layer(self.pages_area)
 
     def _card(self, parent, padding=16):
         return RoundedCard(parent, self, padding=padding)
