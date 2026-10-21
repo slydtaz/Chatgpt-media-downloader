@@ -318,6 +318,60 @@ def main() -> int:
         else:
             raise RuntimeError("Não foi encontrado um botão ativo para validar o hover.")
 
+        # Exercise the Appearance controls with the same Tk variables used by the real UI.
+        # These are preview-only settings in the isolated CI profile; they are not saved.
+        _wait_for_page(root, app, "settings")
+        original_visual_values = {
+            "palette": app.visual_palette_var.get(),
+            "strength": app.visual_strength_var.get(),
+            "style": app.visual_background_style_var.get(),
+        }
+        app.visual_palette_var.set("Nebulosa violeta")
+        app.visual_strength_var.set("Vibrante")
+        app.visual_background_style_var.set("Luz nas bordas")
+        app._preview_visual_effect_settings()
+        pump_for(0.24)
+        customized_image = _capture_window(root)
+        customized_file = "11-personalizacao-gradiente.png"
+        customized_image.save(output_dir / customized_file, format="PNG", optimize=True)
+        captured.append(("Personalização: nebulosa vibrante e luz nas bordas", customized_image))
+        print(f"CAPTURED {customized_file} {customized_image.width}x{customized_image.height}", flush=True)
+
+        # Invoke the actual visible button, not the animation method directly.
+        animation_buttons = [
+            widget for widget in walk_widgets(root)
+            if isinstance(widget, RoundedGlowButton)
+            and widget.winfo_exists()
+            and widget.winfo_ismapped()
+            and "testar animação" in widget.text.casefold()
+            and widget._state != "disabled"
+        ]
+        if not animation_buttons:
+            raise RuntimeError("O botão real 'Testar animação' não foi encontrado na tela Aparência.")
+        animation_buttons[0].invoke()
+        pump_for(0.28)
+        atom_test_a = _capture_window(root)
+        atom_test_a_file = "12-teste-botao-animacao-atomo.png"
+        atom_test_a.save(output_dir / atom_test_a_file, format="PNG", optimize=True)
+        captured.append(("Botão Testar animação · fase A", atom_test_a))
+        print(f"CAPTURED {atom_test_a_file} {atom_test_a.width}x{atom_test_a.height}", flush=True)
+        pump_for(0.42)
+        atom_test_b = _capture_window(root)
+        atom_test_b_file = "13-teste-botao-animacao-atomo-fase-b.png"
+        atom_test_b.save(output_dir / atom_test_b_file, format="PNG", optimize=True)
+        captured.append(("Botão Testar animação · fase B", atom_test_b))
+        print(f"CAPTURED {atom_test_b_file} {atom_test_b.width}x{atom_test_b.height}", flush=True)
+        app._dismiss_loading_splash(immediate=True)
+        root.update()
+
+        # Restore the non-persistent preview state so this harness does not leave
+        # future in-process checks using the temporary test customization.
+        app.visual_palette_var.set(original_visual_values["palette"])
+        app.visual_strength_var.set(original_visual_values["strength"])
+        app.visual_background_style_var.set(original_visual_values["style"])
+        app._preview_visual_effect_settings()
+        root.update()
+
         _make_contact_sheet(captured, output_dir / "visao-geral.png")
 
         report = {
@@ -329,6 +383,8 @@ def main() -> int:
             "loading_screen_files": ["00-tela-carregamento.png", "00-tela-carregamento-fase-b.png"],
             "background_phase_files": ["08-fundo-animado-fase-a.png", "09-fundo-animado-fase-b.png"],
             "button_hover_file": "10-hover-botao-gradiente.png",
+            "customization_test_file": "11-personalizacao-gradiente.png",
+            "manual_atom_button_files": ["12-teste-botao-animacao-atomo.png", "13-teste-botao-animacao-atomo-fase-b.png"],
             "screenshots": [path.name for path in sorted(output_dir.glob("*.png"))],
             "pages": [{"key": key, "file": filename, "label": label} for key, filename, label in PAGES],
             "media_downloads_started": False,
