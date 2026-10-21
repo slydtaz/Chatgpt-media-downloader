@@ -1414,6 +1414,21 @@ class MediaDownloaderApp:
             palette = palette_colors(str(self.config.get("visual_palette", "cosmic")))
             canvas.delete("all")
             canvas.configure(background="#000000")
+            # Reuse the same local light-field generator as the main UI. It draws
+            # translucent neon over OLED black, while Canvas keeps the atom crisp.
+            if ImageTk is not None:
+                try:
+                    strength = float(self.config.get("visual_strength", 0.80)) if self.config.get("visual_effects_enabled", True) else 0.0
+                    backdrop = render_ambient_gradient(
+                        width, height, palette=str(self.config.get("visual_palette", "cosmic")),
+                        strength=strength, phase=elapsed * 0.78,
+                        style=str(self.config.get("visual_background_style", "cosmic")),
+                    )
+                    if backdrop is not None:
+                        self._loading_background_photo = ImageTk.PhotoImage(backdrop, master=self.root)
+                        canvas.create_image(0, 0, image=self._loading_background_photo, anchor="nw")
+                except (tk.TclError, ValueError, TypeError, OSError):
+                    self._loading_background_photo = None
             # Native Canvas ribbons keep the splash independent from Pillow and
             # guarantee it remains visible on machines where image rendering fails.
             for ribbon in range(4):
