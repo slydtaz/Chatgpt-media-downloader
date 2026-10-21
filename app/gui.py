@@ -1170,6 +1170,7 @@ class MediaDownloaderApp:
             highlightthickness=0, bd=0,
         )
         self.hero_visual.pack(side="right", fill="y", padx=(12, 0))
+        self.hero_visual.bind("<Configure>", lambda _event: self._render_static_visuals(), add="+")
         hero_body=ttk.Frame(hero,style="Hero.TFrame")
         hero_body.pack(side="left",fill="both",expand=True)
         hero_top=ttk.Frame(hero_body,style="Hero.TFrame")
@@ -1619,7 +1620,43 @@ class MediaDownloaderApp:
         scroll=ScrollableFrame(frame)
         scroll.pack(fill="both",expand=True)
         body=scroll.body
-        ttk.Label(body,text="Personalize a experiência e configure o comportamento do downloader.",style="Subtitle.TLabel").pack(anchor="w",pady=(0,12))
+        ttk.Label(body,text="Personalize cores, efeitos gerados e comportamento do downloader.",style="Subtitle.TLabel").pack(anchor="w",pady=(0,12))
+
+        effects = self._card(body, 15)
+        effects.pack(fill="x", pady=(0, 12))
+        ttk.Label(effects, text="Efeitos visuais estáticos", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            effects,
+            text="A prévia é gerada localmente pelo mecanismo visual do aplicativo. Nesta versão, o gradiente fica estático; os controles abaixo ajustam as cores e a arte do átomo.",
+            style="Card.TLabel", wraplength=780, justify="left",
+        ).pack(anchor="w", pady=(4, 12))
+        self.visual_effects_var = tk.BooleanVar(value=bool(self.config.get("visual_effects_enabled", True)))
+        self.visual_palette_var = tk.StringVar(value=self._display_setting_value("visual_palette", self.config.get("visual_palette", "cosmic")))
+        self.visual_strength_var = tk.StringVar(value=self._display_setting_value("visual_strength", self.config.get("visual_strength", 0.55)))
+        self.visual_orbits_var = tk.StringVar(value=str(self.config.get("visual_orbits", 3)))
+        ttk.Checkbutton(
+            effects, text="Usar gradiente ambiente e brilho do átomo",
+            variable=self.visual_effects_var, command=self._preview_visual_effect_settings,
+        ).pack(anchor="w", pady=(0, 10))
+        effect_controls = ttk.Frame(effects, style="Card.TFrame")
+        effect_controls.pack(fill="x", pady=(0, 10))
+        for title, variable, values in (
+            ("PALETA DE CORES", self.visual_palette_var, ["Cósmica · roxo/azul", "Nebulosa violeta", "Aurora", "Oceano"]),
+            ("INTENSIDADE", self.visual_strength_var, ["Suave", "Equilibrado", "Vibrante"]),
+            ("ÓRBITAS DO ÁTOMO", self.visual_orbits_var, ["2", "3", "4"]),
+        ):
+            group = ttk.Frame(effect_controls, style="Card.TFrame")
+            group.pack(side="left", fill="x", expand=True, padx=(0, 10))
+            ttk.Label(group, text=title, style="Muted.TLabel", font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 4))
+            ttk.Combobox(group, textvariable=variable, values=values, state="readonly").pack(fill="x")
+        ttk.Label(effects, text="PRÉVIA DO GRADIENTE", style="Muted.TLabel", font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 5))
+        self.visual_preview_canvas = tk.Canvas(effects, height=86, background=self.colors["panel2"], borderwidth=0, highlightthickness=1, highlightbackground=self.colors["border"])
+        self.visual_preview_canvas.pack(fill="x", pady=(0, 9))
+        self.visual_palette_var.trace_add("write", lambda *_: self._preview_visual_effect_settings())
+        self.visual_strength_var.trace_add("write", lambda *_: self._preview_visual_effect_settings())
+        self.visual_orbits_var.trace_add("write", lambda *_: self._preview_visual_effect_settings())
+        self.visual_preview_canvas.bind("<Configure>", lambda _event: self._render_static_visuals(), add="+")
+        self._preview_visual_effect_settings()
         appearance=self._card(body,15)
         appearance.pack(fill="x",pady=(0,12))
         ttk.Label(appearance,text="Aparência",style="CardTitle.TLabel").pack(anchor="w")
@@ -1694,6 +1731,21 @@ class MediaDownloaderApp:
         note.pack(fill="x",pady=(0,20))
         ttk.Label(note,text="Como as personalizações são salvas",style="CardTitle.TLabel").pack(anchor="w")
         ttk.Label(note,text="Tema, cor principal e espaçamento são aplicados como prévia. Clique em Salvar personalização para gravar tudo. Preferências, pastas e histórico ficam no perfil do usuário.",style="Card.TLabel",wraplength=780,justify="left").pack(anchor="w",pady=(5,0))
+    def _preview_visual_effect_settings(self):
+        """Apply generator options live; saving to disk is reserved for Save."""
+        try:
+            palette = self._stored_setting_value("visual_palette", self.visual_palette_var.get())
+            strength = self._stored_setting_value("visual_strength", self.visual_strength_var.get())
+            orbits = int(self.visual_orbits_var.get())
+            self.config["visual_effects_enabled"] = bool(self.visual_effects_var.get())
+            self.config["visual_palette"] = palette if palette in EFFECT_PALETTES else "cosmic"
+            self.config["visual_strength"] = strength if strength in {0.30, 0.55, 0.80} else 0.55
+            self.config["visual_orbits"] = orbits if orbits in {2, 3, 4} else 3
+            self._render_static_visuals()
+        except (AttributeError, tk.TclError, ValueError, TypeError):
+            # Controls are incomplete while the settings form is being constructed.
+            return
+
     def _choose_accent_color(self):
         current=self.settings_vars.get("accent_color",tk.StringVar(value="#8B5CF6")).get()
         initial=current if _valid_hex_color(current) else "#8B5CF6"
@@ -1724,6 +1776,12 @@ class MediaDownloaderApp:
         self._preview_developer_mode()
         self.animations_enabled_var.set(bool(source_config.get("animations_enabled", True)))
         self._preview_animations()
+        if hasattr(self, "visual_effects_var"):
+            self.visual_effects_var.set(bool(source_config.get("visual_effects_enabled", True)))
+            self.visual_palette_var.set(self._display_setting_value("visual_palette", source_config.get("visual_palette", "cosmic")))
+            self.visual_strength_var.set(self._display_setting_value("visual_strength", source_config.get("visual_strength", 0.55)))
+            self.visual_orbits_var.set(str(source_config.get("visual_orbits", 3)))
+            self._preview_visual_effect_settings()
         self._preview_theme_from_setting()
         messagebox.showinfo("Configurações","Os valores foram revertidos nesta tela. Clique em Salvar personalização para gravá-los.")
     @staticmethod
@@ -1734,6 +1792,13 @@ class MediaDownloaderApp:
             return {"off":"Desativadas","manual":"Legendas manuais","all":"Manuais + automáticas"}.get(str(value),"Desativadas")
         if key=="theme":
             return {"system":"Sistema","dark":"Escuro","light":"Claro","oled":"Preto OLED"}.get(str(value),"Escuro")
+        if key=="visual_palette":
+            return {"cosmic":"Cósmica · roxo/azul","nebula":"Nebulosa violeta","aurora":"Aurora","ocean":"Oceano"}.get(str(value),"Cósmica · roxo/azul")
+        if key=="visual_strength":
+            try:
+                return {0.30:"Suave",0.55:"Equilibrado",0.80:"Vibrante"}.get(round(float(value), 2),"Equilibrado")
+            except (TypeError, ValueError):
+                return "Equilibrado"
         if key=="ui_density":
             return {"comfortable":"Confortável","compact":"Compacto"}.get(str(value),"Confortável")
         return str(value)
@@ -1745,6 +1810,10 @@ class MediaDownloaderApp:
             return {"Desativadas":"off","Legendas manuais":"manual","Manuais + automáticas":"all"}.get(str(value),"off")
         if key=="theme":
             return {"Sistema":"system","Escuro":"dark","Claro":"light","Preto OLED":"oled"}.get(str(value),str(value))
+        if key=="visual_palette":
+            return {"Cósmica · roxo/azul":"cosmic","Nebulosa violeta":"nebula","Aurora":"aurora","Oceano":"ocean"}.get(str(value),str(value))
+        if key=="visual_strength":
+            return {"Suave":0.30,"Equilibrado":0.55,"Vibrante":0.80}.get(str(value),0.55)
         if key=="ui_density":
             return {"Confortável":"comfortable","Compacto":"compact"}.get(str(value),str(value))
         if key in {"auto_video_quality","audio_bitrate","playlist_parallelism","concurrent_fragments","retries"}:
@@ -1777,6 +1846,10 @@ class MediaDownloaderApp:
         new_config["auto_video_quality"]=q
         new_config["developer_mode"]=bool(self.developer_mode_var.get())
         new_config["animations_enabled"]=bool(self.animations_enabled_var.get())
+        new_config["visual_effects_enabled"]=bool(self.visual_effects_var.get())
+        new_config["visual_palette"]=self._stored_setting_value("visual_palette", self.visual_palette_var.get())
+        new_config["visual_strength"]=self._stored_setting_value("visual_strength", self.visual_strength_var.get())
+        new_config["visual_orbits"]=int(self.visual_orbits_var.get())
         new_config["audio_bitrate"]=b
         try:
             save_config(new_config)
@@ -2581,6 +2654,12 @@ class MediaDownloaderApp:
         self._preview_developer_mode()
         self.animations_enabled_var.set(bool(self.config.get("animations_enabled", True)))
         self._preview_animations()
+        if hasattr(self, "visual_effects_var"):
+            self.visual_effects_var.set(bool(self.config.get("visual_effects_enabled", True)))
+            self.visual_palette_var.set(self._display_setting_value("visual_palette", self.config.get("visual_palette", "cosmic")))
+            self.visual_strength_var.set(self._display_setting_value("visual_strength", self.config.get("visual_strength", 0.55)))
+            self.visual_orbits_var.set(str(self.config.get("visual_orbits", 3)))
+            self._preview_visual_effect_settings()
         self._apply_theme(self.config.get("theme","dark"))
         if hasattr(self,"playlist_strategy_var"):
             self.playlist_strategy_var.set(self._strategy_label(self.config.get("playlist_strategy","sequential")))
