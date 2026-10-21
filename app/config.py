@@ -128,7 +128,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "animations_enabled": False,
     "visual_effects_enabled": True,
     "visual_palette": "cosmic",
-    "visual_strength": 0.55,
+    "visual_strength": 0.80,
     "visual_orbits": 3,
     "visual_background_animated": True,
     "visual_background_style": "cosmic",
