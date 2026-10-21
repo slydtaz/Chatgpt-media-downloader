@@ -11,6 +11,8 @@ on:
       - ".github/workflows/ui-preview.yml"
       - "tools/capture_ui_preview.py"
       - "app/gui.py"
+      - "app/ui_rendering.py"
+      - "app/visual_effects.py"
       - "app/config.py"
       - "app/media_preview.py"
       - "app/playlist.py"
@@ -20,6 +22,8 @@ on:
       - ".github/workflows/ui-preview.yml"
       - "tools/capture_ui_preview.py"
       - "app/gui.py"
+      - "app/ui_rendering.py"
+      - "app/visual_effects.py"
       - "app/config.py"
 
 permissions:

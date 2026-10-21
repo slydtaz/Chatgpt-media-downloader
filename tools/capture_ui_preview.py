@@ -5,6 +5,8 @@ import json
 import os
 import sys
 import tempfile
+import ctypes
+from ctypes import wintypes
 import time
 from pathlib import Path
 
@@ -19,7 +21,63 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 from app.config import VERSION  # noqa: E402
-from app.gui import MediaDownloaderApp  # noqa: E402
+from app.gui import MediaDownloaderApp, RoundedGlowButton  # noqa: E402
+
+
+class _POINTL(ctypes.Structure):
+    _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
+
+
+class _DEVMODEW(ctypes.Structure):
+    _fields_ = [
+        ("dmDeviceName", wintypes.WCHAR * 32),
+        ("dmSpecVersion", wintypes.WORD), ("dmDriverVersion", wintypes.WORD),
+        ("dmSize", wintypes.WORD), ("dmDriverExtra", wintypes.WORD),
+        ("dmFields", wintypes.DWORD), ("dmPosition", _POINTL),
+        ("dmDisplayOrientation", wintypes.DWORD), ("dmDisplayFixedOutput", wintypes.DWORD),
+        ("dmColor", wintypes.SHORT), ("dmDuplex", wintypes.SHORT),
+        ("dmYResolution", wintypes.SHORT), ("dmTTOption", wintypes.SHORT),
+        ("dmCollate", wintypes.SHORT), ("dmFormName", wintypes.WCHAR * 32),
+        ("dmLogPixels", wintypes.WORD), ("dmBitsPerPel", wintypes.DWORD),
+        ("dmPelsWidth", wintypes.DWORD), ("dmPelsHeight", wintypes.DWORD),
+        ("dmDisplayFlags", wintypes.DWORD), ("dmDisplayFrequency", wintypes.DWORD),
+        ("dmICMMethod", wintypes.DWORD), ("dmICMIntent", wintypes.DWORD),
+        ("dmMediaType", wintypes.DWORD), ("dmDitherType", wintypes.DWORD),
+        ("dmReserved1", wintypes.DWORD), ("dmReserved2", wintypes.DWORD),
+        ("dmPanningWidth", wintypes.DWORD), ("dmPanningHeight", wintypes.DWORD),
+    ]
+
+
+def _set_capture_resolution(width: int = 1440, height: int = 900) -> bytes | None:
+    """Ask the Windows CI desktop for the target capture size; keep the original mode."""
+    if os.name != "nt":
+        return None
+    user32 = ctypes.windll.user32
+    current = _DEVMODEW()
+    current.dmSize = ctypes.sizeof(_DEVMODEW)
+    if not user32.EnumDisplaySettingsW(None, -1, ctypes.byref(current)):
+        raise RuntimeError("Não foi possível consultar a resolução de tela do runner Windows.")
+    snapshot = bytes(current)
+    if current.dmPelsWidth == width and current.dmPelsHeight == height:
+        return None
+    desired = _DEVMODEW.from_buffer_copy(snapshot)
+    desired.dmFields = 0x00080000 | 0x00100000  # DM_PELSWIDTH | DM_PELSHEIGHT
+    desired.dmPelsWidth = width
+    desired.dmPelsHeight = height
+    result = user32.ChangeDisplaySettingsW(ctypes.byref(desired), 0)
+    if result != 0:
+        raise RuntimeError(f"O runner não aceitou a resolução de captura {width}x{height} (código {result}).")
+    return snapshot
+
+
+def _restore_capture_resolution(snapshot: bytes | None) -> None:
+    if os.name != "nt" or snapshot is None:
+        return
+    try:
+        original = _DEVMODEW.from_buffer_copy(snapshot)
+        ctypes.windll.user32.ChangeDisplaySettingsW(ctypes.byref(original), 0)
+    except Exception:
+        pass
 
 
 PAGES = [
@@ -42,7 +100,7 @@ def _font(size: int) -> ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-def _capture_window(root, *, width_limit: int = 1280) -> Image.Image:
+def _capture_window(root, *, width_limit: int = 1440) -> Image.Image:
     root.update_idletasks()
     root.update()
     x = root.winfo_rootx()
@@ -106,7 +164,7 @@ def _make_contact_sheet(items: list[tuple[str, Image.Image]], target: Path) -> N
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Capture real GUI screenshots for review.")
-    parser.add_argument("--output", default="ui-preview-output", help="Directory for screenshots, GIFs and report.")
+    parser.add_argument("--output", default="ui-preview-output", help="Directory for real PNG screenshots and report.")
     args = parser.parse_args()
     output_dir = Path(args.output).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -116,9 +174,10 @@ def main() -> int:
     original_uninstall = MediaDownloaderApp._uninstall
 
     root = None
+    original_display_mode = None
     captured: list[tuple[str, Image.Image]] = []
-    animation_frames: list[Image.Image] = []
     try:
+        original_display_mode = _set_capture_resolution(1440, 900)
         # Never scan/install media tools, check for updates or trigger uninstall/downloads.
         MediaDownloaderApp._refresh_dependencies = lambda self, force=False: None
         MediaDownloaderApp._maybe_start_update_check = lambda self: None
@@ -128,18 +187,20 @@ def main() -> int:
 
         root = tk.Tk()
         root.title(f"ChatGPT Media Downloader {VERSION} — prévia da interface")
-        # Tk may report logical dimensions that differ from the actual captured desktop
-        # on the hosted runner. Use ImageGrab's physical desktop size to avoid clipping.
+        # Match the requested review canvas using the real Windows desktop mode.
         desktop_width, desktop_height = ImageGrab.grab().size
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
-        capture_width = max(800, min(1280, screen_width - 16, desktop_width - 16))
-        capture_height = max(600, min(850, screen_height - 60, desktop_height - 60))
-        root.geometry(f"{capture_width}x{capture_height}+4+4")
+        if (desktop_width, desktop_height) != (1440, 900):
+            raise RuntimeError(f"Resolução física inesperada do desktop: {desktop_width}x{desktop_height}; esperado 1440x900.")
+        capture_width, capture_height = 1440, 900
+        root.geometry(f"{capture_width}x{capture_height}+0+0")
         app = MediaDownloaderApp(root)
         # MediaDownloaderApp sets its normal 1220x820 default during construction;
         # override it after initialization only for this bounded screenshot harness.
-        root.geometry(f"{capture_width}x{capture_height}+4+4")
+        root.geometry(f"{capture_width}x{capture_height}+0+0")
+        root.attributes("-fullscreen", True)
+        # Reset the visual-only stopwatch immediately before the harness begins
+        # pumping events, so the real splash remains visible long enough to capture.
+        app._loading_started_at = time.monotonic()
         root.update_idletasks()
         root.deiconify()
         root.lift()
@@ -147,8 +208,31 @@ def main() -> int:
             root.focus_force()
         except tk.TclError:
             pass
-        root.update()
-        time.sleep(0.6)
+        # Restart the actual splash after the CI display has become visible, then
+        # capture two still frames from the real ring/particle animation (no GIF).
+        app._start_loading_splash()
+        app._loading_started_at = time.monotonic()
+        def pump_for(seconds: float):
+            deadline = time.monotonic() + seconds
+            while time.monotonic() < deadline:
+                root.update()
+                time.sleep(0.01)
+
+        pump_for(0.28)
+        loading_image = _capture_window(root)
+        loading_file = "00-tela-carregamento.png"
+        loading_image.save(output_dir / loading_file, format="PNG", optimize=True)
+        captured.append(("Tela de carregamento · fase A", loading_image))
+        print(f"CAPTURED {loading_file} {loading_image.width}x{loading_image.height}", flush=True)
+
+        pump_for(0.42)
+        loading_phase_b = _capture_window(root)
+        loading_phase_b_file = "00-tela-carregamento-fase-b.png"
+        loading_phase_b.save(output_dir / loading_phase_b_file, format="PNG", optimize=True)
+        captured.append(("Tela de carregamento · fase B", loading_phase_b))
+        print(f"CAPTURED {loading_phase_b_file} {loading_phase_b.width}x{loading_phase_b.height}", flush=True)
+
+        app._dismiss_loading_splash(immediate=True)
         root.update()
 
         # Capture the actual preview widget with an offline fixture: no URLs are
@@ -173,50 +257,80 @@ def main() -> int:
             captured.append((label, image))
             print(f"CAPTURED {filename} {image.width}x{image.height}", flush=True)
 
-        # Return to home and record the actual moving orbit motif as a short GIF.
+        # Capture two real fullscreen moments of the same running ambient layer.
         _wait_for_page(root, app, "home")
-        time.sleep(0.2)
-        root.update()
-        for _ in range(18):
-            animation_frames.append(_capture_window(root, width_limit=960))
-            deadline = time.monotonic() + 0.09
+        deadline = time.monotonic() + 0.16
+        while time.monotonic() < deadline:
+            root.update()
+            time.sleep(0.01)
+        phase_a = _capture_window(root)
+        phase_a_file = "08-fundo-animado-fase-a.png"
+        phase_a.save(output_dir / phase_a_file, format="PNG", optimize=True)
+        captured.append(("Fundo animado · fase A", phase_a))
+        print(f"CAPTURED {phase_a_file} {phase_a.width}x{phase_a.height}", flush=True)
+
+        deadline = time.monotonic() + 0.62
+        while time.monotonic() < deadline:
+            root.update()
+            time.sleep(0.01)
+        phase_b = _capture_window(root)
+        phase_b_file = "09-fundo-animado-fase-b.png"
+        phase_b.save(output_dir / phase_b_file, format="PNG", optimize=True)
+        captured.append(("Fundo animado · fase B", phase_b))
+        print(f"CAPTURED {phase_b_file} {phase_b.width}x{phase_b.height}", flush=True)
+
+        # Drive the same enter/fade loop that the actual rounded button uses. This
+        # captures a still photo after the configured one-second gradient reveal.
+        def walk_widgets(widget):
+            try:
+                children = widget.winfo_children()
+            except Exception:
+                return
+            for child in children:
+                yield child
+                yield from walk_widgets(child)
+
+        hover_candidates = [
+            widget for widget in walk_widgets(root)
+            if isinstance(widget, RoundedGlowButton)
+            and widget.winfo_exists()
+            and widget.winfo_ismapped()
+            and widget._state != "disabled"
+            and widget._gradient_is_available()
+        ]
+        if hover_candidates:
+            hover_button = next(
+                (button for button in hover_candidates
+                 if "baixar" in button.text.casefold() or button.style_name == "Accent.TButton"),
+                hover_candidates[0],
+            )
+            hover_button._on_enter()
+            deadline = time.monotonic() + 1.12
             while time.monotonic() < deadline:
                 root.update()
-                time.sleep(0.005)
+                time.sleep(0.01)
+            hover_image = _capture_window(root)
+            hover_file = "10-hover-botao-gradiente.png"
+            hover_image.save(output_dir / hover_file, format="PNG", optimize=True)
+            captured.append(("Botão após 1 s de hover", hover_image))
+            print(f"CAPTURED {hover_file} {hover_image.width}x{hover_image.height}", flush=True)
+            hover_button._on_leave()
+        else:
+            raise RuntimeError("Não foi encontrado um botão ativo para validar o hover.")
 
-        if not animation_frames:
-            raise RuntimeError("Nenhum quadro da animação foi capturado.")
-        animation_frames[0].save(
-            output_dir / "animacao-painel-inicial.gif",
-            save_all=True,
-            append_images=animation_frames[1:],
-            duration=90,
-            loop=0,
-            optimize=True,
-            disposal=2,
-        )
-
-        # Short tour: each page stays visible briefly, then the moving home animation plays.
-        tour_frames = [image.copy() for _, image in captured] + animation_frames
-        durations = [1100] * len(captured) + [90] * len(animation_frames)
-        tour_frames[0].save(
-            output_dir / "passeio-pelas-abas.gif",
-            save_all=True,
-            append_images=tour_frames[1:],
-            duration=durations,
-            loop=0,
-            optimize=True,
-            disposal=2,
-        )
         _make_contact_sheet(captured, output_dir / "visao-geral.png")
 
         report = {
             "application_version": VERSION,
             "media_preview_demo_file": "00-preview-automatica.png",
             "media_preview_demo_network_requests": 0,
-            "capture_method": "Pillow ImageGrab from a real Tk window on a Windows GitHub Actions runner",
+            "capture_method": "Pillow ImageGrab from the real fullscreen Tk window at 1440x900 on a Windows GitHub Actions runner",
+            "capture_resolution": "1440x900",
+            "loading_screen_files": ["00-tela-carregamento.png", "00-tela-carregamento-fase-b.png"],
+            "background_phase_files": ["08-fundo-animado-fase-a.png", "09-fundo-animado-fase-b.png"],
+            "button_hover_file": "10-hover-botao-gradiente.png",
+            "screenshots": [path.name for path in sorted(output_dir.glob("*.png"))],
             "pages": [{"key": key, "file": filename, "label": label} for key, filename, label in PAGES],
-            "animation_frames": len(animation_frames),
             "media_downloads_started": False,
             "dependency_scans_started": False,
             "update_checks_started": False,
@@ -237,6 +351,7 @@ def main() -> int:
         MediaDownloaderApp._refresh_dependencies = original_refresh
         MediaDownloaderApp._maybe_start_update_check = original_update_check
         MediaDownloaderApp._uninstall = original_uninstall
+        _restore_capture_resolution(original_display_mode)
         # We intentionally do not delete ISOLATED_PROFILE during the process lifetime:
         # the application logger may still hold an open file handle on Windows.
 

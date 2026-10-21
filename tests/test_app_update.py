@@ -21,12 +21,14 @@ from app.app_update import (
     _release_version,
     _windows_update_helper_script,
     _safe_extract_zip,
+    _download_file,
     _stage_source_tree,
     _verify_executable_hash,
     _trusted_url,
     AppUpdate,
     check_for_update,
     check_repair_candidate,
+    list_available_releases,
     is_newer_version,
     version_key,
 )
@@ -101,14 +103,80 @@ class VersionComparisonTests(unittest.TestCase):
             "assets": [],
         }
         with patch("app.app_update._request_json", return_value=stable), patch("app.app_update._request_json_list", return_value=[next_beta]) as list_request:
-            update = check_for_update("5.4.0-beta.1", frozen=False)
+            update = check_for_update("5.4.0-beta.1", frozen=False, include_prereleases=True)
         self.assertIsNotNone(update)
         self.assertEqual(update.version, "5.4.0-beta.2")
         self.assertEqual(update.source_ref, "v5.4.0-beta.2")
-        list_request.assert_called_once_with(f"{API_ROOT}/releases?per_page=50")
+        list_request.assert_called_once_with(f"{API_ROOT}/releases?per_page=100")
 
 
 class AppUpdateDiscoveryTests(unittest.TestCase):
+    def test_release_catalog_lists_stable_and_prerelease_versions_newest_first(self):
+        releases = [
+            {"tag_name": "v5.3.0", "name": "5.3.0 stable", "draft": False,
+             "prerelease": False, "published_at": "2026-01-01T00:00:00Z",
+             "body": "stable notes", "assets": []},
+            {"tag_name": "v5.4.0-beta.3", "name": "5.4.0-beta.3 beta", "draft": False,
+             "prerelease": True, "published_at": "2026-02-01T00:00:00Z",
+             "body": "beta notes", "assets": []},
+            {"tag_name": "stable", "name": "Stable alias", "draft": False,
+             "prerelease": False, "body": "alias", "assets": []},
+            {"tag_name": "v9.9.9", "name": "draft", "draft": True,
+             "prerelease": False, "body": "draft", "assets": []},
+        ]
+        with patch("app.app_update._request_json_list", return_value=releases):
+            updates = list_available_releases("5.2.0", frozen=False, include_prereleases=True)
+        self.assertEqual([item.version for item in updates], ["5.4.0-beta.3", "5.3.0"])
+        self.assertEqual([item.tag_name for item in updates], ["v5.4.0-beta.3", "v5.3.0"])
+
+    def test_release_catalog_can_hide_prereleases_without_hiding_stable_versions(self):
+        releases = [
+            {"tag_name": "v5.4.0-beta.3", "draft": False, "prerelease": True,
+             "body": "beta notes", "assets": []},
+            {"tag_name": "v5.3.0", "draft": False, "prerelease": False,
+             "body": "stable notes", "assets": []},
+        ]
+        with patch("app.app_update._request_json_list", return_value=releases):
+            updates = list_available_releases("5.2.0", frozen=False, include_prereleases=False)
+        self.assertEqual([item.version for item in updates], ["5.3.0"])
+
+    def test_specific_older_release_can_be_selected_without_semver_upgrade_check(self):
+        release = {
+            "tag_name": "v5.2.0", "name": "5.2.0 stable", "draft": False,
+            "prerelease": False, "body": "old release notes", "assets": [],
+        }
+        selected = _release_candidate("5.4.0-beta.3", release, frozen=False, require_newer=False)
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.version, "5.2.0")
+        self.assertEqual(selected.source_ref, "v5.2.0")
+
+    def test_opt_in_allows_stable_install_to_find_newer_prerelease(self):
+        releases = [
+            {"tag_name": "v5.4.0-beta.3", "name": "5.4.0-beta.3 beta",
+             "draft": False, "prerelease": True, "body": "beta notes", "assets": []},
+            {"tag_name": "v5.3.0", "name": "5.3.0 stable",
+             "draft": False, "prerelease": False, "body": "stable notes", "assets": []},
+        ]
+        with patch("app.app_update._request_json_list", return_value=releases):
+            update = check_for_update("5.3.0", frozen=False, include_prereleases=True)
+        self.assertIsNotNone(update)
+        self.assertEqual(update.version, "5.4.0-beta.3")
+        self.assertEqual(update.source_ref, "v5.4.0-beta.3")
+
+    def test_default_update_check_does_not_query_prereleases(self):
+        stable = {
+            "tag_name": "v5.3.0", "name": "5.3.0 stable",
+            "draft": False, "prerelease": False, "body": "stable notes", "assets": [],
+        }
+        with patch("app.app_update._request_json", return_value=stable), \
+             patch("app.app_update._source_version", return_value="5.3.0"), \
+             patch("app.app_update._request_json_list") as release_list:
+            update = check_for_update("5.3.0", frozen=False, include_prereleases=False)
+        self.assertIsNone(update)
+        release_list.assert_not_called()
+
+
+
     def test_source_install_uses_main_branch_when_no_release_is_published(self):
         with patch("app.app_update._request_json", return_value=None), \
              patch("app.app_update._source_version", return_value="5.0.0"), \
@@ -267,6 +335,35 @@ class AppUpdateDiscoveryTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, msg=result.stdout + "\n" + result.stderr)
 
 
+class DownloadSizeSecurityTests(unittest.TestCase):
+    def test_download_rejects_declared_size_mismatch_before_writing_payload(self):
+        class FakeResponse:
+            headers = {"Content-Length": "12"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def geturl(self):
+                return "https://github.com/vendor/project/releases/download/v1/tool.exe"
+
+            def read(self, _size=-1):
+                raise AssertionError("The body should not be read after size mismatch.")
+
+        with tempfile.TemporaryDirectory() as td:
+            destination = Path(td) / "tool.exe"
+            with patch("app.app_update.trusted_urlopen", return_value=FakeResponse()):
+                with self.assertRaises(AppUpdateError):
+                    _download_file(
+                        "https://github.com/vendor/project/releases/download/v1/tool.exe",
+                        destination,
+                        expected_size=11,
+                    )
+            self.assertFalse(destination.exists())
+
+
 class SafeArchiveTests(unittest.TestCase):
     def test_valid_source_archive_is_found(self):
         with tempfile.TemporaryDirectory() as td:
@@ -321,6 +418,35 @@ class SafeArchiveTests(unittest.TestCase):
             with patch("app.app_update.MAX_SOURCE_UNPACKED_BYTES", 10):
                 with self.assertRaises(AppUpdateError):
                     _safe_extract_zip(archive, root / "extract")
+
+    def test_duplicate_case_insensitive_archive_paths_are_rejected_before_extract(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            archive = root / "duplicate.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("project/PROJECT_ID", PRODUCT_ID)
+                zf.writestr("project/app/main.py", "first")
+                zf.writestr("project/APP/MAIN.PY", "second")
+            destination = root / "extract"
+            destination.mkdir()
+            with self.assertRaises(AppUpdateError):
+                _safe_extract_zip(archive, destination)
+            self.assertEqual(list(destination.iterdir()), [])
+
+    def test_windows_alternate_data_stream_names_are_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            archive = root / "ads.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("project/PROJECT_ID", PRODUCT_ID)
+                zf.writestr("project/app/main.py", "pass")
+                zf.writestr("project/app/config.py", 'VERSION = "5.4.0"')
+                zf.writestr("project/payload.txt:stream", "not an ordinary file")
+            destination = root / "extract"
+            destination.mkdir()
+            with self.assertRaises(AppUpdateError):
+                _safe_extract_zip(archive, destination)
+            self.assertEqual(list(destination.iterdir()), [])
 
     def test_parent_traversal_is_rejected(self):
         with tempfile.TemporaryDirectory() as td:
