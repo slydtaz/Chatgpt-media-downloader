@@ -144,7 +144,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "subtitle_mode": "off",
     "update_open_after": True,
     "update_check_on_startup": True,
-    "settings_schema_version": 4,
+    "update_include_prereleases": False,
+    "settings_schema_version": 5,
 }
 
 
@@ -281,7 +282,7 @@ def load_config() -> dict[str, Any]:
         data["video_container"] = "mp4"
     if data.get("subtitle_mode") not in {"off", "manual", "all"}:
         data["subtitle_mode"] = "off"
-    for option in ("update_open_after", "update_check_on_startup"):
+    for option in ("update_open_after", "update_check_on_startup", "update_include_prereleases"):
         value = data.get(option, True)
         if isinstance(value, bool):
             data[option] = value
@@ -289,7 +290,7 @@ def load_config() -> dict[str, Any]:
             data[option] = bool(value)
         else:
             data[option] = str(value).strip().lower() in {"1", "true", "yes", "sim", "on"}
-    data["settings_schema_version"] = 4
+    data["settings_schema_version"] = 5
     return data
 
 
