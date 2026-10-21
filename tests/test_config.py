@@ -72,7 +72,7 @@ class ConfigTests(unittest.TestCase):
                 }), encoding="utf-8")
                 migrated = config.load_config()
                 self.assertEqual(migrated["accent_color"], "#8B5CF6")
-                self.assertEqual(migrated["settings_schema_version"], 3)
+                self.assertEqual(migrated["settings_schema_version"], 4)
                 self.assertTrue(migrated["animations_enabled"])
 
                 config.CONFIG_PATH.write_text(json.dumps({
