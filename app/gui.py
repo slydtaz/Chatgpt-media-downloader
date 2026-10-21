@@ -366,7 +366,9 @@ class RoundedCard(ttk.Frame):
                     smooth=False, splinesteps=14, fill=surface,
                     outline=border, width=1, tags="surface",
                 )
-            self._canvas.lower()
+            # Lower the Canvas window behind card contents; Canvas.lower()
+            # addresses canvas items rather than the Tk widget stacking order.
+            self._canvas.tk.call("lower", self._canvas._w)
         except (tk.TclError, ValueError, TypeError):
             pass
 
