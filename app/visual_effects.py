@@ -91,13 +91,13 @@ def render_ambient_gradient(
         )
     elif style == "nebula":
         blobs = (
-            (0.04, 0.12, 0.63, 0), (0.95, 0.17, 0.56, 4),
-            (0.67, 0.97, 0.58, 2), (0.26, 0.55, 0.45, 1),
+            (0.02, 0.10, 0.38, 0), (0.98, 0.16, 0.34, 4),
+            (0.72, 1.00, 0.39, 2), (0.26, 0.54, 0.32, 1),
         )
     else:
         blobs = (
-            (0.01, 0.10, 0.60, 0), (0.97, 0.20, 0.54, 2),
-            (0.72, 1.02, 0.56, 1), (0.38, 0.48, 0.36, 4),
+            (0.01, 0.10, 0.37, 0), (0.97, 0.20, 0.34, 2),
+            (0.72, 1.02, 0.39, 1), (0.38, 0.48, 0.28, 4),
         )
 
     # The strongest light stays near the perimeter; the center retains contrast.
@@ -112,6 +112,24 @@ def render_ambient_gradient(
         draw.ellipse((cx-radius, cy-radius, cx+radius, cy+radius),
                      fill=(*color, min(220, alpha)))
 
+    if style in {"cosmic", "nebula"}:
+        # Saturated diagonal light ribbons break up broad blobs into a nebula-like
+        # field while leaving the OLED-black base visible between streaks.
+        for index, color_value in enumerate(colors[:4]):
+            ribbon = []
+            for step in range(101):
+                t = step / 100
+                x = work_w * t
+                y = work_h * (0.84 - t * 0.62 + (index - 1.5) * 0.13)
+                y += math.sin(t * math.tau * 1.15 + motion * (0.65 + index * 0.11) + index) * work_h * 0.045
+                ribbon.append((round(x), round(y)))
+            draw.line(
+                ribbon,
+                fill=(*_rgb(color_value), round((34 if style == "nebula" else 42) + 42 * strength)),
+                width=max(2, round(short_side * (0.035 if style == "nebula" else 0.025))),
+                joint="curve",
+            )
+
     if style == "aurora":
         # A few wide, saturated ribbons add a more ribbon-like alternative.
         for index, color_value in enumerate(colors[:4]):
@@ -125,7 +143,7 @@ def render_ambient_gradient(
             draw.line(ribbon, fill=(*_rgb(color_value), round(65 + 85 * strength)),
                       width=max(7, round(short_side * 0.085)), joint="curve")
 
-    blurred = glow.filter(ImageFilter.GaussianBlur(radius=max(5, round(short_side * 0.19))))
+    blurred = glow.filter(ImageFilter.GaussianBlur(radius=max(5, round(short_side * (0.145 if style in {"cosmic", "nebula"} else 0.16)))))
     base.alpha_composite(blurred)
 
     # A gentle black vignette is another layer above the glows, not a colored fill.
