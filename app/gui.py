@@ -1381,8 +1381,8 @@ class MediaDownloaderApp:
             for orbit in range(max(2, min(5, int(self.config.get("visual_orbits", 3))))):
                 rotation = math.pi * orbit / 3
                 points = []
-                for step in range(97):
-                    angle = math.tau * step / 96
+                for step in range(31):
+                    angle = math.tau * step / 30
                     x, y = rx * math.cos(angle), ry * math.sin(angle)
                     points.extend((cx + x * math.cos(rotation) - y * math.sin(rotation),
                                    cy + x * math.sin(rotation) + y * math.cos(rotation)))
