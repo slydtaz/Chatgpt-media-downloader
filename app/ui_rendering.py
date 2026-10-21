@@ -163,7 +163,8 @@ def render_rounded_button(
         canvas.alpha_composite(layer)
 
     paint_ring(outer_ring, outer_palette, 0.03, edge)
-    paint_ring(inner_ring, inner_palette, 0.39, edge)
+    if inner_palette:
+        paint_ring(inner_ring, inner_palette, 0.39, edge)
     resampling = getattr(Image, "Resampling", Image).LANCZOS
     return canvas.resize((width, height), resampling)
 
