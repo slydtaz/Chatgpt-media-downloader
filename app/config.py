@@ -126,6 +126,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "ui_density": "comfortable",
     "developer_mode": False,
     "animations_enabled": False,
+    "visual_effects_enabled": True,
+    "visual_palette": "cosmic",
+    "visual_strength": 0.55,
+    "visual_orbits": 3,
     "playlist_strategy": "sequential",
     "playlist_parallelism": 3,
     "concurrent_fragments": 4,
@@ -200,6 +204,25 @@ def load_config() -> dict[str, Any]:
     data["accent_color"] = accent.upper()
     if data.get("ui_density") not in {"comfortable", "compact"}:
         data["ui_density"] = "comfortable"
+    if data.get("visual_palette") not in {"cosmic", "nebula", "aurora", "ocean"}:
+        data["visual_palette"] = "cosmic"
+    try:
+        data["visual_strength"] = float(data.get("visual_strength", 0.55))
+    except (TypeError, ValueError):
+        data["visual_strength"] = 0.55
+    if data["visual_strength"] not in {0.30, 0.55, 0.80}:
+        data["visual_strength"] = 0.55
+    try:
+        data["visual_orbits"] = int(data.get("visual_orbits", 3))
+    except (TypeError, ValueError):
+        data["visual_orbits"] = 3
+    if data["visual_orbits"] not in {2, 3, 4}:
+        data["visual_orbits"] = 3
+    visual_enabled = data.get("visual_effects_enabled", True)
+    if isinstance(visual_enabled, bool):
+        data["visual_effects_enabled"] = visual_enabled
+    else:
+        data["visual_effects_enabled"] = str(visual_enabled).strip().lower() in {"1", "true", "yes", "sim", "on"}
     if data.get("playlist_strategy") not in {"sequential", "parallel"}:
         data["playlist_strategy"] = "sequential"
     try:
