@@ -480,6 +480,7 @@ def _safe_extract_zip(archive: Path, destination: Path) -> Path:
             if unpacked_size > MAX_SOURCE_UNPACKED_BYTES:
                 raise AppUpdateError("O pacote de origem excede o limite de tamanho após extração.")
             seen: dict[str, bool] = {}
+            known_prefixes: set[str] = set()
             for member in members:
                 try:
                     target = safe_archive_member_path(destination, member.filename)
@@ -493,12 +494,16 @@ def _safe_extract_zip(archive: Path, destination: Path) -> Path:
                 is_directory = member.is_dir() or file_type == stat.S_IFDIR
                 if key in seen:
                     raise AppUpdateError("O pacote de origem contém caminhos duplicados, inclusive diferenças de maiúsculas.")
-                for parent in ("/".join(key.split("/")[:i]) for i in range(1, len(key.split("/")))):
+                if not is_directory and key in known_prefixes:
+                    raise AppUpdateError("O pacote de origem contém conflito entre arquivo e diretório.")
+                parts = key.split("/")
+                for depth in range(1, len(parts)):
+                    parent = "/".join(parts[:depth])
                     if parent in seen and not seen[parent]:
                         raise AppUpdateError("O pacote de origem contém um arquivo usado como diretório.")
-                if not is_directory and any(existing.startswith(key + "/") for existing in seen):
-                    raise AppUpdateError("O pacote de origem contém conflito entre arquivo e diretório.")
                 seen[key] = is_directory
+                for depth in range(1, len(parts)):
+                    known_prefixes.add("/".join(parts[:depth))
             zf.extractall(destination)
     except AppUpdateError:
         raise
