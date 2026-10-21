@@ -20,6 +20,10 @@ Nenhum teste de unidade, hash de arquivo ou verificação automática prova que 
 - O download de playlists exige seleção dos itens disponíveis. O paralelismo tem limites explícitos e não habilita acesso a conteúdo privado.
 - O binário é empacotado sem ofuscação deliberada. Metadados PE identificam o produto, mas não autenticam o publicador.
 
+## Auditoria automatizada de dependências Python
+
+A workflow `.github/workflows/dependency-audit.yml` executa o `pip-audit` contra a árvore de dependências versionadas usadas para empacotar o aplicativo (PyInstaller e Pillow), em pushes, pull requests e semanalmente. Uma auditoria aprovada indica apenas que essa árvore auditada não apresentou avisos conhecidos para as fontes consultadas naquele momento. Ela não analisa o código-fonte, os executáveis externos de yt-dlp/FFmpeg/FFprobe, DLLs do sistema ou o executável final; esses componentes precisam das verificações próprias descritas neste documento.
+
 ## Distribuição e verificação
 
 1. Baixe o programa exclusivamente da página de Releases deste repositório.
