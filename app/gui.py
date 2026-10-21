@@ -1371,9 +1371,27 @@ class MediaDownloaderApp:
                 borderwidth=0, bd=0, takefocus=0, cursor="watch",
             )
             canvas.place(x=0, y=0, relwidth=1, relheight=1)
-            # Widget-level tkraise puts this child window above the packed shell;
-            # Canvas tag_raise would only move drawing items inside the canvas.
-            canvas.tkraise()
+            # Paint a complete first frame synchronously so Tk never shows a
+            # blank black sheet while waiting for the first after() callback.
+            palette = palette_colors(str(self.config.get("visual_palette", "cosmic")))
+            width = max(320, self.root.winfo_width())
+            height = max(240, self.root.winfo_height())
+            cx, cy = width / 2, height * 0.385
+            rx, ry = min(150, width * 0.115), min(108, height * 0.12)
+            for orbit in range(max(2, min(5, int(self.config.get("visual_orbits", 3))))):
+                rotation = math.pi * orbit / 3
+                points = []
+                for step in range(97):
+                    angle = math.tau * step / 96
+                    x, y = rx * math.cos(angle), ry * math.sin(angle)
+                    points.extend((cx + x * math.cos(rotation) - y * math.sin(rotation),
+                                   cy + x * math.sin(rotation) + y * math.cos(rotation)))
+                canvas.create_line(*points, fill=palette[orbit % len(palette)], width=2, smooth=True)
+            canvas.create_oval(cx-12, cy-12, cx+12, cy+12, fill="#F5F3FF", outline="#A78BFA", width=2)
+            canvas.create_text(width/2, height*0.615, text="Carregando...",
+                               fill="#F7F4FF", font=("Segoe UI", 22, "bold"))
+            canvas.create_text(width/2, height*0.657, text="Preparando sua experiência visual",
+                               fill="#C5BDF4", font=("Segoe UI", 10))
             self._loading_overlay_canvas = canvas
             self._loading_animation_job = self.root.after(40, self._animate_loading_splash)
         except tk.TclError:
