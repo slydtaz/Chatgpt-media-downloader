@@ -496,6 +496,16 @@ class IconNavButton(tk.Canvas):
                                     outline=_blend_hex(palette[1], panel, 0.18 if self.active else 0.58),
                                     width=1.2 if self.active else 1)
                 if self.active:
+                    # Horizontal, static gradient inside the selected tab; edges stay rounded.
+                    radius = 12
+                    for x in range(3, width - 3):
+                        depth = min(x - 2, width - 2 - x)
+                        inset = radius - math.sqrt(max(0.0, radius * radius - (radius - min(radius, depth)) ** 2)) if depth < radius else 0.0
+                        tint = _cyclic_palette_color(palette, 0.08 + 0.32 * x / max(1, width - 1))
+                        line_color = _blend_hex(surface, tint, 0.62)
+                        self.create_line(x, 1 + inset, x, height - 1 - inset, fill=line_color, width=1)
+                    self.create_polygon(_rounded_polygon(2, 1, width - 2, height - 1, 12),
+                                        fill="", outline=_blend_hex(palette[1], panel, 0.20), width=1.2)
                     self.create_polygon(_rounded_polygon(1, height / 2 - 8, 4, height / 2 + 8, 2),
                                         fill=palette[0], outline="", smooth=False)
             icon_color = palette[0] if self.active else (colors["fg"] if self.hovered else colors["muted"])
