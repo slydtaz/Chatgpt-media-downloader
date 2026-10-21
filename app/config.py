@@ -121,7 +121,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "yt_dlp_path": "",
     "ffmpeg_path": "",
     "ffprobe_path": "",
-    "theme": "dark",
+    "theme": "oled",
     "accent_color": "#8B5CF6",
     "ui_density": "comfortable",
     "developer_mode": False,
