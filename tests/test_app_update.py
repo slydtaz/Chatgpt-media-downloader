@@ -107,7 +107,7 @@ class VersionComparisonTests(unittest.TestCase):
         self.assertIsNotNone(update)
         self.assertEqual(update.version, "5.4.0-beta.2")
         self.assertEqual(update.source_ref, "v5.4.0-beta.2")
-        list_request.assert_called_once_with(f"{API_ROOT}/releases?per_page=50")
+        list_request.assert_called_once_with(f"{API_ROOT}/releases?per_page=100")
 
 
 class AppUpdateDiscoveryTests(unittest.TestCase):
