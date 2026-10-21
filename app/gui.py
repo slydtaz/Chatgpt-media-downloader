@@ -1433,8 +1433,8 @@ class MediaDownloaderApp:
             # guarantee it remains visible on machines where image rendering fails.
             for ribbon in range(4):
                 points = []
-                for step in range(91):
-                    t = step / 90
+                for step in range(61):
+                    t = step / 60
                     x = width * t
                     y = height * (0.18 + ribbon * 0.19 + 0.13 * math.sin(t * math.tau * 1.1 + elapsed * (0.55 + ribbon * 0.08) + ribbon))
                     points.extend((x, y))
@@ -1446,8 +1446,8 @@ class MediaDownloaderApp:
             for orbit in range(orbit_count):
                 rotation = math.pi * orbit / orbit_count + elapsed * (0.55 + orbit * 0.19) * (-1 if orbit % 2 else 1)
                 points = []
-                for step in range(145):
-                    angle = math.tau * step / 144
+                for step in range(61):
+                    angle = math.tau * step / 60
                     x, y = rx * math.cos(angle), ry * math.sin(angle)
                     points.extend((cx + x * math.cos(rotation) - y * math.sin(rotation),
                                    cy + x * math.sin(rotation) + y * math.cos(rotation)))
