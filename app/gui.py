@@ -1212,7 +1212,10 @@ class MediaDownloaderApp:
     def _build_home(self):
         frame=ttk.Frame(self.pages_area)
         self.page_frames["home"]=frame
-        hero=RoundedCard(frame,self,padding=(22,20),surface="panel2")
+        scroll=ScrollableFrame(frame)
+        scroll.pack(fill="both",expand=True)
+        body=scroll.body
+        hero=RoundedCard(body,self,padding=(22,20),surface="panel2")
         hero.pack(fill="x",pady=(0,13))
         self.hero_accent_bar=tk.Frame(hero,bg=self.colors["accent"],width=4,bd=0,highlightthickness=0)
         self.hero_accent_bar.pack(side="left",fill="y",padx=(0,18))
@@ -1271,7 +1274,7 @@ class MediaDownloaderApp:
         self.analyze_playlist_btn=RoundedGlowButton(buttons,text="Analisar playlist",style="Secondary.TButton",command=self._start_playlist_analysis)
         self.analyze_playlist_btn.pack(side="right",padx=(0,8))
 
-        quick_actions = ttk.Frame(frame)
+        quick_actions = ttk.Frame(body)
         quick_actions.pack(fill="x", pady=(0, 12))
         quick_specs = [
             ("Vídeos", "MP4 · qualidade configurável", lambda: self._select_download_mode("Vídeo")),
@@ -1300,7 +1303,7 @@ class MediaDownloaderApp:
 
         self.media_preview_placeholder = self._make_thumbnail_placeholder(220, 124)
         self.playlist_thumbnail_placeholder = self._make_thumbnail_placeholder(76, 43)
-        self.media_preview_card = RoundedCard(frame, self, padding=12, surface="panel")
+        self.media_preview_card = RoundedCard(body, self, padding=12, surface="panel")
         preview_header = ttk.Frame(self.media_preview_card, style="Card.TFrame")
         preview_header.pack(fill="x", pady=(0, 8))
         ttk.Label(preview_header, text="PRÉVIA AUTOMÁTICA", style="PreviewEyebrow.TLabel").pack(side="left")
@@ -1336,7 +1339,7 @@ class MediaDownloaderApp:
             style="Muted.TLabel", wraplength=650, justify="left",
         ).pack(anchor="w", pady=(12, 0))
         self.media_preview_card.pack_forget()
-        self.progress_card = self._card(frame,16)
+        self.progress_card = self._card(body,16)
         self.progress_card.pack(fill="x",pady=(0,13))
         progress_card = self.progress_card
         pr=ttk.Frame(progress_card,style="Card.TFrame")
@@ -1353,7 +1356,7 @@ class MediaDownloaderApp:
             box.pack(side="left",fill="both",expand=True,padx=(0,7))
             ttk.Label(box,text=label,style="MiniLabel.TLabel").pack(anchor="w")
             ttk.Label(box,textvariable=var,style="MiniValue.TLabel",wraplength=140).pack(anchor="w",pady=(4,0))
-        log_card=self._card(frame,13)
+        log_card=self._card(body,13)
         log_card.pack(fill="both",expand=True)
         top_log=ttk.Frame(log_card,style="Card.TFrame")
         top_log.pack(fill="x")
@@ -1367,7 +1370,7 @@ class MediaDownloaderApp:
         scroll=ttk.Scrollbar(log_frame,orient="vertical",command=self.log_text.yview)
         scroll.pack(side="right",fill="y")
         self.log_text.configure(yscrollcommand=scroll.set,state="disabled")
-        footer=ttk.Frame(frame)
+        footer=ttk.Frame(body)
         footer.pack(fill="x",pady=(9,0))
         ttk.Label(footer,text="Dica: use o gerenciador de playlists para escolher itens individualmente.",style="Muted.TLabel").pack(side="left")
         self.cancel_btn=RoundedGlowButton(footer,text="Cancelar download",style="Secondary.TButton",command=self.cancel_download,state="disabled")
