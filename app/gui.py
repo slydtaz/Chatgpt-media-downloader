@@ -557,6 +557,8 @@ class RoundedGlowButton(tk.Canvas):
         self._focused = False
         self._gradient_phase = 0.0
         self._gradient_strength = 0.0
+        self._visual_scale_current = 1.0
+        self._gradient_last_tick = time.monotonic()
         self._gradient_job = None
         self._textvariable = kwargs.pop("textvariable", None)
         self._font = tkfont.Font(
@@ -689,7 +691,7 @@ class RoundedGlowButton(tk.Canvas):
     def _schedule_gradient_animation(self):
         if self._gradient_job is None:
             try:
-                self._gradient_job = self.after(40, self._animate_gradient)
+                self._gradient_job = self.after(16, self._animate_gradient)
             except tk.TclError:
                 self._gradient_job = None
 
@@ -700,35 +702,45 @@ class RoundedGlowButton(tk.Canvas):
                 return
         except tk.TclError:
             return
-        animations_enabled = bool(self.app.config.get("animations_enabled", False))
-        if self._hovered and self._gradient_is_available():
-            self._gradient_strength = min(1.0, self._gradient_strength + 0.22)
-            if animations_enabled:
-                self._gradient_phase = (self._gradient_phase + 0.016) % 1.0
-            else:
-                self._gradient_phase = 0.0
+        now = time.monotonic()
+        elapsed = max(0.001, min(0.06, now - self._gradient_last_tick))
+        self._gradient_last_tick = now
+        hover_enabled = bool(self.app.config.get("visual_hover_enabled", True))
+        hover_active = (
+            hover_enabled and self._state != "disabled"
+            and self._gradient_is_available() and (self._hovered or self._focused)
+        )
+        reveal_seconds = float(self.app.config.get("visual_hover_reveal_seconds", 1.0))
+        reveal_seconds = max(0.2, min(2.0, reveal_seconds))
+        if hover_active:
+            # Reveal the top gradient/glow over the configured interval. At 1 s,
+            # opacity reaches 100%, and the edge colors continue looping.
+            self._gradient_strength = min(1.0, self._gradient_strength + elapsed / reveal_seconds)
+            loop_speed = float(self.app.config.get("visual_background_speed", 0.85))
+            self._gradient_phase = (self._gradient_phase + elapsed * 0.22 * loop_speed) % 1.0
         else:
-            self._gradient_strength *= 0.76
-            if animations_enabled:
-                delta = ((-self._gradient_phase + 0.5) % 1.0) - 0.5
-                self._gradient_phase = (self._gradient_phase + delta * 0.24) % 1.0
-            else:
-                self._gradient_phase = 0.0
-            if (self._gradient_strength < 0.008
-                    and min(self._gradient_phase, 1.0 - self._gradient_phase) < 0.003):
+            self._gradient_strength = max(0.0, self._gradient_strength - elapsed / reveal_seconds * 2.2)
+            if self._gradient_strength <= 0.002:
                 self._gradient_strength = 0.0
                 self._gradient_phase = 0.0
+
+        maximum_scale = float(self.app.config.get("visual_hover_scale", 1.06)) if hover_enabled else 1.0
+        maximum_scale = max(1.0, min(1.10, maximum_scale))
+        target_scale = maximum_scale if hover_active else 1.0
+        self._visual_scale_current += (target_scale - self._visual_scale_current) * min(1.0, elapsed * 13.5)
+        if abs(target_scale - self._visual_scale_current) < 0.001:
+            self._visual_scale_current = target_scale
+
         self._draw()
         still_animating = (
-            (self._hovered and self._gradient_is_available() and animations_enabled)
-            or self._gradient_strength > 0.0
-            or self._gradient_phase != 0.0
+            hover_active
+            or self._gradient_strength > 0.002
+            or abs(self._visual_scale_current - 1.0) > 0.001
         )
         if still_animating:
             self._schedule_gradient_animation()
-
     def _draw(self):
-        """Render rounded backgrounds at 4x resolution and downsample with Lanczos."""
+        """Render an antialiased dual-gradient button with a smooth hover scale-up."""
         try:
             width = max(self._natural_width, self.winfo_width(), 38)
             height = max(self._height, self.winfo_height(), 26)
@@ -738,42 +750,48 @@ class RoundedGlowButton(tk.Canvas):
             self.delete("all")
             edge, top, bottom, text_color = self._palette()
             has_gradient = self._gradient_is_available()
-            hovering = (self._hovered or self._focused) and has_gradient
+            hover_enabled = bool(self.app.config.get("visual_hover_enabled", True))
+            hovering = (self._hovered or self._focused) and hover_enabled and has_gradient
             palette = palette_colors(self.app.config.get("visual_palette", "cosmic"))
-            inner_palette = tuple(_blend_hex(value, "#D8D5FF", 0.24) for value in reversed(palette))
+            inner_palette = tuple(_blend_hex(value, "#E6E2FF", 0.12) for value in reversed(palette))
+
+            max_scale = float(self.app.config.get("visual_hover_scale", 1.06)) if hover_enabled and has_gradient else 1.0
+            max_scale = max(1.0, min(1.10, max_scale))
+            current_scale = float(getattr(self, "_visual_scale_current", 1.0))
+            current_scale = max(1.0, min(max_scale, current_scale))
+            target_width = max(32, min(width, round(width * current_scale / max_scale)))
+            target_height = max(24, min(height, round(height * current_scale / max_scale)))
+            offset_x = (width - target_width) // 2
+            offset_y = (height - target_height) // 2
+            glow_strength = self._gradient_strength if hover_enabled and has_gradient else 0.0
+
             artwork = render_rounded_button(
-                width, height, backdrop=bg, edge=edge, top=top, bottom=bottom,
+                target_width, target_height,
+                backdrop=bg, edge=edge, top=top, bottom=bottom,
                 outer_palette=palette if has_gradient else (),
                 inner_palette=inner_palette if has_gradient else (),
-                hover_palette=palette if hovering else (),
-                hover=hovering, radius=max(9, height / 2 - 1), scale=4,
+                hover_palette=palette if has_gradient else (),
+                hover=glow_strength > 0.001,
+                hover_strength=glow_strength,
+                gradient_phase=self._gradient_phase,
+                radius=max(9, target_height / 2 - 1), scale=4,
             )
             if artwork is not None and ImageTk is not None:
                 self._button_background_photo = ImageTk.PhotoImage(artwork, master=self.app.root)
-                self.create_image(0, 0, image=self._button_background_photo, anchor="nw")
+                self.create_image(offset_x, offset_y, image=self._button_background_photo, anchor="nw")
             else:
-                # Retain a compatibility path for source runs without Pillow.
-                outer_inset, inner_inset = 1.0, 3.0
-                outer_radius = max(9, height / 2 - outer_inset)
-                inner_radius = max(7, height / 2 - inner_inset)
+                # Retain the older Canvas fallback if Pillow is not installed.
                 self.create_polygon(
-                    _rounded_polygon(outer_inset, outer_inset, width-outer_inset, height-outer_inset, outer_radius),
-                    fill=_blend_hex(edge, bg, 0.24), outline="", width=1,
+                    _rounded_polygon(offset_x + 1, offset_y + 1,
+                                     offset_x + target_width - 1, offset_y + target_height - 1,
+                                     max(9, target_height / 2 - 1)),
+                    fill=_blend_hex(edge, bg, 0.24), outline=edge, width=1.2,
                 )
-                x0, y0, x1, y1 = inner_inset, inner_inset, width-inner_inset, height-inner_inset
-                self.create_polygon(_rounded_polygon(x0, y0, x1, y1, inner_radius), fill=bottom, outline="")
-                for y in range(int(y0+1), int(y1)):
-                    left, right = self._span(y, y0+1, y1-1, x0+1, x1-1, inner_radius-1)
-                    if left <= right:
-                        t = (y-y0) / max(1, y1-y0)
-                        self.create_line(left, y, right, y, fill=_blend_hex(top, bottom, t), width=1)
-                self.create_polygon(
-                    _rounded_polygon(outer_inset, outer_inset, width-outer_inset, height-outer_inset, outer_radius),
-                    fill="", outline=edge, width=1.1,
+                self.create_text(
+                    width/2, height/2, text=self.text, fill=text_color,
+                    font=self._font, anchor="center", width=max(10, width-20),
                 )
-                if has_gradient:
-                    self._draw_gradient_outline(width, height, outer_inset, outer_radius, palette, 0.03, 1.55)
-                    self._draw_gradient_outline(width, height, inner_inset+0.7, inner_radius, inner_palette, 0.39, 0.95)
+                return
             self.create_text(
                 width/2, height/2 + (0.5 if self._pressed else 0), text=self.text,
                 fill=text_color, font=self._font, anchor="center", width=max(10, width-20),
@@ -783,15 +801,19 @@ class RoundedGlowButton(tk.Canvas):
 
     def _on_enter(self, _event=None):
         self._hovered = True
-        self._gradient_strength = 1.0
-        self._gradient_phase = 0.0
+        self._gradient_last_tick = time.monotonic()
+        if self.app.config.get("visual_hover_enabled", True) and self._gradient_is_available():
+            self._schedule_gradient_animation()
         self._draw()
 
     def _on_leave(self, _event=None):
         self._hovered = False
         self._pressed = False
-        self._gradient_strength = 0.0
-        self._gradient_phase = 0.0
+        self._gradient_last_tick = time.monotonic()
+        if self._gradient_job is None and (
+            self._gradient_strength > 0.001 or self._visual_scale_current > 1.001
+        ):
+            self._schedule_gradient_animation()
         self._draw()
 
     def _on_press(self, _event=None):
@@ -826,10 +848,18 @@ class RoundedGlowButton(tk.Canvas):
 
     def _on_focus_in(self, _event=None):
         self._focused = True
+        self._gradient_last_tick = time.monotonic()
+        if self.app.config.get("visual_hover_enabled", True) and self._gradient_is_available():
+            self._schedule_gradient_animation()
         self._draw()
 
     def _on_focus_out(self, _event=None):
         self._focused = False
+        self._gradient_last_tick = time.monotonic()
+        if self._gradient_job is None and (
+            self._gradient_strength > 0.001 or self._visual_scale_current > 1.001
+        ):
+            self._schedule_gradient_animation()
         self._draw()
 
     def refresh_theme(self):
