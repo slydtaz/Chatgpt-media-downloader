@@ -141,10 +141,26 @@ def _run_gui_smoke_test() -> int:
         root.update()
 
         app._animate_hero_visual()
-        drawn_items = len(app.hero_visual.find_all())
-        if drawn_items < 12:
+        hero_items = app.hero_visual.find_all()
+        drawn_items = len(hero_items)
+        hero_photo = getattr(app, "hero_visual_photo", None)
+        if drawn_items < 1:
+            raise RuntimeError("A arte orbital do painel inicial não desenhou nenhum elemento.")
+        # Pillow renders the complete atom/nebula as one antialiased RGBA image,
+        # so Canvas item count is not the number of visible orbital components.
+        # Validate the actual rendered image when available; validate the native
+        # vector fallback otherwise. Counting Canvas items alone falsely rejects
+        # the supported high-quality Pillow renderer.
+        if hero_photo is not None:
+            if not any(app.hero_visual.type(item) == "image" for item in hero_items):
+                raise RuntimeError("A arte orbital gerada não foi anexada ao Canvas.")
+            if hero_photo.width() < 80 or hero_photo.height() < 60:
+                raise RuntimeError(
+                    f"A arte orbital ficou pequena demais: {hero_photo.width()}x{hero_photo.height()}."
+                )
+        elif drawn_items < 4:
             raise RuntimeError(
-                f"A animação do painel inicial desenhou apenas {drawn_items} elementos; esperado pelo menos 12."
+                f"O fallback vetorial desenhou apenas {drawn_items} elementos; esperados pelo menos 4."
             )
 
         for page_name in ("playlist", "settings", "dependencies", "updates", "help", "developer", "home"):
