@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -13,12 +14,12 @@ import urllib.request
 import uuid
 import zipfile
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import urlsplit
 
 from .config import APP_DATA, INSTALL_ID_PATH, INSTALL_ROOT, PRODUCT_ID, STARTUP_REPAIR_PENDING_PATH, VENDOR, VERSION
-from .security import trusted_urlopen
+from .security import trusted_urlopen, safe_archive_member_path
 
 OWNER = "slydtaz"
 REPOSITORY = "Chatgpt-media-downloader"
@@ -140,7 +141,7 @@ def _request_bytes(url: str, *, timeout: int = 20, maximum: int = MAX_DOWNLOAD_B
             if not _trusted_url(final_url, metadata=True):
                 raise AppUpdateError("O GitHub redirecionou para um endereço não autorizado.")
             declared = int(response.headers.get("Content-Length", "0") or 0)
-            if declared > maximum:
+            if declared < 0 or declared > maximum:
                 raise AppUpdateError("O arquivo informado pelo servidor excede o limite de segurança.")
             data = response.read(maximum + 1)
             if len(data) > maximum:
@@ -380,9 +381,17 @@ def check_repair_candidate(current_version: str = VERSION, *, frozen: Optional[b
                      "main", source_ref="main")
 
 
-def _download_file(url: str, destination: Path, progress: Optional[Callable[[int, int], None]] = None) -> tuple[int, str]:
+def _download_file(
+    url: str,
+    destination: Path,
+    progress: Optional[Callable[[int, int], None]] = None,
+    *,
+    expected_size: int | None = None,
+) -> tuple[int, str]:
     if not _trusted_url(url):
         raise AppUpdateError("O endereço do arquivo não é um asset autorizado do GitHub.")
+    if expected_size is not None and (expected_size <= 0 or expected_size > MAX_DOWNLOAD_BYTES):
+        raise AppUpdateError("O tamanho esperado do arquivo de atualização é inválido.")
     destination.parent.mkdir(parents=True, exist_ok=True)
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/octet-stream"})
     digest = hashlib.sha256()
@@ -393,21 +402,25 @@ def _download_file(url: str, destination: Path, progress: Optional[Callable[[int
             if not _trusted_url(final_url):
                 raise AppUpdateError("O GitHub redirecionou o download para um domínio não autorizado.")
             total = int(response.headers.get("Content-Length", "0") or 0)
-            if total > MAX_DOWNLOAD_BYTES:
+            if total < 0 or total > MAX_DOWNLOAD_BYTES:
                 raise AppUpdateError("O arquivo de atualização é maior que o limite de segurança.")
+            if expected_size is not None and total and total != expected_size:
+                raise AppUpdateError("O tamanho recebido não corresponde ao tamanho anunciado pelo GitHub.")
             while True:
                 block = response.read(1024 * 1024)
                 if not block:
                     break
                 done += len(block)
-                if done > MAX_DOWNLOAD_BYTES:
-                    raise AppUpdateError("O download excedeu o limite de segurança.")
+                if done > MAX_DOWNLOAD_BYTES or (expected_size is not None and done > expected_size):
+                    raise AppUpdateError("O download excedeu o tamanho esperado ou o limite de segurança.")
                 out.write(block)
                 digest.update(block)
                 if progress:
                     progress(done, total)
         if total and done != total:
             raise AppUpdateError("O download terminou antes do tamanho informado pelo GitHub.")
+        if expected_size is not None and done != expected_size:
+            raise AppUpdateError("O tamanho final do arquivo não corresponde ao metadado da Release.")
         return done, digest.hexdigest()
     except AppUpdateError:
         destination.unlink(missing_ok=True)
@@ -439,8 +452,17 @@ def _verify_executable_hash(update: AppUpdate, staged: Path, computed_hash: str,
 
 
 def _safe_extract_zip(archive: Path, destination: Path) -> Path:
+    destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
     dest_resolved = destination.resolve()
+    try:
+        archive_info = archive.lstat()
+    except OSError as exc:
+        raise AppUpdateError("O pacote ZIP não pôde ser inspecionado.") from exc
+    if archive.is_symlink() or not stat.S_ISREG(archive_info.st_mode):
+        raise AppUpdateError("O pacote ZIP precisa ser um arquivo regular, não um link.")
+    if archive_info.st_size <= 0 or archive_info.st_size > MAX_DOWNLOAD_BYTES:
+        raise AppUpdateError("O pacote ZIP está vazio ou excede o limite permitido.")
     try:
         with zipfile.ZipFile(archive) as zf:
             members = zf.infolist()
@@ -449,20 +471,30 @@ def _safe_extract_zip(archive: Path, destination: Path) -> Path:
             unpacked_size = sum(max(0, int(member.file_size)) for member in members)
             if unpacked_size > MAX_SOURCE_UNPACKED_BYTES:
                 raise AppUpdateError("O pacote de origem excede o limite de tamanho após extração.")
+            seen: dict[str, bool] = {}
             for member in members:
-                pure = PurePosixPath(member.filename)
-                if pure.is_absolute() or ".." in pure.parts or "\\" in member.filename:
-                    raise AppUpdateError("O pacote de origem contém um caminho inseguro.")
-                target = (destination / Path(*pure.parts)).resolve()
-                if target != dest_resolved and dest_resolved not in target.parents:
-                    raise AppUpdateError("O pacote de origem tenta gravar fora da pasta temporária.")
-                mode = (member.external_attr >> 16) & 0o170000
-                if mode == 0o120000:
-                    raise AppUpdateError("O pacote de origem contém um link simbólico não permitido.")
+                try:
+                    target = safe_archive_member_path(destination, member.filename)
+                    key = target.relative_to(dest_resolved).as_posix().casefold()
+                except (ValueError, OSError) as exc:
+                    raise AppUpdateError("O pacote de origem contém um caminho inseguro ou ambíguo.") from exc
+                mode = (member.external_attr >> 16) & 0xFFFF
+                file_type = stat.S_IFMT(mode)
+                if file_type and file_type not in {stat.S_IFREG, stat.S_IFDIR}:
+                    raise AppUpdateError("O pacote de origem contém um link ou arquivo especial não permitido.")
+                is_directory = member.is_dir() or file_type == stat.S_IFDIR
+                if key in seen:
+                    raise AppUpdateError("O pacote de origem contém caminhos duplicados, inclusive diferenças de maiúsculas.")
+                for parent in ("/".join(key.split("/")[:i]) for i in range(1, len(key.split("/")))):
+                    if parent in seen and not seen[parent]:
+                        raise AppUpdateError("O pacote de origem contém um arquivo usado como diretório.")
+                if not is_directory and any(existing.startswith(key + "/") for existing in seen):
+                    raise AppUpdateError("O pacote de origem contém conflito entre arquivo e diretório.")
+                seen[key] = is_directory
             zf.extractall(destination)
     except AppUpdateError:
         raise
-    except (OSError, zipfile.BadZipFile, RuntimeError) as exc:
+    except (OSError, zipfile.BadZipFile, RuntimeError, ValueError) as exc:
         raise AppUpdateError(f"O pacote ZIP não pôde ser extraído com segurança: {exc}") from exc
 
     for candidate in destination.iterdir():
@@ -543,8 +575,11 @@ def prepare_update(
             staged = temp_dir / "ChatGPTMediaDownloader.exe"
             if progress:
                 progress("Baixando o executável completo", 0, update.download_size)
-            size, sha = _download_file(update.download_url, staged,
-                                      lambda done, total: progress("Baixando o executável completo", done, total) if progress else None)
+            size, sha = _download_file(
+                update.download_url, staged,
+                lambda done, total: progress("Baixando o executável completo", done, total) if progress else None,
+                expected_size=update.download_size if update.download_size else None,
+            )
             if update.download_size and size != update.download_size:
                 raise AppUpdateError("O tamanho do executável difere dos metadados da Release.")
             _verify_executable_hash(update, staged, sha, temp_dir)
