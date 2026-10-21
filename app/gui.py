@@ -33,6 +33,7 @@ from .app_update import (
 from .uninstall import launch_uninstaller
 from .brand_assets import load_brand_images
 from .media_preview import fetch_thumbnail_bytes, inspect_media_preview
+from .visual_effects import PALETTES as EFFECT_PALETTES, render_atom_art, render_gradient_preview, palette_colors
 
 try:
     from PIL import Image, ImageDraw, ImageFont, ImageTk
@@ -365,7 +366,7 @@ class IconNavButton(tk.Canvas):
 
     def __init__(self, parent, app, key: str, glyph: str, command: Callable[[], None]):
         super().__init__(
-            parent, width=48, height=44, bd=0, highlightthickness=0,
+            parent, width=184, height=42, bd=0, highlightthickness=0,
             background=app.colors["panel2"], cursor="hand2",
         )
         self.app = app
@@ -481,33 +482,37 @@ class IconNavButton(tk.Canvas):
     def _draw(self):
         try:
             self.delete("all")
-            width = max(48, self.winfo_width())
+            width = max(184, self.winfo_width())
             height = max(42, self.winfo_height())
             colors = self.app.colors
-            panel = colors.get("panel2", "#191F38")
+            panel = colors.get("panel2", "#090814")
             accent = colors.get("accent", "#8B5CF6")
+            palette = palette_colors(self.app.config.get("visual_palette", "cosmic"))
             if self.active or self.hovered:
-                fill = _blend_hex(accent, panel, 0.68 if self.active else 0.84)
-                self.create_polygon(
-                    _rounded_polygon(5, 2, width - 5, height - 2, 13),
-                    smooth=False, splinesteps=12, fill=fill, outline="",
-                )
-            if self.active:
-                self.create_polygon(
-                    _rounded_polygon(1, height / 2 - 8, 4, height / 2 + 8, 2),
-                    fill=colors.get("pink", accent), outline="", smooth=False,
-                )
-            icon_color = accent if self.active else (colors["fg"] if self.hovered else colors["muted"])
-            size = max(19, int(21 * self._scale))
-            photo = _render_nav_icon(self.app.root, self.app._nav_icon_cache, self.page_key, size, icon_color)
+                surface = _blend_hex(accent, panel, 0.66 if self.active else 0.86)
+                self.create_polygon(_rounded_polygon(2, 1, width - 2, height - 1, 12),
+                                    smooth=False, fill=surface,
+                                    outline=_blend_hex(palette[1], panel, 0.18 if self.active else 0.58),
+                                    width=1.2 if self.active else 1)
+                if self.active:
+                    self.create_polygon(_rounded_polygon(1, height / 2 - 8, 4, height / 2 + 8, 2),
+                                        fill=palette[0], outline="", smooth=False)
+            icon_color = palette[0] if self.active else (colors["fg"] if self.hovered else colors["muted"])
+            icon_size = max(19, int(21 * self._scale))
+            photo = _render_nav_icon(self.app.root, self.app._nav_icon_cache, self.page_key, icon_size, icon_color)
             if photo is not None:
                 self._icon_photo = photo
-                self.create_image(width / 2, height / 2, image=photo)
+                self.create_image(26, height / 2, image=photo)
             else:
-                self._draw_vector_icon(width / 2, height / 2, size, icon_color)
+                self._draw_vector_icon(26, height / 2, icon_size, icon_color)
+            label = {"home":"Início","playlist":"Playlists","settings":"Aparência",
+                     "dependencies":"Dependências","updates":"Atualizações",
+                     "help":"Ajuda","developer":"Diagnóstico"}.get(self.page_key, self.page_key)
+            self.create_text(51, height / 2, text=label,
+                             fill=colors["fg"] if self.active or self.hovered else colors["muted"],
+                             font=("Segoe UI", 10, "bold" if self.active else "normal"), anchor="w")
         except tk.TclError:
             pass
-
 
 class RoundedGlowButton(tk.Canvas):
     """A real clickable rounded button with restrained product styling and keyboard support."""
@@ -700,93 +705,61 @@ class RoundedGlowButton(tk.Canvas):
             self._schedule_gradient_animation()
 
     def _draw(self):
+        """Draw crisp, static dual neon borders; only the button fill changes on hover."""
         try:
             width = max(self._natural_width, self.winfo_width(), 38)
             height = max(self._height, self.winfo_height(), 26)
             c = self.app.colors
             bg = self._parent_background(self.master)
-            tk.Canvas.configure(
-                self, background=bg,
-                cursor="arrow" if self._state == "disabled" else "hand2",
-            )
+            tk.Canvas.configure(self, background=bg, cursor="arrow" if self._state == "disabled" else "hand2")
             self.delete("all")
             edge, top, bottom, text_color = self._palette()
-            strength = self._gradient_strength if self._gradient_is_available() else 0.0
-            strength = max(0.0, min(1.0, strength))
-            outer_inset = max(0.35, 1.2 - 0.75 * strength)
+            has_gradient = self._gradient_is_available()
+            hovering = (self._hovered or self._focused) and has_gradient
+            strength = 1.0 if hovering else 0.0
+            outer_inset, inner_inset = 1.0, 3.0
             outer_radius = max(9, height / 2 - outer_inset)
-            inner_inset = 3.0 - 0.5 * strength
             inner_radius = max(7, height / 2 - inner_inset)
-            self.create_polygon(
-                _rounded_polygon(outer_inset, outer_inset, width - outer_inset,
-                                 height - outer_inset, outer_radius),
-                fill=_blend_hex(edge, bg, 0.24), outline=edge, width=1.4,
-            )
-            x0, y0, x1, y1 = inner_inset, inner_inset, width - inner_inset, height - inner_inset
-            self.create_polygon(
-                _rounded_polygon(x0, y0, x1, y1, inner_radius),
-                fill=bottom, outline="",
-            )
-            for y in range(int(y0 + 1), int(y1)):
-                left, right = self._span(
-                    y, y0 + 1, y1 - 1, x0 + 1, x1 - 1, inner_radius - 1
-                )
+            self.create_polygon(_rounded_polygon(outer_inset, outer_inset, width-outer_inset, height-outer_inset, outer_radius),
+                                fill=_blend_hex(edge, bg, 0.24), outline="", width=1)
+            x0, y0, x1, y1 = inner_inset, inner_inset, width-inner_inset, height-inner_inset
+            self.create_polygon(_rounded_polygon(x0, y0, x1, y1, inner_radius), fill=bottom, outline="")
+            for y in range(int(y0+1), int(y1)):
+                left, right = self._span(y, y0+1, y1-1, x0+1, x1-1, inner_radius-1)
                 if left <= right:
-                    t = (y - y0) / max(1, y1 - y0)
+                    t = (y-y0) / max(1, y1-y0)
                     color = _blend_hex(top, bottom, max(0.0, min(1.0, t)))
-                    if strength > 0.0:
-                        tint = _cyclic_palette_color(
-                            BUTTON_FILL_GRADIENT, self._gradient_phase + t * 0.36
-                        )
-                        color = _blend_hex(color, tint, 0.28 * strength)
+                    if strength:
+                        tint = _cyclic_palette_color(palette_colors(self.app.config.get("visual_palette", "cosmic")), t*0.36)
+                        color = _blend_hex(color, tint, 0.36)
                     self.create_line(left, y, right, y, fill=color, width=1)
-            self.create_polygon(
-                _rounded_polygon(outer_inset, outer_inset, width - outer_inset,
-                                 height - outer_inset, outer_radius),
-                fill="", outline=edge, width=1.1,
-            )
-            if strength > 0.0:
-                self._draw_gradient_outline(
-                    width, height, outer_inset, outer_radius,
-                    BUTTON_OUTER_GRADIENT, self._gradient_phase, 1.8 * strength,
-                )
-                self._draw_gradient_outline(
-                    width, height, inner_inset + 0.5, inner_radius,
-                    BUTTON_INNER_GRADIENT, self._gradient_phase + 0.27, 1.2 * strength,
-                )
+            self.create_polygon(_rounded_polygon(outer_inset, outer_inset, width-outer_inset, height-outer_inset, outer_radius),
+                                fill="", outline=_blend_hex(edge, "#FFFFFF", 0.20), width=0.8)
+            if has_gradient:
+                palette = palette_colors(self.app.config.get("visual_palette", "cosmic"))
+                inner_palette = tuple(_blend_hex(value, "#D8D5FF", 0.24) for value in reversed(palette))
+                # Two continuously colored outlines remain visible even when not hovered.
+                self._draw_gradient_outline(width, height, outer_inset, outer_radius, palette, 0.03, 1.55)
+                self._draw_gradient_outline(width, height, inner_inset+0.7, inner_radius, inner_palette, 0.39, 0.95)
             else:
-                self.create_line(
-                    min(width / 2 - 10, 26), 4,
-                    max(width / 2 + 10, width - 26), 4,
-                    fill=_blend_hex(edge, "#FFFFFF", 0.34 if self._hovered else 0.16),
-                    width=1,
-                )
-            self.create_text(
-                width / 2, height / 2 + (0.5 if self._pressed else 0),
-                text=self.text, fill=text_color, font=self._font,
-                anchor="center", width=max(10, width - 20),
-            )
+                self.create_polygon(_rounded_polygon(outer_inset, outer_inset, width-outer_inset, height-outer_inset, outer_radius),
+                                    fill="", outline=edge, width=1.1)
+            self.create_text(width/2, height/2 + (0.5 if self._pressed else 0), text=self.text,
+                             fill=text_color, font=self._font, anchor="center", width=max(10, width-20))
         except tk.TclError:
             pass
 
     def _on_enter(self, _event=None):
         self._hovered = True
-        if self._gradient_is_available():
-            if self.app.config.get("animations_enabled", False):
-                self._schedule_gradient_animation()
-            else:
-                self._gradient_strength = 1.0
-                self._gradient_phase = 0.0
+        self._gradient_strength = 1.0
+        self._gradient_phase = 0.0
         self._draw()
 
     def _on_leave(self, _event=None):
         self._hovered = False
         self._pressed = False
-        if not self.app.config.get("animations_enabled", False):
-            self._gradient_strength = 0.0
-            self._gradient_phase = 0.0
-        elif self._gradient_strength > 0.0 or self._gradient_phase != 0.0:
-            self._schedule_gradient_animation()
+        self._gradient_strength = 0.0
+        self._gradient_phase = 0.0
         self._draw()
 
     def _on_press(self, _event=None):
@@ -1121,63 +1094,67 @@ class MediaDownloaderApp:
 
     # ---------- Shell ----------
     def _build_shell(self):
-        outer=ttk.Frame(self.root,padding=13)
-        outer.pack(fill="both",expand=True)
-        self.shell=outer
-        sidebar=ttk.Frame(outer,style="Sidebar.TFrame",padding=(8,13,8,12),width=92)
-        sidebar.pack(side="left",fill="y",padx=(0,12))
+        outer = ttk.Frame(self.root, padding=13)
+        outer.pack(fill="both", expand=True)
+        self.shell = outer
+        sidebar = ttk.Frame(outer, style="Sidebar.TFrame", padding=(10, 13, 10, 12), width=216)
+        sidebar.pack(side="left", fill="y", padx=(0, 13))
         sidebar.pack_propagate(False)
-        self.sidebar=sidebar
-        brand=ttk.Frame(sidebar,style="Sidebar.TFrame")
-        brand.pack(fill="x",pady=(0,16))
-        self.brand_logo_canvas = tk.Canvas(
-            brand, width=76, height=62, bg=self.colors["panel2"],
-            bd=0, highlightthickness=0, relief="flat",
-        )
+        self.sidebar = sidebar
+        brand = ttk.Frame(sidebar, style="Sidebar.TFrame")
+        brand.pack(fill="x", pady=(3, 17))
+        self.brand_logo_canvas = tk.Canvas(brand, width=54, height=54, bg=self.colors["panel2"], bd=0, highlightthickness=0, relief="flat")
         self.brand_logo_canvas._brand_logo_canvas = True
-        self.brand_logo_canvas.pack(anchor="center")
+        self.brand_logo_canvas.pack(side="left", padx=(1, 8))
         self._draw_brand_logo()
-        ttk.Label(brand, text="MEDIA LAB", style="BrandWordmark.TLabel", anchor="center").pack(fill="x", pady=(2, 0))
-        ttk.Separator(sidebar).pack(fill="x",pady=(0,12))
-        for key,glyph,label,tip in [
-            ("home","⌂","Início","Baixe vídeo ou áudio, acompanhe o progresso e consulte o resumo da atividade."),
-            ("playlist","▤","Playlists","Analise uma playlist, escolha itens e personalize formato e qualidade por mídia."),
-            ("settings","⚙","Aparência","Personalize as cores de destaque, o tema, as pastas e o desempenho."),
-            ("dependencies","◈","Dependências","Confira e configure yt-dlp, FFmpeg e FFprobe."),
-            ("updates","⟳","Atualizações","Confira versões, atualize o aplicativo ou restaure arquivos oficiais."),
-            ("help","?","Ajuda","Guias rápidos, opções de qualidade, playlists e segurança."),
-            ("developer","⌘","Diagnóstico","Versão, caminhos, dados técnicos e desinstalação."),
-        ]:
-            button=IconNavButton(sidebar,self,key,glyph,lambda k=key:self.show_page(k))
-            button.pack(anchor="center",pady=3)
-            self.nav_buttons[key]=button
-            Tooltip(button,f"{label}\n{tip}",delay_ms=450,click_to_pin=False)
-        spacer=ttk.Frame(sidebar,style="Sidebar.TFrame")
-        spacer.pack(fill="both",expand=True)
-        ttk.Separator(sidebar).pack(fill="x",pady=(12,9))
-        self.dep_badge=tk.Label(sidebar,text="●",bg=self.colors["panel2"],fg=self.colors["muted"],anchor="center",font=("Segoe UI",10,"bold"),padx=7,pady=7)
-        self.dep_badge.pack(fill="x",pady=(0,5))
-        Tooltip(self.dep_badge,"Veja a aba Dependências para conferir o estado atual.",delay_ms=450,click_to_pin=False)
-        ttk.Label(sidebar,text=f"v{VERSION}",style="SidebarMuted.TLabel",anchor="center",font=("Segoe UI",7)).pack(fill="x")
-        content_wrap=ttk.Frame(outer)
-        content_wrap.pack(side="left",fill="both",expand=True)
-        self.content_wrap=content_wrap
-        header=ttk.Frame(content_wrap,style="Topbar.TFrame")
-        header.pack(fill="x",pady=(4,16))
-        header_left=ttk.Frame(header,style="Topbar.TFrame")
-        header_left.pack(side="left",fill="x",expand=True)
-        ttk.Label(header_left,text="MEDIA DOWNLOADER  /  CENTRAL DE MÍDIA",style="Eyebrow.TLabel").pack(anchor="w",pady=(0,3))
-        self.page_title_var=tk.StringVar(value="Início")
-        ttk.Label(header_left,textvariable=self.page_title_var,style="PageTitle.TLabel").pack(anchor="w")
-        self.page_subtitle_var=tk.StringVar(value="Gerencie vídeos, músicas e playlists em um só lugar.")
-        ttk.Label(header_left,textvariable=self.page_subtitle_var,style="Muted.TLabel").pack(anchor="w",pady=(2,0))
-        header_actions=ttk.Frame(header,style="Topbar.TFrame")
-        header_actions.pack(side="right",anchor="n",padx=(10,0),pady=(9,0))
-        ttk.Label(header_actions,text=f"v{VERSION}",style="SectionBadge.TLabel").pack(side="left",padx=(0,8))
-        self.header_update_btn=RoundedGlowButton(header_actions,text="Atualizações  ↗",style="Secondary.TButton",command=lambda:self.show_page("updates"))
+        brand_copy = ttk.Frame(brand, style="Sidebar.TFrame")
+        brand_copy.pack(side="left", fill="x", expand=True, anchor="center")
+        ttk.Label(brand_copy, text="ChatGPT Media", style="BrandWordmark.TLabel", anchor="w", font=("Segoe UI", 9, "bold")).pack(fill="x", anchor="w")
+        ttk.Label(brand_copy, text="Downloader", style="SidebarMuted.TLabel", anchor="w", font=("Segoe UI", 8)).pack(fill="x", anchor="w", pady=(2, 0))
+        ttk.Label(brand_copy, text="Vídeos · áudio", style="SidebarMuted.TLabel", anchor="w", font=("Segoe UI", 7)).pack(fill="x", anchor="w", pady=(2, 0))
+        ttk.Separator(sidebar).pack(fill="x", pady=(0, 12))
+        self.nav_buttons = {}
+        items = [
+            ("home", "⌂", "Início", "Baixe vídeo ou áudio, acompanhe progresso e consulte atividade."),
+            ("playlist", "▤", "Playlists", "Analise playlists, selecione itens e ajuste opções por mídia."),
+            ("settings", "⚙", "Aparência", "Personalize tema, gradientes, pastas e comportamento."),
+            ("dependencies", "◈", "Dependências", "Confira yt-dlp, FFmpeg e FFprobe."),
+            ("updates", "⟳", "Atualizações", "Atualize ou recupere arquivos oficiais do aplicativo."),
+            ("help", "?", "Ajuda", "Guias de uso, qualidade, playlists e segurança."),
+            ("developer", "⌘", "Diagnóstico", "Versão, ambiente, logs e desinstalação."),
+        ]
+        for key, glyph, label, tip in items:
+            button = IconNavButton(sidebar, self, key, glyph, lambda k=key: self.show_page(k))
+            button.pack(fill="x", padx=0, pady=3)
+            self.nav_buttons[key] = button
+            Tooltip(button, f"{label}\\n{tip}", delay_ms=500, click_to_pin=False)
+        spacer = ttk.Frame(sidebar, style="Sidebar.TFrame")
+        spacer.pack(fill="both", expand=True)
+        ttk.Separator(sidebar).pack(fill="x", pady=(12, 9))
+        self.dep_badge = tk.Label(sidebar, text="●  Dependências", bg=self.colors["panel2"], fg=self.colors["muted"], anchor="w", font=("Segoe UI", 8, "bold"), padx=9, pady=8)
+        self.dep_badge.pack(fill="x", pady=(0, 6))
+        Tooltip(self.dep_badge, "Veja a aba Dependências para conferir o estado atual.", delay_ms=500, click_to_pin=False)
+        ttk.Label(sidebar, text=f"v{VERSION}", style="SidebarMuted.TLabel", anchor="w", font=("Segoe UI", 7)).pack(fill="x", padx=(8, 0))
+        content_wrap = ttk.Frame(outer)
+        content_wrap.pack(side="left", fill="both", expand=True)
+        self.content_wrap = content_wrap
+        header = ttk.Frame(content_wrap, style="Topbar.TFrame")
+        header.pack(fill="x", pady=(4, 13))
+        header_left = ttk.Frame(header, style="Topbar.TFrame")
+        header_left.pack(side="left", fill="x", expand=True)
+        ttk.Label(header_left, text="CHATGPT MEDIA DOWNLOADER  /  CENTRAL DE MÍDIA", style="Eyebrow.TLabel").pack(anchor="w", pady=(0, 3))
+        self.page_title_var = tk.StringVar(value="Início")
+        ttk.Label(header_left, textvariable=self.page_title_var, style="PageTitle.TLabel").pack(anchor="w")
+        self.page_subtitle_var = tk.StringVar(value="Vídeos, músicas e playlists em um só lugar.")
+        ttk.Label(header_left, textvariable=self.page_subtitle_var, style="Muted.TLabel").pack(anchor="w", pady=(2, 0))
+        header_actions = ttk.Frame(header, style="Topbar.TFrame")
+        header_actions.pack(side="right", anchor="n", padx=(10, 0), pady=(9, 0))
+        ttk.Label(header_actions, text=f"v{VERSION}", style="SectionBadge.TLabel").pack(side="left", padx=(0, 8))
+        self.header_update_btn = RoundedGlowButton(header_actions, text="Atualizações  ↗", style="Secondary.TButton", command=lambda: self.show_page("updates"))
         self.header_update_btn.pack(side="left")
-        self.pages_area=ttk.Frame(content_wrap)
-        self.pages_area.pack(fill="both",expand=True)
+        self.pages_area = ttk.Frame(content_wrap)
+        self.pages_area.pack(fill="both", expand=True)
+
     def _card(self, parent, padding=16):
         return RoundedCard(parent, self, padding=padding)
 
@@ -1189,7 +1166,7 @@ class MediaDownloaderApp:
         self.hero_accent_bar=tk.Frame(hero,bg=self.colors["accent"],width=4,bd=0,highlightthickness=0)
         self.hero_accent_bar.pack(side="left",fill="y",padx=(0,18))
         self.hero_visual = tk.Canvas(
-            hero, width=108, height=112, bg=self.colors["panel2"],
+            hero, width=238, height=154, bg=self.colors["panel2"],
             highlightthickness=0, bd=0,
         )
         self.hero_visual.pack(side="right", fill="y", padx=(12, 0))
@@ -1231,7 +1208,22 @@ class MediaDownloaderApp:
         self.analyze_playlist_btn=RoundedGlowButton(buttons,text="Analisar playlist",style="Secondary.TButton",command=self._start_playlist_analysis)
         self.analyze_playlist_btn.pack(side="right",padx=(0,8))
 
-        self.media_preview_placeholder = self._make_thumbnail_placeholder(220, 124)
+        quick_actions = ttk.Frame(frame)
+        quick_actions.pack(fill="x", pady=(0, 12))
+        quick_specs = [
+            ("Vídeos", "MP4 · qualidade configurável", lambda: self._select_download_mode("Vídeo")),
+            ("Áudio MP3", "MP3 · bitrate configurável", lambda: self._select_download_mode("Música — MP3")),
+            ("Playlists", "Escolha itens individuais", lambda: self.show_page("playlist")),
+        ]
+        for index, (title, description, action) in enumerate(quick_specs):
+            card = self._card(quick_actions, 11)
+            left = 0 if index == 0 else 6
+            right = 6 if index < len(quick_specs)-1 else 0
+            card.pack(side="left", fill="both", expand=True, padx=(left, right))
+            ttk.Label(card, text=title, style="CardTitle.TLabel").pack(anchor="w")
+            ttk.Label(card, text=description, style="Muted.TLabel", wraplength=220).pack(anchor="w", pady=(4, 8))
+            RoundedGlowButton(card, text="Abrir  →", style="Secondary.TButton", command=action).pack(anchor="e")
+
         self.playlist_thumbnail_placeholder = self._make_thumbnail_placeholder(76, 43)
         self.media_preview_card = RoundedCard(frame, self, padding=12, surface="panel")
         preview_header = ttk.Frame(self.media_preview_card, style="Card.TFrame")
@@ -2400,80 +2392,81 @@ class MediaDownloaderApp:
         except tk.TclError:
             pass
 
-    def _animate_hero_visual(self):
-        """Render lightweight space particles and deforming orb shapes on the home hero."""
+    def _render_static_visuals(self):
+        """Render settings-driven local artwork without animating gradients."""
         canvas = getattr(self, "hero_visual", None)
-        if canvas is None:
-            return
         try:
-            if not self.root.winfo_exists() or not canvas.winfo_exists():
-                return
-            canvas.delete("all")
-            width = max(canvas.winfo_width(), 108)
-            height = max(canvas.winfo_height(), 112)
-            cx, cy = width / 2.0, height / 2.0
-            phase = self._hero_visual_phase
-            panel = self.colors.get("panel2", "#191F38")
-            accent = self.colors.get("accent", "#8B5CF6")
-            pink = self.colors.get("pink", "#F472B6")
-            blue = self.colors.get("space", "#60A5FA")
-            violet_glow = _blend_hex(accent, panel, 0.36)
-            pink_glow = _blend_hex(pink, panel, 0.42)
-            blue_glow = _blend_hex(blue, panel, 0.42)
+            if canvas is not None and canvas.winfo_exists():
+                width = max(canvas.winfo_width(), canvas.winfo_reqwidth(), 150)
+                height = max(canvas.winfo_height(), canvas.winfo_reqheight(), 100)
+                enabled = bool(self.config.get("visual_effects_enabled", True))
+                palette = str(self.config.get("visual_palette", "cosmic"))
+                strength = float(self.config.get("visual_strength", 0.55)) if enabled else 0.0
+                orbits = int(self.config.get("visual_orbits", 3))
+                artwork = render_atom_art(width, height, palette=palette, strength=strength, orbit_count=orbits, background=enabled)
+                canvas.delete("all")
+                if artwork is not None and ImageTk is not None:
+                    photo = ImageTk.PhotoImage(artwork, master=self.root)
+                    self.hero_visual_photo = photo
+                    canvas.create_image(width/2, height/2, image=photo)
+                else:
+                    canvas.configure(background=self.colors.get("panel2", "#090814"))
+                    cx, cy = width/2, height/2
+                    chosen = palette_colors(palette)
+                    for index in range(orbits):
+                        canvas.create_oval(cx-width*0.31, cy-height*0.20, cx+width*0.31, cy+height*0.20,
+                                           outline=chosen[index % len(chosen)], width=2)
+                    canvas.create_oval(cx-7, cy-7, cx+7, cy+7, fill=chosen[0], outline="#F4F2FF", width=2)
+            preview = getattr(self, "visual_preview_canvas", None)
+            if preview is not None and preview.winfo_exists():
+                width = max(420, preview.winfo_width(), preview.winfo_reqwidth())
+                height = max(72, preview.winfo_height(), 86)
+                enabled = bool(self.config.get("visual_effects_enabled", True))
+                palette = str(self.config.get("visual_palette", "cosmic"))
+                strength = float(self.config.get("visual_strength", 0.55)) if enabled else 0.0
+                image = render_gradient_preview(width, height, palette, strength)
+                preview.delete("all")
+                if image is not None and ImageTk is not None:
+                    photo = ImageTk.PhotoImage(image, master=self.root)
+                    self.visual_preview_photo = photo
+                    preview.create_image(0, 0, image=photo, anchor="nw")
+                else:
+                    chosen = palette_colors(palette)
+                    for x in range(width):
+                        color = chosen[min(len(chosen)-1, int(x*len(chosen)/max(1, width)))] if enabled else "#090814"
+                        preview.create_line(x, 0, x, height, fill=color)
+            for button in getattr(self, "nav_buttons", {}).values():
+                if hasattr(button, "refresh_theme"):
+                    button.refresh_theme()
+            def refresh_buttons(parent):
+                for child in parent.winfo_children():
+                    if isinstance(child, RoundedGlowButton):
+                        child.refresh_theme()
+                    if child.winfo_children():
+                        refresh_buttons(child)
+            if getattr(self, "root", None) is not None:
+                refresh_buttons(self.root)
+        except (tk.TclError, ValueError, TypeError) as exc:
+            try:
+                self.logger.debug("Falha ao atualizar efeitos estáticos: %s", type(exc).__name__)
+            except Exception:
+                pass
 
-            for index, radius in enumerate((25, 37, 45)):
-                wobble = math.sin(phase * 0.8 + index * 0.9) * 1.8
-                canvas.create_oval(
-                    cx - radius - wobble, cy - radius * 0.78,
-                    cx + radius + wobble, cy + radius * 0.78,
-                    outline=(violet_glow if index == 0 else pink_glow if index == 1 else blue_glow),
-                    width=2 if index == 0 else 1,
-                )
+    def _animate_hero_visual(self):
+        """Compatibility hook: render the atom artwork once; gradients do not animate."""
+        self._render_static_visuals()
+        self._hero_animation_job = None
 
-            # Soft, smoothed polygons mimic liquid orbs, morphing with every frame.
-            for blob_index, (offset_x, offset_y, base, color, outline) in enumerate((
-                (-19, -12, 15, blue_glow, blue),
-                (18, -7, 17, pink_glow, pink),
-                (0, 13, 20, violet_glow, accent),
-            )):
-                points = []
-                blob_phase = phase * (0.78 + blob_index * 0.11) + blob_index * 1.9
-                for index in range(36):
-                    angle = math.tau * index / 36.0
-                    wave = (
-                        math.sin(angle * 3 + blob_phase) * 0.16
-                        + math.cos(angle * 2 - blob_phase * 0.7) * 0.10
-                        + math.sin(angle * 5 + phase * 0.55) * 0.045
-                    )
-                    rx = base * (1.0 + wave)
-                    ry = base * (0.77 + wave * 0.7)
-                    points.extend((
-                        cx + offset_x + math.cos(angle) * rx,
-                        cy + offset_y + math.sin(angle) * ry,
-                    ))
-                canvas.create_polygon(
-                    points, smooth=True, splinesteps=10, fill=color, outline=outline, width=1,
-                )
-
-            for index in range(11):
-                angle = phase * (0.55 + (index % 3) * 0.12) + index * (math.tau / 11.0)
-                radius = 39 + 4 * math.sin(phase * 1.2 + index * 0.8)
-                x = cx + math.cos(angle) * radius
-                y = cy + math.sin(angle) * radius * 0.75
-                size = 1.2 if index % 3 else 2.2
-                color = (pink if index % 3 == 0 else blue if index % 3 == 1 else accent)
-                canvas.create_oval(x-size, y-size, x+size, y+size, fill=color, outline="")
-            canvas.create_text(
-                cx, cy, text="↓", fill=self.colors.get("fg", "#F4F5FF"),
-                font=("Segoe UI", 27, "bold"),
-            )
-            self._hero_visual_phase = (phase + 0.13) % math.tau
-            if self.config.get("animations_enabled", True):
-                self._hero_animation_job = self.root.after(72, self._animate_hero_visual)
-            else:
-                self._hero_animation_job = None
-        except tk.TclError:
+    def _select_download_mode(self, mode: str):
+        """Select a real download mode from one of the home quick-action cards."""
+        if mode not in {"Vídeo", "Música — MP3"}:
             return
+        self.mode_var.set(mode)
+        self._sync_quality()
+        try:
+            self.url_entry.focus_set()
+        except tk.TclError:
+            pass
 
     # ---------- Page navigation and transitions ----------
     def _finish_page_animation(self):
