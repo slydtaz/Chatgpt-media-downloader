@@ -352,9 +352,10 @@ class RoundedCard(ttk.Frame):
             self._canvas.delete("surface")
             if width > 8 and height > 8:
                 self._canvas.create_polygon(
-                    _rounded_polygon(1, 1, width - 2, height - 2, 30),
+                    _rounded_polygon(1, 1, width - 2, height - 2, 15),
                     smooth=False, splinesteps=14, fill=surface,
-                    outline=colors.get("border", surface), width=1, tags="surface",
+                    outline=_blend_hex(colors.get("accent", "#8B5CF6"), colors.get("border", surface), 0.70),
+                    width=1, tags="surface",
                 )
             self._canvas.lower()
         except tk.TclError:
@@ -1035,9 +1036,29 @@ class MediaDownloaderApp:
         self.style.map("Nav.TButton",background=[("active",c["button_hover"]),("!disabled",c["panel2"])],foreground=[("active",c["fg"]),("!disabled",c["muted"])])
         self.style.configure("Selected.Nav.TButton",padding=nav_pad,anchor="w",foreground=c["accent"],background=c["button"],borderwidth=1,relief="flat",font=("Segoe UI",10,"bold"))
         self.style.map("Selected.Nav.TButton",background=[("active",c["button_hover"]),("!disabled",c["button"])],foreground=[("!disabled",c["accent"])])
-        self.style.configure("TEntry",padding=10 if not compact else 7,fieldbackground=c["field"],foreground=c["input_fg"],bordercolor=c["border"])
-        self.style.configure("TCombobox",padding=8 if not compact else 6,fieldbackground=c["field"],foreground=c["input_fg"],arrowcolor=c["accent"])
-        self.style.map("TCombobox",fieldbackground=[("readonly",c["field"])],foreground=[("readonly",c["input_fg"])])
+        self.style.configure(
+            "TEntry", padding=10 if not compact else 7, fieldbackground=c["field"],
+            foreground=c["input_fg"], bordercolor=c["border"], lightcolor=c["border"],
+            darkcolor=c["border"], relief="flat", borderwidth=1, insertcolor=c["fg"],
+        )
+        self.style.map(
+            "TEntry", bordercolor=[("focus", c["accent"]), ("!focus", c["border"])],
+            lightcolor=[("focus", c["accent"]), ("!focus", c["border"])],
+            darkcolor=[("focus", c["accent"]), ("!focus", c["border"])],
+        )
+        self.style.configure(
+            "TCombobox", padding=8 if not compact else 6, fieldbackground=c["field"],
+            foreground=c["input_fg"], arrowcolor=c["accent"], bordercolor=c["border"],
+            lightcolor=c["border"], darkcolor=c["border"], relief="flat", borderwidth=1,
+            arrowsize=13,
+        )
+        self.style.map(
+            "TCombobox", fieldbackground=[("readonly", c["field"])],
+            foreground=[("readonly", c["input_fg"])],
+            bordercolor=[("focus", c["accent"]), ("!focus", c["border"])],
+            lightcolor=[("focus", c["accent"]), ("!focus", c["border"])],
+            darkcolor=[("focus", c["accent"]), ("!focus", c["border"])],
+        )
         self.style.configure("TProgressbar",thickness=10 if compact else 12,troughcolor=c["panel2"],background=c["accent"])
         self.style.configure("Treeview",background=c["field"],fieldbackground=c["field"],foreground=c["fg"],rowheight=50 if compact else 58,bordercolor=c["border"])
         self.style.map("Treeview",background=[("selected",c["accent2"])],foreground=[("selected",c["accent_fg"])])
@@ -1048,8 +1069,28 @@ class MediaDownloaderApp:
         self.style.configure("Help.TButton",width=2,padding=2,foreground=c["accent"],background=c["panel"],borderwidth=0)
         self.style.configure("Danger.TButton",foreground="#FFFFFF",background=c["bad"])
         self.style.map("Danger.TButton",background=[("active",c["bad"]),("!disabled",c["bad"])])
-        self.style.configure("TCheckbutton",background=c["panel"],foreground=c["fg"],padding=(2,3))
-        self.style.map("TCheckbutton",background=[("active",c["panel"])],foreground=[("disabled",c["muted"])])
+        self.style.configure(
+            "TCheckbutton", background=c["panel"], foreground=c["fg"],
+            padding=(2, 4), indicatorcolor=c["field"], indicatorrelief="flat",
+            focuscolor=c["bg"], bordercolor=c["border"], lightcolor=c["border"],
+            darkcolor=c["border"],
+        )
+        self.style.map(
+            "TCheckbutton", background=[("active", c["panel"])],
+            foreground=[("disabled", c["muted"])],
+            indicatorcolor=[("selected", c["accent"]), ("pressed", c["accent2"]), ("!selected", c["field"])],
+            bordercolor=[("focus", c["accent"]), ("!focus", c["border"])],
+        )
+        for scrollbar_style in ("Vertical.TScrollbar", "Horizontal.TScrollbar"):
+            self.style.configure(
+                scrollbar_style, background=c["panel2"], troughcolor=c["bg"],
+                bordercolor=c["border"], lightcolor=c["panel2"], darkcolor=c["panel"],
+                arrowcolor=c["muted"], relief="flat", gripcount=0,
+            )
+            self.style.map(
+                scrollbar_style, background=[("active", c["accent2"]), ("!active", c["panel2"])],
+                troughcolor=[("!disabled", c["bg"])],
+            )
         if hasattr(self,"log_text"):
             self.log_text.configure(bg=c["field"],fg=c["fg"],insertbackground=c["fg"],selectbackground=c["accent"],selectforeground=c["accent_fg"])
         if hasattr(self,"dep_badge"):
