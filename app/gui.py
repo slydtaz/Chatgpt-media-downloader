@@ -1481,12 +1481,46 @@ class MediaDownloaderApp:
                 self._loading_animation_job = self.root.after(33, self._animate_loading_splash)
             else:
                 self._loading_animation_job = self.root.after(90, self._dismiss_loading_splash)
-        except (tk.TclError, ValueError, TypeError, OSError) as exc:
+        except Exception as exc:
+            # A renderer failure must not flash the main page or leave a blank
+            # splash. Keep a native-Canvas fallback alive until the short startup
+            # sequence ends, and record the original exception for diagnostics.
             try:
-                self.logger.debug("Animação de carregamento interrompida: %s", type(exc).__name__)
+                self.logger.debug("Fallback nativo da tela de carregamento: %s", type(exc).__name__)
+                if canvas is None or not canvas.winfo_exists() or not self.root.winfo_exists():
+                    self._dismiss_loading_splash(immediate=True)
+                    return
+                elapsed = max(0.0, time.monotonic() - self._loading_started_at)
+                width, height = max(320, canvas.winfo_width()), max(240, canvas.winfo_height())
+                palette = palette_colors(str(self.config.get("visual_palette", "cosmic")))
+                canvas.delete("all")
+                canvas.configure(background="#000000")
+                cx, cy = width/2, height*0.385
+                rx, ry = min(150, width*0.115), min(108, height*0.12)
+                count = max(2, min(5, int(self.config.get("visual_orbits", 3))))
+                for orbit in range(count):
+                    rotation = math.pi * orbit/count + elapsed*(0.6+orbit*0.15)*(-1 if orbit%2 else 1)
+                    points = []
+                    for step in range(49):
+                        angle = math.tau*step/48
+                        x, y = rx*math.cos(angle), ry*math.sin(angle)
+                        points.extend((cx+x*math.cos(rotation)-y*math.sin(rotation),
+                                       cy+x*math.sin(rotation)+y*math.cos(rotation)))
+                    color = palette[orbit % len(palette)]
+                    canvas.create_line(*points, fill=color, width=2, smooth=True)
+                    angle = elapsed*(1.6+orbit*0.25)+orbit*math.tau/count
+                    x, y = rx*math.cos(angle), ry*math.sin(angle)
+                    px, py = cx+x*math.cos(rotation)-y*math.sin(rotation), cy+x*math.sin(rotation)+y*math.cos(rotation)
+                    canvas.create_oval(px-6, py-6, px+6, py+6, fill=color, outline="#FFFFFF")
+                canvas.create_oval(cx-10, cy-10, cx+10, cy+10, fill="#F5F3FF", outline="#A78BFA", width=2)
+                canvas.create_text(width/2, height*0.615, text="Carregando...", fill="#F7F4FF", font=("Segoe UI", 22, "bold"))
+                canvas.create_text(width/2, height*0.657, text="Preparando sua experiência visual", fill="#C5BDF4", font=("Segoe UI", 10))
+                if elapsed < 1.85:
+                    self._loading_animation_job = self.root.after(33, self._animate_loading_splash)
+                else:
+                    self._loading_animation_job = self.root.after(90, self._dismiss_loading_splash)
             except Exception:
-                pass
-            self._dismiss_loading_splash(immediate=True)
+                self._dismiss_loading_splash(immediate=True)
 
     def _dismiss_loading_splash(self, immediate: bool = False):
         job = getattr(self, "_loading_animation_job", None)
