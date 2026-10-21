@@ -164,7 +164,7 @@ def _make_contact_sheet(items: list[tuple[str, Image.Image]], target: Path) -> N
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Capture real GUI screenshots for review.")
-    parser.add_argument("--output", default="ui-preview-output", help="Directory for screenshots, GIFs and report.")
+    parser.add_argument("--output", default="ui-preview-output", help="Directory for real PNG screenshots and report.")
     args = parser.parse_args()
     output_dir = Path(args.output).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -176,7 +176,6 @@ def main() -> int:
     root = None
     original_display_mode = None
     captured: list[tuple[str, Image.Image]] = []
-    animation_frames: list[Image.Image] = []
     try:
         original_display_mode = _set_capture_resolution(1440, 900)
         # Never scan/install media tools, check for updates or trigger uninstall/downloads.
@@ -210,6 +209,15 @@ def main() -> int:
         time.sleep(0.6)
         root.update()
 
+        # Capture the application's actual animated loading screen before it dismisses.
+        loading_image = _capture_window(root)
+        loading_file = "00-tela-carregamento.png"
+        loading_image.save(output_dir / loading_file, format="PNG", optimize=True)
+        captured.append(("Tela de carregamento animada", loading_image))
+        print(f"CAPTURED {loading_file} {loading_image.width}x{loading_image.height}", flush=True)
+        app._dismiss_loading_splash(immediate=True)
+        root.update()
+
         # Capture the actual preview widget with an offline fixture: no URLs are
         # submitted, no external host is contacted, and no media is downloaded.
         app._show_media_preview_card()
@@ -232,41 +240,6 @@ def main() -> int:
             captured.append((label, image))
             print(f"CAPTURED {filename} {image.width}x{image.height}", flush=True)
 
-        # Return to home and record the actual moving orbit motif as a short GIF.
-        _wait_for_page(root, app, "home")
-        time.sleep(0.2)
-        root.update()
-        for _ in range(18):
-            animation_frames.append(_capture_window(root, width_limit=960))
-            deadline = time.monotonic() + 0.09
-            while time.monotonic() < deadline:
-                root.update()
-                time.sleep(0.005)
-
-        if not animation_frames:
-            raise RuntimeError("Nenhum quadro da animação foi capturado.")
-        animation_frames[0].save(
-            output_dir / "animacao-painel-inicial.gif",
-            save_all=True,
-            append_images=animation_frames[1:],
-            duration=90,
-            loop=0,
-            optimize=True,
-            disposal=2,
-        )
-
-        # Short tour: each page stays visible briefly, then the moving home animation plays.
-        tour_frames = [image.copy() for _, image in captured] + animation_frames
-        durations = [1100] * len(captured) + [90] * len(animation_frames)
-        tour_frames[0].save(
-            output_dir / "passeio-pelas-abas.gif",
-            save_all=True,
-            append_images=tour_frames[1:],
-            duration=durations,
-            loop=0,
-            optimize=True,
-            disposal=2,
-        )
         _make_contact_sheet(captured, output_dir / "visao-geral.png")
 
         report = {
@@ -275,8 +248,8 @@ def main() -> int:
             "media_preview_demo_network_requests": 0,
             "capture_method": "Pillow ImageGrab from the real fullscreen Tk window at 1440x900 on a Windows GitHub Actions runner",
             "capture_resolution": "1440x900",
+            "loading_screen_file": "00-tela-carregamento.png",
             "pages": [{"key": key, "file": filename, "label": label} for key, filename, label in PAGES],
-            "animation_frames": len(animation_frames),
             "media_downloads_started": False,
             "dependency_scans_started": False,
             "update_checks_started": False,
