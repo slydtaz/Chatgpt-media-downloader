@@ -1225,6 +1225,7 @@ class MediaDownloaderApp:
             ttk.Label(card, text=description, style="Muted.TLabel", wraplength=220).pack(anchor="w", pady=(4, 8))
             RoundedGlowButton(card, text="Abrir  →", style="Secondary.TButton", command=action).pack(anchor="e")
 
+        self.media_preview_placeholder = self._make_thumbnail_placeholder(220, 124)
         self.playlist_thumbnail_placeholder = self._make_thumbnail_placeholder(76, 43)
         self.media_preview_card = RoundedCard(frame, self, padding=12, surface="panel")
         preview_header = ttk.Frame(self.media_preview_card, style="Card.TFrame")
