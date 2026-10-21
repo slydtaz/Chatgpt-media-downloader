@@ -19,7 +19,7 @@ from typing import Callable, Optional
 from urllib.parse import urlsplit
 
 from .config import APP_DATA, INSTALL_ID_PATH, INSTALL_ROOT, PRODUCT_ID, STARTUP_REPAIR_PENDING_PATH, VENDOR, VERSION
-from .security import trusted_urlopen, safe_archive_member_path
+from .security import trusted_urlopen, safe_archive_member_path, safe_extract_zip
 
 OWNER = "slydtaz"
 REPOSITORY = "Chatgpt-media-downloader"
@@ -554,7 +554,10 @@ def _safe_extract_zip(archive: Path, destination: Path) -> Path:
                 seen[key] = is_directory
                 for depth in range(1, len(parts)):
                     known_prefixes.add("/".join(parts[:depth]))
-            zf.extractall(destination)
+            safe_extract_zip(
+                archive, destination, max_members=10000,
+                max_unpacked_bytes=MAX_SOURCE_UNPACKED_BYTES,
+            )
     except AppUpdateError:
         raise
     except (OSError, zipfile.BadZipFile, RuntimeError, ValueError) as exc:

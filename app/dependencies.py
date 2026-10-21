@@ -16,7 +16,7 @@ from typing import Optional
 from .config import TOOLS_DIR
 from .platform import SystemInfo
 from .process_utils import hidden_subprocess_kwargs
-from .security import safe_archive_member_path
+from .security import safe_archive_member_path, safe_extract_zip
 
 MAX_ARCHIVE_MEMBERS = 100_000
 MAX_ARCHIVE_COMPRESSED_BYTES = 512 * 1024 * 1024
@@ -251,7 +251,10 @@ def extract_archive(archive: Path, destination: Path) -> None:
                     file_type = stat.S_IFMT(mode)
                     if file_type == stat.S_IFLNK or (file_type and file_type not in {stat.S_IFREG, stat.S_IFDIR}):
                         raise ValueError("Arquivo compactado contém link ou arquivo especial inseguro.")
-                zf.extractall(temp_dir)
+                safe_extract_zip(
+                    archive, temp_dir, max_members=MAX_ARCHIVE_MEMBERS,
+                    max_unpacked_bytes=MAX_ARCHIVE_UNPACKED_BYTES,
+                )
         elif archive.name.lower().endswith(".tar.xz"):
             with tarfile.open(archive, "r:xz") as tf:
                 members = tf.getmembers()
