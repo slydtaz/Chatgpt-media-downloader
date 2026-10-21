@@ -1347,7 +1347,7 @@ class MediaDownloaderApp:
                 self._ambient_phase = (self._ambient_phase + elapsed * 0.95 * speed) % math.tau
             self._render_ambient_layers()
             if motion_enabled:
-                self._ambient_job = self.root.after(33, self._ambient_frame_tick)
+                self._ambient_job = self.root.after(42, self._ambient_frame_tick)
         except (tk.TclError, ValueError, TypeError):
             self._ambient_job = None
 
@@ -1382,7 +1382,8 @@ class MediaDownloaderApp:
             width, height = canvas.winfo_width(), canvas.winfo_height()
             palette = str(self.config.get("visual_palette", "cosmic"))
             style = str(self.config.get("visual_background_style", "cosmic"))
-            strength = float(self.config.get("visual_strength", 0.80))
+            effects_enabled = bool(self.config.get("visual_effects_enabled", True))
+            strength = float(self.config.get("visual_strength", 0.80)) if effects_enabled else 0.0
             # The light remains a translucent layer above OLED black; it never
             # replaces the surface with a solid purple or blue fill.
             backdrop = render_ambient_gradient(
@@ -2314,6 +2315,12 @@ class MediaDownloaderApp:
             self.visual_palette_var.set(self._display_setting_value("visual_palette", source_config.get("visual_palette", "cosmic")))
             self.visual_strength_var.set(self._display_setting_value("visual_strength", source_config.get("visual_strength", 0.55)))
             self.visual_orbits_var.set(str(source_config.get("visual_orbits", 3)))
+            self.visual_background_animated_var.set(bool(source_config.get("visual_background_animated", True)))
+            self.visual_background_style_var.set(self._display_setting_value("visual_background_style", source_config.get("visual_background_style", "cosmic")))
+            self.visual_background_speed_var.set(self._display_setting_value("visual_background_speed", source_config.get("visual_background_speed", 0.85)))
+            self.visual_hover_enabled_var.set(bool(source_config.get("visual_hover_enabled", True)))
+            self.visual_hover_scale_var.set(self._display_setting_value("visual_hover_scale", source_config.get("visual_hover_scale", 1.06)))
+            self.visual_hover_reveal_var.set(self._display_setting_value("visual_hover_reveal_seconds", source_config.get("visual_hover_reveal_seconds", 1.0)))
             self._preview_visual_effect_settings()
         self._preview_theme_from_setting()
         messagebox.showinfo("Configurações","Os valores foram revertidos nesta tela. Clique em Salvar personalização para gravá-los.")
@@ -2999,7 +3006,11 @@ class MediaDownloaderApp:
     def close(self):
         """Cancel transient work before closing the real application window."""
         self._media_preview_generation = getattr(self, "_media_preview_generation", 0) + 1
-        for name in ("_media_preview_after", "_hero_animation_job", "_page_animation_job"):
+        try:
+            self._dismiss_loading_splash(immediate=True)
+        except (AttributeError, tk.TclError):
+            pass
+        for name in ("_media_preview_after", "_hero_animation_job", "_page_animation_job", "_ambient_job", "_loading_animation_job"):
             job = getattr(self, name, None)
             if job is not None:
                 try:
