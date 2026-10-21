@@ -2328,6 +2328,23 @@ class MediaDownloaderApp:
                 return {0.30:"Suave",0.55:"Equilibrado",0.80:"Vibrante"}.get(round(float(value), 2),"Equilibrado")
             except (TypeError, ValueError):
                 return "Equilibrado"
+        if key=="visual_background_style":
+            return {"cosmic":"Cósmica · roxo/azul/rosa","nebula":"Nebulosa difusa","aurora":"Aurora ondulada","edge-light":"Luz nas bordas"}.get(str(value),"Cósmica · roxo/azul/rosa")
+        if key=="visual_background_speed":
+            try:
+                return {0.45:"Lenta",0.85:"Normal",1.25:"Rápida"}.get(round(float(value),2),"Normal")
+            except (TypeError,ValueError):
+                return "Normal"
+        if key=="visual_hover_scale":
+            try:
+                return {1.04:"Suave · 1,04×",1.06:"Referência · 1,06×",1.10:"Forte · 1,10×"}.get(round(float(value),2),"Referência · 1,06×")
+            except (TypeError,ValueError):
+                return "Referência · 1,06×"
+        if key=="visual_hover_reveal_seconds":
+            try:
+                return {0.5:"Rápido · 0,5 s",1.0:"Referência · 1 s",1.5:"Suave · 1,5 s"}.get(round(float(value),2),"Referência · 1 s")
+            except (TypeError,ValueError):
+                return "Referência · 1 s"
         if key=="ui_density":
             return {"comfortable":"Confortável","compact":"Compacto"}.get(str(value),"Confortável")
         return str(value)
@@ -2343,6 +2360,14 @@ class MediaDownloaderApp:
             return {"Cósmica · roxo/azul":"cosmic","Nebulosa violeta":"nebula","Aurora":"aurora","Oceano":"ocean"}.get(str(value),str(value))
         if key=="visual_strength":
             return {"Suave":0.30,"Equilibrado":0.55,"Vibrante":0.80}.get(str(value),0.55)
+        if key=="visual_background_style":
+            return {"Cósmica · roxo/azul/rosa":"cosmic","Nebulosa difusa":"nebula","Aurora ondulada":"aurora","Luz nas bordas":"edge-light"}.get(str(value),str(value))
+        if key=="visual_background_speed":
+            return {"Lenta":0.45,"Normal":0.85,"Rápida":1.25}.get(str(value),0.85)
+        if key=="visual_hover_scale":
+            return {"Suave · 1,04×":1.04,"Referência · 1,06×":1.06,"Forte · 1,10×":1.10}.get(str(value),1.06)
+        if key=="visual_hover_reveal_seconds":
+            return {"Rápido · 0,5 s":0.5,"Referência · 1 s":1.0,"Suave · 1,5 s":1.5}.get(str(value),1.0)
         if key=="ui_density":
             return {"Confortável":"comfortable","Compacto":"compact"}.get(str(value),str(value))
         if key in {"auto_video_quality","audio_bitrate","playlist_parallelism","concurrent_fragments","retries"}:
@@ -3203,6 +3228,12 @@ class MediaDownloaderApp:
             self.visual_palette_var.set(self._display_setting_value("visual_palette", self.config.get("visual_palette", "cosmic")))
             self.visual_strength_var.set(self._display_setting_value("visual_strength", self.config.get("visual_strength", 0.55)))
             self.visual_orbits_var.set(str(self.config.get("visual_orbits", 3)))
+            self.visual_background_animated_var.set(bool(self.config.get("visual_background_animated", True)))
+            self.visual_background_style_var.set(self._display_setting_value("visual_background_style", self.config.get("visual_background_style", "cosmic")))
+            self.visual_background_speed_var.set(self._display_setting_value("visual_background_speed", self.config.get("visual_background_speed", 0.85)))
+            self.visual_hover_enabled_var.set(bool(self.config.get("visual_hover_enabled", True)))
+            self.visual_hover_scale_var.set(self._display_setting_value("visual_hover_scale", self.config.get("visual_hover_scale", 1.06)))
+            self.visual_hover_reveal_var.set(self._display_setting_value("visual_hover_reveal_seconds", self.config.get("visual_hover_reveal_seconds", 1.0)))
             self._preview_visual_effect_settings()
         self._apply_theme(self.config.get("theme","dark"))
         if hasattr(self,"playlist_strategy_var"):
