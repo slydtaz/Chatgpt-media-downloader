@@ -8,9 +8,10 @@ from app import config
 
 
 class ConfigTests(unittest.TestCase):
-    def test_update_preferences_are_enabled_by_default(self):
+    def test_update_preferences_default_to_stable_and_require_confirmation(self):
         self.assertIs(config.DEFAULT_CONFIG["update_open_after"], True)
         self.assertIs(config.DEFAULT_CONFIG["update_check_on_startup"], True)
+        self.assertIs(config.DEFAULT_CONFIG["update_include_prereleases"], False)
 
     def test_defaults_and_install_id(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -72,7 +73,7 @@ class ConfigTests(unittest.TestCase):
                 }), encoding="utf-8")
                 migrated = config.load_config()
                 self.assertEqual(migrated["accent_color"], "#8B5CF6")
-                self.assertEqual(migrated["settings_schema_version"], 4)
+                self.assertEqual(migrated["settings_schema_version"], 5)
                 self.assertTrue(migrated["animations_enabled"])
 
                 config.CONFIG_PATH.write_text(json.dumps({
@@ -82,6 +83,26 @@ class ConfigTests(unittest.TestCase):
                 custom = config.load_config()
                 self.assertEqual(custom["accent_color"], "#12ABCD")
 
+
+    def test_prerelease_preference_is_validated_and_persisted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            with patch.object(config, "APP_DATA", base), \
+                 patch.object(config, "TOOLS_DIR", base / "tools"), \
+                 patch.object(config, "TEMP_DIR", base / "temp"), \
+                 patch.object(config, "LOG_DIR", base / "logs"), \
+                 patch.object(config, "CONFIG_PATH", base / "config" / "config.json"):
+                chosen = dict(config.DEFAULT_CONFIG)
+                chosen["update_include_prereleases"] = True
+                config.save_config(chosen)
+                loaded = config.load_config()
+                self.assertIs(loaded["update_include_prereleases"], True)
+                self.assertEqual(loaded["settings_schema_version"], 5)
+
+                loaded["update_include_prereleases"] = "not-a-boolean"
+                config.save_config(loaded)
+                normalized = config.load_config()
+                self.assertIs(normalized["update_include_prereleases"], False)
 
     def test_startup_repair_marker_persists_until_gui_confirms_success(self):
         with tempfile.TemporaryDirectory() as tmp:
