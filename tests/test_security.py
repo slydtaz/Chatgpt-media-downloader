@@ -95,6 +95,35 @@ class SecurityTests(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         safe_archive_member_path(root, name)
 
+    def test_safe_archive_member_path_rejects_ads_devices_and_ambiguous_components(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "extract"
+            root.mkdir()
+            for name in (
+                "media/file.exe:payload",
+                "media/CON.txt",
+                "media/NUL",
+                "media/trailing.",
+                "media/trailing ",
+                "media//empty.exe",
+                "media/./child.exe",
+                "media\\child.exe",
+                "media/with<angle>.exe",
+                "media/name\x01.exe",
+            ):
+                with self.subTest(name=name):
+                    with self.assertRaises(ValueError):
+                        safe_archive_member_path(root, name)
+
+    def test_safe_archive_member_path_allows_explicit_directory_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "extract"
+            root.mkdir()
+            self.assertEqual(
+                safe_archive_member_path(root, "media/tools/"),
+                (root / "media" / "tools").resolve(),
+            )
+
     def test_filename(self):
         value = safe_filename_part('A<>:"/\\\\|?*B')
         self.assertNotRegex(value, r'[<>:"/\\\\|?*]')
