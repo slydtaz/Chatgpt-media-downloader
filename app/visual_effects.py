@@ -166,6 +166,8 @@ def render_atom_art(
     strength: float = 0.55,
     orbit_count: int = 3,
     background: bool = True,
+    phase: float = 0.0,
+    style: str = "cosmic",
 ):
     """Render a crisp atom/orbit motif on a static generated gradient."""
     if Image is None or ImageDraw is None or ImageFilter is None:
@@ -174,8 +176,14 @@ def render_atom_art(
     height = max(72, min(800, int(height)))
     strength = _clamp_strength(strength)
     colors = palette_colors(palette)
+    try:
+        phase = float(phase)
+        if not math.isfinite(phase):
+            phase = 0.0
+    except (TypeError, ValueError):
+        phase = 0.0
     if background:
-        image = render_ambient_gradient(width, height, palette, strength)
+        image = render_ambient_gradient(width, height, palette, strength, phase=phase, style=style)
     else:
         image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     if image is None:
@@ -189,7 +197,7 @@ def render_atom_art(
     glow_draw = ImageDraw.Draw(glow)
     glow_colors = [_rgb(c) for c in colors]
     for orbit in range(orbit_count):
-        rotation = math.pi * orbit / orbit_count
+        rotation = math.pi * orbit / orbit_count + phase * (0.32 + 0.10 * (orbit + 1)) * (-1 if orbit % 2 else 1)
         points = []
         for step in range(241):
             angle = math.tau * step / 240
@@ -216,6 +224,44 @@ def render_atom_art(
             ))
         color = colors[(orbit * 2) % len(colors)]
         draw.line(points, fill=(*_rgb(color), 235), width=max(1, round(min(width, height) * 0.009)), joint="curve")
+    # Moving electron-like molecules orbit on each tilted ring. They are drawn as
+    # a soft colored halo plus a bright glassy core for the loading-screen reference.
+    electron_positions = []
+    electron_glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    electron_glow_draw = ImageDraw.Draw(electron_glow)
+    electron_radius = max(3, round(min(width, height) * 0.022))
+    for orbit in range(orbit_count):
+        rotation = math.pi * orbit / orbit_count + phase * (0.32 + 0.10 * (orbit + 1)) * (-1 if orbit % 2 else 1)
+        angle = phase * (1.65 + orbit * 0.16) + orbit * 2.13
+        x = radius_x * math.cos(angle)
+        y = radius_y * math.sin(angle)
+        ex = cx + x * math.cos(rotation) - y * math.sin(rotation)
+        ey = cy + x * math.sin(rotation) + y * math.cos(rotation)
+        color = colors[(orbit + 2) % len(colors)]
+        electron_positions.append((ex, ey, color))
+        glow_r = electron_radius * 2.8
+        electron_glow_draw.ellipse(
+            (ex-glow_r, ey-glow_r, ex+glow_r, ey+glow_r),
+            fill=(*_rgb(color), round(80 + 85 * strength)),
+        )
+    electron_glow = electron_glow.filter(
+        ImageFilter.GaussianBlur(radius=max(2, round(electron_radius * 1.2)))
+    )
+    image.alpha_composite(electron_glow)
+    draw = ImageDraw.Draw(image)
+    for ex, ey, color in electron_positions:
+        draw.ellipse(
+            (ex-electron_radius*1.45, ey-electron_radius*1.45,
+             ex+electron_radius*1.45, ey+electron_radius*1.45),
+            fill=(*_rgb(color), 255),
+            outline=(244, 240, 255, 255),
+            width=max(1, electron_radius // 3),
+        )
+        draw.ellipse(
+            (ex-electron_radius*0.48, ey-electron_radius*0.48,
+             ex+electron_radius*0.48, ey+electron_radius*0.48),
+            fill=(255, 255, 255, 255),
+        )
     nucleus_radius = max(4, round(min(width, height) * 0.034))
     nucleus = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     nucleus_draw = ImageDraw.Draw(nucleus)
