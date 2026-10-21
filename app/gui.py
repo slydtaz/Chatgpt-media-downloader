@@ -1447,8 +1447,59 @@ class MediaDownloaderApp:
                 self._loading_animation_job = self.root.after(33, self._animate_loading_splash)
             else:
                 self._loading_animation_job = self.root.after(90, self._dismiss_loading_splash)
-        except (tk.TclError, ValueError, TypeError, OSError):
-            self._dismiss_loading_splash(immediate=True)
+        except Exception as exc:
+            # Keep startup usable even if Pillow's renderer fails on a particular
+            # machine. Draw the atom with native Canvas primitives as a safe fallback.
+            try:
+                self.logger.debug("Renderizador Pillow do splash falhou; usando Canvas: %s", type(exc).__name__)
+                if canvas is None or not canvas.winfo_exists() or not self.root.winfo_exists():
+                    self._dismiss_loading_splash(immediate=True)
+                    return
+                elapsed = max(0.0, time.monotonic() - self._loading_started_at)
+                width, height = max(240, canvas.winfo_width()), max(240, canvas.winfo_height())
+                cx, cy = width / 2, height * 0.385
+                rx, ry = min(145, width * 0.115), min(105, height * 0.12)
+                palette = palette_colors(str(self.config.get("visual_palette", "cosmic")))
+                canvas.delete("all")
+                # A dark backdrop with vivid light near the edges.
+                canvas.configure(background="#000000")
+                for orbit in range(max(2, min(5, int(self.config.get("visual_orbits", 3))))):
+                    rotation = math.pi * orbit / 3 + elapsed * (0.55 + orbit * 0.16) * (-1 if orbit % 2 else 1)
+                    points = []
+                    for step in range(121):
+                        angle = math.tau * step / 120
+                        x, y = rx * math.cos(angle), ry * math.sin(angle)
+                        points.extend((cx + x * math.cos(rotation) - y * math.sin(rotation),
+                                       cy + x * math.sin(rotation) + y * math.cos(rotation)))
+                    color = palette[orbit % len(palette)]
+                    canvas.create_line(*points, fill=color, width=2, smooth=True)
+                    angle = elapsed * (1.8 + orbit * 0.35) + orbit * math.tau / 3
+                    x, y = rx * math.cos(angle), ry * math.sin(angle)
+                    px = cx + x * math.cos(rotation) - y * math.sin(rotation)
+                    py = cy + x * math.sin(rotation) + y * math.cos(rotation)
+                    canvas.create_oval(px-6, py-6, px+6, py+6, fill=color, outline="#FFFFFF", width=1)
+                canvas.create_oval(cx-10, cy-10, cx+10, cy+10, fill="#F5F3FF", outline="#A78BFA", width=2)
+                canvas.create_text(width/2, height*0.615, text="Carregando...",
+                                   fill="#F7F4FF", font=("Segoe UI", 22, "bold"))
+                canvas.create_text(width/2, height*0.657, text="Preparando sua experiência visual",
+                                   fill="#C5BDF4", font=("Segoe UI", 10))
+                bar_width = min(340, max(220, round(width * 0.30)))
+                bar_y = round(height * 0.715)
+                bar_x = round(width/2 - bar_width/2)
+                canvas.create_rectangle(bar_x, bar_y, bar_x+bar_width, bar_y+9,
+                                        fill="#100D27", outline="#31245D")
+                fill_width = round((bar_width-4) * min(1.0, elapsed/1.85))
+                if fill_width > 0:
+                    canvas.create_rectangle(bar_x+2, bar_y+2, bar_x+2+fill_width, bar_y+7,
+                                            fill=palette[0], outline="")
+                canvas.create_text(width/2, height*0.89, text="Gradientes e órbitas · inicialização local",
+                                   fill="#7C76B2", font=("Segoe UI", 8))
+                if elapsed < 1.85:
+                    self._loading_animation_job = self.root.after(33, self._animate_loading_splash)
+                else:
+                    self._loading_animation_job = self.root.after(90, self._dismiss_loading_splash)
+            except (tk.TclError, ValueError, TypeError, OSError):
+                self._dismiss_loading_splash(immediate=True)
 
     def _dismiss_loading_splash(self, immediate: bool = False):
         job = getattr(self, "_loading_animation_job", None)
