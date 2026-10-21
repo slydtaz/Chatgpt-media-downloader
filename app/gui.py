@@ -3048,7 +3048,12 @@ class MediaDownloaderApp:
                 palette = str(self.config.get("visual_palette", "cosmic"))
                 strength = float(self.config.get("visual_strength", 0.55)) if enabled else 0.0
                 orbits = int(self.config.get("visual_orbits", 3))
-                artwork = render_atom_art(width, height, palette=palette, strength=strength, orbit_count=orbits, background=enabled)
+                background_style = str(self.config.get("visual_background_style", "cosmic"))
+                artwork = render_atom_art(
+                    width, height, palette=palette, strength=strength,
+                    orbit_count=orbits, background=enabled,
+                    phase=self._atom_phase, style=background_style,
+                )
                 canvas.delete("all")
                 if artwork is not None and ImageTk is not None:
                     photo = ImageTk.PhotoImage(artwork, master=self.root)
@@ -3069,7 +3074,11 @@ class MediaDownloaderApp:
                 enabled = bool(self.config.get("visual_effects_enabled", True))
                 palette = str(self.config.get("visual_palette", "cosmic"))
                 strength = float(self.config.get("visual_strength", 0.55)) if enabled else 0.0
-                image = render_gradient_preview(width, height, palette, strength)
+                image = render_gradient_preview(
+                    width, height, palette, strength,
+                    phase=self._ambient_phase,
+                    style=str(self.config.get("visual_background_style", "cosmic")),
+                )
                 preview.delete("all")
                 if image is not None and ImageTk is not None:
                     photo = ImageTk.PhotoImage(image, master=self.root)
@@ -3099,9 +3108,13 @@ class MediaDownloaderApp:
                 pass
 
     def _animate_hero_visual(self):
-        """Compatibility hook: render the atom artwork once; gradients do not animate."""
+        """Compatibility hook for the local atom illustration."""
+        self._atom_phase = (self._atom_phase + 0.22) % math.tau
         self._render_static_visuals()
-        self._hero_animation_job = None
+        if self.config.get("animations_enabled", False):
+            self._hero_animation_job = self.root.after(50, self._animate_hero_visual)
+        else:
+            self._hero_animation_job = None
 
     def _select_download_mode(self, mode: str):
         """Select a real download mode from one of the home quick-action cards."""
