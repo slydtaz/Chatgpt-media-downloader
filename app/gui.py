@@ -2712,7 +2712,7 @@ class MediaDownloaderApp:
         options = self._card(body, 14)
         options.pack(fill="x", pady=(0, 12))
         ttk.Label(options, text="Preferências e canal", style="CardTitle.TLabel").pack(anchor="w", pady=(0, 7))
-        installed_channel = "Pré-release (Beta/RC)" if re.search(r"(?i)-(?:alpha|beta|rc)\\.\\d+$", VERSION) else "Release estável"
+        installed_channel = "Pré-release (Beta/RC)" if re.search(r"(?i)-(?:alpha|beta|rc)\.\d+$", VERSION) else "Release estável"
         ttk.Label(
             options,
             text=f"Canal instalado: {installed_channel}  ·  Versão {VERSION}",
@@ -2868,7 +2868,7 @@ class MediaDownloaderApp:
             self._app_update_info = None
             self.app_update_install_button.configure(state="disabled")
             self.app_update_status_var.set(f"Você está usando a versão {VERSION}.")
-            channel = "Pré-release (Beta/RC)" if re.search(r"(?i)-(?:alpha|beta|rc)\\.\\d+$", VERSION) else "Release estável"
+            channel = "Pré-release (Beta/RC)" if re.search(r"(?i)-(?:alpha|beta|rc)\.\d+$", VERSION) else "Release estável"
             wanted = "estáveis e pré-releases" if self.config.get("update_include_prereleases", False) else "somente estáveis"
             self.app_update_latest_var.set(f"Canal instalado: {channel}. Nenhuma versão mais nova encontrada no canal {wanted}.")
             self.app_update_notes_var.set("Consulte as Releases do GitHub para ver o histórico publicado. Antes da primeira Release estável, builds executáveis não podem ser atualizados automaticamente.")
@@ -2878,7 +2878,7 @@ class MediaDownloaderApp:
             return
         self._app_update_info = update
         self.app_update_status_var.set(f"Nova versão disponível: {update.version}")
-        release_channel = "Pré-release" if re.search(r"(?i)-(?:alpha|beta|rc)\\.\\d+$", update.version) else "Release estável"
+        release_channel = "Pré-release" if re.search(r"(?i)-(?:alpha|beta|rc)\.\d+$", update.version) else "Release estável"
         artifact_kind = "Executável" if update.kind == "executable" else "Código-fonte"
         self.app_update_latest_var.set(
             f"Versão instalada: {VERSION}  •  Disponível: {update.version} ({release_channel})  •  {artifact_kind}"
@@ -2921,7 +2921,7 @@ class MediaDownloaderApp:
         values = []
         self._available_release_updates = {}
         for update in updates or []:
-            prerelease = bool(re.search(r"(?i)-(?:alpha|beta|rc)\\.\\d+$", update.version))
+            prerelease = bool(re.search(r"(?i)-(?:alpha|beta|rc)\.\d+$", update.version))
             channel = "Pré-release" if prerelease else "Estável"
             label = f"{update.version}  ·  {channel}  ·  {update.tag_name}"
             if label in self._available_release_updates:
@@ -2957,7 +2957,7 @@ class MediaDownloaderApp:
             )
             return
         self._app_update_info = update
-        channel = "Pré-release" if re.search(r"(?i)-(?:alpha|beta|rc)\\.\\d+$", update.version) else "Release estável"
+        channel = "Pré-release" if re.search(r"(?i)-(?:alpha|beta|rc)\.\d+$", update.version) else "Release estável"
         self.app_update_status_var.set(f"Versão selecionada: {update.version} ({channel})")
         self.app_update_latest_var.set(
             f"Tag: {update.tag_name}  •  Tipo de pacote: {'Executável' if update.kind == 'executable' else 'Código-fonte'}"
