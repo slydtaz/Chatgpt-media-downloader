@@ -532,7 +532,8 @@ def _stage_source_tree(source_root: Path, target_root: Path, version: str) -> Pa
         if marker.is_file():
             try:
                 candidate = json.loads(marker.read_text(encoding="utf-8"))
-                if candidate.get("vendor") == VENDOR and candidate.get("product_id") == PRODUCT_ID:
+                if (isinstance(candidate, dict) and candidate.get("vendor") == VENDOR
+                        and candidate.get("product_id") == PRODUCT_ID):
                     marker_data = candidate
             except (OSError, json.JSONDecodeError):
                 marker_data = None
