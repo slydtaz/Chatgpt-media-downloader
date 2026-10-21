@@ -2068,19 +2068,33 @@ class MediaDownloaderApp:
 
         effects = self._card(body, 15)
         effects.pack(fill="x", pady=(0, 12))
-        ttk.Label(effects, text="Efeitos visuais estáticos", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(effects, text="Gradientes animados e efeitos espaciais", style="CardTitle.TLabel").pack(anchor="w")
         ttk.Label(
             effects,
-            text="A prévia é gerada localmente pelo mecanismo visual do aplicativo. Nesta versão, o gradiente fica estático; os controles abaixo ajustam as cores e a arte do átomo.",
+            text="A luz é uma camada translúcida que se move por cima do fundo preto OLED. Ajuste paleta, intensidade, estilo, velocidade e o comportamento dos botões; a prévia usa o mesmo gerador do aplicativo.",
             style="Card.TLabel", wraplength=780, justify="left",
         ).pack(anchor="w", pady=(4, 12))
         self.visual_effects_var = tk.BooleanVar(value=bool(self.config.get("visual_effects_enabled", True)))
         self.visual_palette_var = tk.StringVar(value=self._display_setting_value("visual_palette", self.config.get("visual_palette", "cosmic")))
         self.visual_strength_var = tk.StringVar(value=self._display_setting_value("visual_strength", self.config.get("visual_strength", 0.55)))
         self.visual_orbits_var = tk.StringVar(value=str(self.config.get("visual_orbits", 3)))
+        self.visual_background_animated_var = tk.BooleanVar(value=bool(self.config.get("visual_background_animated", True)))
+        self.visual_background_style_var = tk.StringVar(value=self._display_setting_value("visual_background_style", self.config.get("visual_background_style", "cosmic")))
+        self.visual_background_speed_var = tk.StringVar(value=self._display_setting_value("visual_background_speed", self.config.get("visual_background_speed", 0.85)))
+        self.visual_hover_enabled_var = tk.BooleanVar(value=bool(self.config.get("visual_hover_enabled", True)))
+        self.visual_hover_scale_var = tk.StringVar(value=self._display_setting_value("visual_hover_scale", self.config.get("visual_hover_scale", 1.06)))
+        self.visual_hover_reveal_var = tk.StringVar(value=self._display_setting_value("visual_hover_reveal_seconds", self.config.get("visual_hover_reveal_seconds", 1.0)))
         ttk.Checkbutton(
-            effects, text="Usar gradiente ambiente e brilho do átomo",
+            effects, text="Usar a camada de luz ambiente e a arte do átomo",
             variable=self.visual_effects_var, command=self._preview_visual_effect_settings,
+        ).pack(anchor="w", pady=(0, 4))
+        ttk.Checkbutton(
+            effects, text="Animar o gradiente sobre o fundo preto OLED",
+            variable=self.visual_background_animated_var, command=self._preview_visual_effect_settings,
+        ).pack(anchor="w", pady=(0, 4))
+        ttk.Checkbutton(
+            effects, text="Crescimento dos botões e brilho em gradiente ao passar o mouse",
+            variable=self.visual_hover_enabled_var, command=self._preview_visual_effect_settings,
         ).pack(anchor="w", pady=(0, 10))
         swatch_row = ttk.Frame(effects, style="Card.TFrame")
         swatch_row.pack(fill="x", pady=(0, 10))
@@ -2110,12 +2124,28 @@ class MediaDownloaderApp:
             group.pack(side="left", fill="x", expand=True, padx=(0, 10))
             ttk.Label(group, text=title, style="Muted.TLabel", font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 4))
             ttk.Combobox(group, textvariable=variable, values=values, state="readonly").pack(fill="x")
-        ttk.Label(effects, text="PRÉVIA DO GRADIENTE", style="Muted.TLabel", font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 5))
+        motion_controls = ttk.Frame(effects, style="Card.TFrame")
+        motion_controls.pack(fill="x", pady=(0, 10))
+        for title, variable, values in (
+            ("ESTILO DA LUZ", self.visual_background_style_var, ["Cósmica · roxo/azul/rosa", "Nebulosa difusa", "Aurora ondulada", "Luz nas bordas"]),
+            ("VELOCIDADE DO FUNDO", self.visual_background_speed_var, ["Lenta", "Normal", "Rápida"]),
+            ("CRESCIMENTO DO BOTÃO", self.visual_hover_scale_var, ["Suave · 1,04×", "Referência · 1,06×", "Forte · 1,10×"]),
+            ("REVELAR GRADIENTE", self.visual_hover_reveal_var, ["Rápido · 0,5 s", "Referência · 1 s", "Suave · 1,5 s"]),
+        ):
+            group = ttk.Frame(motion_controls, style="Card.TFrame")
+            group.pack(side="left", fill="x", expand=True, padx=(0, 8))
+            ttk.Label(group, text=title, style="Muted.TLabel", font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 4))
+            ttk.Combobox(group, textvariable=variable, values=values, state="readonly").pack(fill="x")
+        ttk.Label(effects, text="PRÉVIA DINÂMICA DO GRADIENTE", style="Muted.TLabel", font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 5))
         self.visual_preview_canvas = tk.Canvas(effects, height=86, background=self.colors["panel2"], borderwidth=0, highlightthickness=1, highlightbackground=self.colors["border"])
         self.visual_preview_canvas.pack(fill="x", pady=(0, 9))
         self.visual_palette_var.trace_add("write", lambda *_: self._preview_visual_effect_settings())
         self.visual_strength_var.trace_add("write", lambda *_: self._preview_visual_effect_settings())
         self.visual_orbits_var.trace_add("write", lambda *_: self._preview_visual_effect_settings())
+        self.visual_background_style_var.trace_add("write", lambda *_: self._preview_visual_effect_settings())
+        self.visual_background_speed_var.trace_add("write", lambda *_: self._preview_visual_effect_settings())
+        self.visual_hover_scale_var.trace_add("write", lambda *_: self._preview_visual_effect_settings())
+        self.visual_hover_reveal_var.trace_add("write", lambda *_: self._preview_visual_effect_settings())
         self.visual_preview_canvas.bind("<Configure>", lambda _event: self._render_static_visuals(), add="+")
         self._preview_visual_effect_settings()
         appearance=self._card(body,15)
@@ -2228,8 +2258,19 @@ class MediaDownloaderApp:
             self.config["visual_palette"] = palette if palette in EFFECT_PALETTES else "cosmic"
             self.config["visual_strength"] = strength if strength in {0.30, 0.55, 0.80} else 0.55
             self.config["visual_orbits"] = orbits if orbits in {2, 3, 4} else 3
+            self.config["visual_background_animated"] = bool(self.visual_background_animated_var.get())
+            style = self._stored_setting_value("visual_background_style", self.visual_background_style_var.get())
+            self.config["visual_background_style"] = style if style in {"cosmic", "nebula", "aurora", "edge-light"} else "cosmic"
+            speed = self._stored_setting_value("visual_background_speed", self.visual_background_speed_var.get())
+            self.config["visual_background_speed"] = speed if speed in {0.45, 0.85, 1.25} else 0.85
+            self.config["visual_hover_enabled"] = bool(self.visual_hover_enabled_var.get())
+            scale = self._stored_setting_value("visual_hover_scale", self.visual_hover_scale_var.get())
+            self.config["visual_hover_scale"] = scale if scale in {1.04, 1.06, 1.10} else 1.06
+            reveal = self._stored_setting_value("visual_hover_reveal_seconds", self.visual_hover_reveal_var.get())
+            self.config["visual_hover_reveal_seconds"] = reveal if reveal in {0.5, 1.0, 1.5} else 1.0
             self._draw_visual_palette_swatches()
             self._render_static_visuals()
+            self._restart_ambient_animation()
         except (AttributeError, tk.TclError, ValueError, TypeError):
             # Controls are incomplete while the settings form is being constructed.
             return
@@ -2338,6 +2379,12 @@ class MediaDownloaderApp:
         new_config["visual_palette"]=self._stored_setting_value("visual_palette", self.visual_palette_var.get())
         new_config["visual_strength"]=self._stored_setting_value("visual_strength", self.visual_strength_var.get())
         new_config["visual_orbits"]=int(self.visual_orbits_var.get())
+        new_config["visual_background_animated"]=bool(self.visual_background_animated_var.get())
+        new_config["visual_background_style"]=self._stored_setting_value("visual_background_style",self.visual_background_style_var.get())
+        new_config["visual_background_speed"]=self._stored_setting_value("visual_background_speed",self.visual_background_speed_var.get())
+        new_config["visual_hover_enabled"]=bool(self.visual_hover_enabled_var.get())
+        new_config["visual_hover_scale"]=self._stored_setting_value("visual_hover_scale",self.visual_hover_scale_var.get())
+        new_config["visual_hover_reveal_seconds"]=self._stored_setting_value("visual_hover_reveal_seconds",self.visual_hover_reveal_var.get())
         new_config["audio_bitrate"]=b
         try:
             save_config(new_config)
