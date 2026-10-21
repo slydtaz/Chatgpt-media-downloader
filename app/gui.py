@@ -611,21 +611,38 @@ class RoundedGlowButton(tk.Canvas):
         self._draw()
 
     def _parent_background(self, parent):
+        """Return the actual surface color behind this Canvas button.
+
+        Resolve ttk styles instead of guessing from a short allow-list. If a
+        button is nested in a card, toolbar, or custom frame, transparent
+        antialiased corner pixels must composite against that exact surface;
+        otherwise the Canvas leaks a darker rectangular halo around the pill.
+        """
         colors = self.app.colors
-        if isinstance(parent, RoundedCard):
-            return colors.get(parent.backdrop_key, colors["bg"])
-        try:
-            style_name = str(parent.cget("style") or "TFrame")
-        except (tk.TclError, TypeError):
-            style_name = "TFrame"
-        key = {
-            "Card.TFrame": "panel",
-            "Hero.TFrame": "panel2",
-            "Sidebar.TFrame": "panel2",
-            "Topbar.TFrame": "bg",
-            "RoundedCard.TFrame": "panel",
-        }.get(style_name, "bg")
-        return colors.get(key, colors["bg"])
+        current = parent
+        while current is not None:
+            if isinstance(current, RoundedCard):
+                return colors.get(current.backdrop_key, colors["bg"])
+            # Classic Tk widgets expose the effective color directly.
+            try:
+                background = str(current.cget("background") or "").strip()
+                if background and background.lower() not in {"systembuttonface", "systemwindow"}:
+                    return background
+            except (tk.TclError, TypeError):
+                pass
+            # ttk widgets derive their surface from the resolved style.
+            try:
+                style_name = str(current.cget("style") or current.winfo_class() or "TFrame")
+                background = str(self.app.style.lookup(style_name, "background") or "").strip()
+                if background:
+                    return background
+            except (tk.TclError, TypeError):
+                pass
+            try:
+                current = current.master
+            except AttributeError:
+                current = None
+        return colors["bg"]
 
     def _recalculate_size(self):
         measured = self._font.measure(self.text)
