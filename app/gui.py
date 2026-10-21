@@ -396,7 +396,8 @@ class IconNavButton(tk.Canvas):
 
     def set_active(self, active: bool):
         self.active = bool(active)
-        self._target_scale = 1.06 if self.active else (1.03 if self.hovered else 1.0)
+        configured_scale = float(self.app.config.get("visual_hover_scale", 1.06))
+        self._target_scale = configured_scale * 0.98 if self.active else (configured_scale if self.hovered else 1.0)
         self._draw()
         self._animate_scale()
 
@@ -406,13 +407,15 @@ class IconNavButton(tk.Canvas):
 
     def _on_enter(self, _event=None):
         self.hovered = True
-        self._target_scale = 1.10 if not self.active else 1.08
+        configured_scale = float(self.app.config.get("visual_hover_scale", 1.06))
+        self._target_scale = configured_scale if not self.active else configured_scale * 0.98
         self._animate_scale()
         self._draw()
 
     def _on_leave(self, _event=None):
         self.hovered = False
-        self._target_scale = 1.06 if self.active else 1.0
+        configured_scale = float(self.app.config.get("visual_hover_scale", 1.06))
+        self._target_scale = configured_scale * 0.98 if self.active else 1.0
         self._animate_scale()
         self._draw()
 
@@ -425,7 +428,7 @@ class IconNavButton(tk.Canvas):
                 self.after_cancel(self._scale_job)
             except tk.TclError:
                 pass
-        if not self.app.config.get("animations_enabled", True):
+        if not self.app.config.get("visual_hover_enabled", True):
             self._scale = self._target_scale
             self._scale_job = None
             self._draw()
@@ -656,8 +659,9 @@ class RoundedGlowButton(tk.Canvas):
             bottom = top
             text_color = c["fg"]
         else:
-            edge = c["border"] if not (self._hovered or self._focused) else c["accent"]
-            top = c["button_hover"] if self._hovered or self._focused else c["button"]
+            hover_amount = max(0.0, min(1.0, float(getattr(self, "_gradient_strength", 0.0))))
+            edge = _blend_hex(c["border"], c["accent"], hover_amount)
+            top = _blend_hex(c["button"], c["button_hover"], hover_amount)
             bottom = top
             text_color = c["fg"]
         if self._state == "disabled":
