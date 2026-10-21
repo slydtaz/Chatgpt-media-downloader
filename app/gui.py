@@ -1742,6 +1742,23 @@ class MediaDownloaderApp:
             effects, text="Usar gradiente ambiente e brilho do átomo",
             variable=self.visual_effects_var, command=self._preview_visual_effect_settings,
         ).pack(anchor="w", pady=(0, 10))
+        swatch_row = ttk.Frame(effects, style="Card.TFrame")
+        swatch_row.pack(fill="x", pady=(0, 10))
+        ttk.Label(swatch_row, text="PALETAS", style="Muted.TLabel", font=("Segoe UI", 8, "bold")).pack(side="left", padx=(0, 9))
+        self.visual_palette_swatches = []
+        for key, short_label, display_value in (
+            ("cosmic", "Cósmica", "Cósmica · roxo/azul"),
+            ("nebula", "Nebulosa", "Nebulosa violeta"),
+            ("aurora", "Aurora", "Aurora"),
+            ("ocean", "Oceano", "Oceano"),
+        ):
+            swatch = tk.Canvas(swatch_row, width=124, height=34, bg=self.colors["panel"], bd=0, highlightthickness=0, cursor="hand2")
+            swatch.visual_key = key
+            swatch.visual_label = short_label
+            swatch.visual_value = display_value
+            swatch.pack(side="left", padx=(0, 7))
+            swatch.bind("<Button-1>", lambda _event, value=display_value: self.visual_palette_var.set(value))
+            self.visual_palette_swatches.append(swatch)
         effect_controls = ttk.Frame(effects, style="Card.TFrame")
         effect_controls.pack(fill="x", pady=(0, 10))
         for title, variable, values in (
@@ -1835,6 +1852,32 @@ class MediaDownloaderApp:
         note.pack(fill="x",pady=(0,20))
         ttk.Label(note,text="Como as personalizações são salvas",style="CardTitle.TLabel").pack(anchor="w")
         ttk.Label(note,text="Tema, cor principal e espaçamento são aplicados como prévia. Clique em Salvar personalização para gravar tudo. Preferências, pastas e histórico ficam no perfil do usuário.",style="Card.TLabel",wraplength=780,justify="left").pack(anchor="w",pady=(5,0))
+    def _draw_visual_palette_swatches(self):
+        current = str(self.config.get("visual_palette", "cosmic"))
+        for swatch in getattr(self, "visual_palette_swatches", []):
+            try:
+                if not swatch.winfo_exists():
+                    continue
+                palette = palette_colors(getattr(swatch, "visual_key", "cosmic"))
+                swatch.delete("all")
+                width = max(124, swatch.winfo_width(), swatch.winfo_reqwidth())
+                height = max(34, swatch.winfo_height(), swatch.winfo_reqheight())
+                selected = getattr(swatch, "visual_key", "") == current
+                outline = palette[0] if selected else self.colors.get("border", "#302A4E")
+                swatch.create_polygon(
+                    _rounded_polygon(1, 1, width-1, height-1, 8),
+                    fill=self.colors.get("panel2", "#111022"), outline=outline,
+                    width=2 if selected else 1,
+                )
+                for index, color in enumerate(palette[:3]):
+                    x = 9 + index * 11
+                    swatch.create_oval(x, height/2-4, x+8, height/2+4, fill=color, outline="")
+                swatch.create_text(48, height/2, text=getattr(swatch, "visual_label", ""),
+                                   fill=self.colors.get("fg", "#F5F3FF"),
+                                   font=("Segoe UI", 8, "bold" if selected else "normal"), anchor="w")
+            except tk.TclError:
+                pass
+
     def _preview_visual_effect_settings(self):
         """Apply generator options live; saving to disk is reserved for Save."""
         try:
@@ -1845,6 +1888,7 @@ class MediaDownloaderApp:
             self.config["visual_palette"] = palette if palette in EFFECT_PALETTES else "cosmic"
             self.config["visual_strength"] = strength if strength in {0.30, 0.55, 0.80} else 0.55
             self.config["visual_orbits"] = orbits if orbits in {2, 3, 4} else 3
+            self._draw_visual_palette_swatches()
             self._render_static_visuals()
         except (AttributeError, tk.TclError, ValueError, TypeError):
             # Controls are incomplete while the settings form is being constructed.
