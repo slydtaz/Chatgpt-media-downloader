@@ -208,16 +208,30 @@ def main() -> int:
             root.focus_force()
         except tk.TclError:
             pass
-        root.update()
-        time.sleep(0.6)
-        root.update()
+        # Restart the actual splash after the CI display has become visible, then
+        # capture two still frames from the real ring/particle animation (no GIF).
+        app._start_loading_splash()
+        app._loading_started_at = time.monotonic()
+        def pump_for(seconds: float):
+            deadline = time.monotonic() + seconds
+            while time.monotonic() < deadline:
+                root.update()
+                time.sleep(0.01)
 
-        # Capture the application's actual animated loading screen before it dismisses.
+        pump_for(0.28)
         loading_image = _capture_window(root)
         loading_file = "00-tela-carregamento.png"
         loading_image.save(output_dir / loading_file, format="PNG", optimize=True)
-        captured.append(("Tela de carregamento animada", loading_image))
+        captured.append(("Tela de carregamento · fase A", loading_image))
         print(f"CAPTURED {loading_file} {loading_image.width}x{loading_image.height}", flush=True)
+
+        pump_for(0.42)
+        loading_phase_b = _capture_window(root)
+        loading_phase_b_file = "00-tela-carregamento-fase-b.png"
+        loading_phase_b.save(output_dir / loading_phase_b_file, format="PNG", optimize=True)
+        captured.append(("Tela de carregamento · fase B", loading_phase_b))
+        print(f"CAPTURED {loading_phase_b_file} {loading_phase_b.width}x{loading_phase_b.height}", flush=True)
+
         app._dismiss_loading_splash(immediate=True)
         root.update()
 
@@ -312,7 +326,7 @@ def main() -> int:
             "media_preview_demo_network_requests": 0,
             "capture_method": "Pillow ImageGrab from the real fullscreen Tk window at 1440x900 on a Windows GitHub Actions runner",
             "capture_resolution": "1440x900",
-            "loading_screen_file": "00-tela-carregamento.png",
+            "loading_screen_files": ["00-tela-carregamento.png", "00-tela-carregamento-fase-b.png"],
             "background_phase_files": ["08-fundo-animado-fase-a.png", "09-fundo-animado-fase-b.png"],
             "button_hover_file": "10-hover-botao-gradiente.png",
             "screenshots": [path.name for path in sorted(output_dir.glob("*.png"))],
