@@ -22,7 +22,7 @@ from .config import APP_DATA, TOOLS_DIR, VERSION
 from .locking import CrossProcessFileLock
 from .dependencies import detect_binary_arch
 from .platform import SystemInfo
-from .security import safe_archive_member_path, trusted_urlopen
+from .security import safe_archive_member_path, safe_extract_zip, trusted_urlopen
 from .dependencies import MAX_ARCHIVE_MEMBERS, MAX_ARCHIVE_UNPACKED_BYTES
 from .process_utils import hidden_subprocess_kwargs
 
@@ -373,7 +373,10 @@ def _install_tool_from_release_locked(
                         file_type = stat.S_IFMT(mode)
                         if file_type == stat.S_IFLNK or (file_type and file_type not in {stat.S_IFREG, stat.S_IFDIR}):
                             raise UpdateError("Pacote yt-dlp contém um link ou arquivo especial inseguro.")
-                    zf.extractall(extract_dir)
+                    safe_extract_zip(
+                    archive, extract_dir, max_members=MAX_ARCHIVE_MEMBERS,
+                    max_unpacked_bytes=MAX_ARCHIVE_UNPACKED_BYTES,
+                )
                 source = next((p for p in extract_dir.rglob("yt-dlp_linux_armv7l") if p.is_file()), None)
                 if source is None:
                     raise UpdateError("O pacote yt-dlp ARMv7 não contém o executável esperado.")
@@ -413,7 +416,10 @@ def _install_tool_from_release_locked(
                     file_type = stat.S_IFMT(mode)
                     if file_type == stat.S_IFLNK or (file_type and file_type not in {stat.S_IFREG, stat.S_IFDIR}):
                         raise UpdateError("Pacote FFmpeg contém um link ou arquivo especial inseguro.")
-                zf.extractall(extract_dir)
+                safe_extract_zip(
+                    archive, extract_dir, max_members=MAX_ARCHIVE_MEMBERS,
+                    max_unpacked_bytes=MAX_ARCHIVE_UNPACKED_BYTES,
+                )
         elif archive.name.endswith(".tar.xz"):
             with tarfile.open(archive, "r:xz") as tf:
                 members = tf.getmembers()

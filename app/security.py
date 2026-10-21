@@ -3,6 +3,9 @@ from __future__ import annotations
 import ipaddress
 import os
 import re
+import shutil
+import stat
+import zipfile
 from pathlib import Path
 from urllib.parse import urlsplit
 import urllib.error
@@ -173,6 +176,130 @@ def safe_archive_member_path(root: Path, member_name: str) -> Path:
     except ValueError as exc:
         raise ValueError("Arquivo compactado contém caminho inseguro.") from exc
     return target
+
+
+def safe_extract_zip(
+    archive: Path,
+    destination: Path,
+    *,
+    max_members: int = 10000,
+    max_unpacked_bytes: int = 512 * 1024 * 1024,
+    max_compressed_bytes: int = 512 * 1024 * 1024,
+) -> None:
+    """Validate a ZIP completely, then stream-extract only regular files/directories.
+
+    The destination must be a real, empty directory. Entries are validated for
+    traversal, Windows-specific names, duplicates/case collisions, file-directory
+    conflicts, encryption, links and special file types before any output is written.
+    Actual bytes are counted while streaming to defend against dishonest ZIP metadata.
+    """
+    root = Path(destination)
+    root.mkdir(parents=True, exist_ok=True)
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("A pasta de extração precisa ser um diretório real, não um link.")
+    is_junction = getattr(root, "is_junction", None)
+    try:
+        if is_junction is not None and is_junction():
+            raise ValueError("A pasta de extração não pode ser uma junction.")
+    except OSError as exc:
+        raise ValueError("Não foi possível validar a pasta de extração.") from exc
+    if any(root.iterdir()):
+        raise ValueError("A pasta de extração precisa estar vazia.")
+    root_resolved = root.resolve()
+
+    try:
+        archive_info = Path(archive).lstat()
+    except OSError as exc:
+        raise ValueError("O arquivo ZIP não pôde ser inspecionado.") from exc
+    if Path(archive).is_symlink() or not stat.S_ISREG(archive_info.st_mode):
+        raise ValueError("O arquivo ZIP precisa ser um arquivo regular, não um link.")
+    if archive_info.st_size <= 0 or archive_info.st_size > max_compressed_bytes:
+        raise ValueError("O arquivo ZIP está vazio ou excede o limite compactado.")
+
+    def cleanup_partial_output() -> None:
+        try:
+            for child in tuple(root.iterdir()):
+                try:
+                    if child.is_dir() and not child.is_symlink():
+                        shutil.rmtree(child, ignore_errors=True)
+                    else:
+                        child.unlink(missing_ok=True)
+                except OSError:
+                    pass
+        except OSError:
+            pass
+
+    try:
+        with zipfile.ZipFile(archive) as zf:
+            members = zf.infolist()
+            if not members or len(members) > max_members:
+                raise ValueError("O ZIP está vazio ou excede o limite de entradas.")
+            declared_total = 0
+            validated = []
+            seen: dict[str, bool] = {}
+            implied_directories: set[str] = set()
+
+            for member in members:
+                if member.flag_bits & 0x1:
+                    raise ValueError("ZIPs criptografados não são aceitos.")
+                if member.file_size < 0 or member.compress_size < 0:
+                    raise ValueError("O ZIP contém tamanhos de entrada inválidos.")
+                declared_total += int(member.file_size)
+                if declared_total > max_unpacked_bytes:
+                    raise ValueError("O ZIP excede o limite de conteúdo descompactado.")
+
+                try:
+                    target = safe_archive_member_path(root_resolved, member.filename)
+                    key = target.relative_to(root_resolved).as_posix().casefold()
+                except (ValueError, OSError) as exc:
+                    raise ValueError("O ZIP contém um caminho inseguro ou ambíguo.") from exc
+
+                mode = (member.external_attr >> 16) & 0xFFFF
+                file_type = stat.S_IFMT(mode)
+                if file_type and file_type not in {stat.S_IFREG, stat.S_IFDIR}:
+                    raise ValueError("O ZIP contém links ou arquivos especiais não permitidos.")
+                is_directory = member.is_dir() or file_type == stat.S_IFDIR
+                if key in seen:
+                    raise ValueError("O ZIP contém caminhos duplicados ou colisões de maiúsculas/minúsculas.")
+                if not is_directory and key in implied_directories:
+                    raise ValueError("O ZIP contém conflito entre arquivo e diretório.")
+                parts = key.split("/")
+                for depth in range(1, len(parts)):
+                    parent = "/".join(parts[:depth])
+                    if parent in seen and not seen[parent]:
+                        raise ValueError("O ZIP usa um arquivo como diretório.")
+                seen[key] = is_directory
+                for depth in range(1, len(parts)):
+                    implied_directories.add("/".join(parts[:depth]))
+                validated.append((member, target, is_directory))
+
+            actual_total = 0
+            for member, target, is_directory in validated:
+                if is_directory:
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                # Exclusive creation prevents overwriting even if the directory
+                # unexpectedly changes after validation.
+                with zf.open(member, "r") as source, target.open("xb") as output:
+                    actual_entry = 0
+                    while True:
+                        block = source.read(1024 * 1024)
+                        if not block:
+                            break
+                        actual_entry += len(block)
+                        actual_total += len(block)
+                        if actual_entry > member.file_size or actual_total > max_unpacked_bytes:
+                            raise ValueError("O conteúdo real do ZIP excedeu os limites declarados.")
+                        output.write(block)
+                    if actual_entry != member.file_size:
+                        raise ValueError("O tamanho real de uma entrada do ZIP não corresponde ao declarado.")
+    except Exception as exc:
+        cleanup_partial_output()
+        if isinstance(exc, ValueError):
+            raise
+        raise ValueError("O ZIP não pôde ser extraído com segurança.") from exc
+
 
 _INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]+')
 

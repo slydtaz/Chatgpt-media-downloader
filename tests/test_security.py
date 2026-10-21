@@ -1,5 +1,7 @@
 import tempfile
 import io
+import stat
+import zipfile
 import urllib.error
 import urllib.request
 import unittest
@@ -7,7 +9,7 @@ from unittest import mock
 from pathlib import Path
 
 from app.security import (
-    redact_sensitive, redacted_url, safe_archive_member_path,
+    redact_sensitive, redacted_url, safe_archive_member_path, safe_extract_zip,
     RestrictedHTTPSRedirectHandler, safe_filename_part, trusted_urlopen, validate_url,
 )
 
@@ -123,6 +125,82 @@ class SecurityTests(unittest.TestCase):
                 safe_archive_member_path(root, "media/tools/"),
                 (root / "media" / "tools").resolve(),
             )
+
+    def test_safe_extract_zip_extracts_regular_nested_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "bundle.zip"
+            destination = root / "extract"
+            destination.mkdir()
+            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr("folder/tool.txt", "trusted data")
+                zf.writestr("folder/sub/", "")
+            safe_extract_zip(archive, destination, max_members=20, max_unpacked_bytes=1024)
+            self.assertEqual((destination / "folder" / "tool.txt").read_text(), "trusted data")
+            self.assertTrue((destination / "folder" / "sub").is_dir())
+
+    def test_safe_extract_zip_rejects_traversal_before_writing_anything(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "payload.zip"
+            destination = root / "extract"
+            escaped = root / "escaped.txt"
+            destination.mkdir()
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("safe.txt", "should not be written")
+                zf.writestr("../escaped.txt", "outside")
+            with self.assertRaises(ValueError):
+                safe_extract_zip(archive, destination)
+            self.assertEqual(list(destination.iterdir()), [])
+            self.assertFalse(escaped.exists())
+
+    def test_safe_extract_zip_rejects_case_collisions_file_directory_conflicts_and_symlinks(self):
+        builders = (
+            (("item.txt", b"a"), ("ITEM.TXT", b"b")),
+            (("folder/child.txt", b"a"), ("folder", b"not a directory")),
+        )
+        for entries in builders:
+            with self.subTest(entries=entries), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                archive = root / "payload.zip"
+                destination = root / "extract"
+                destination.mkdir()
+                with zipfile.ZipFile(archive, "w") as zf:
+                    for name, data in entries:
+                        zf.writestr(name, data)
+                with self.assertRaises(ValueError):
+                    safe_extract_zip(archive, destination)
+                self.assertEqual(list(destination.iterdir()), [])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "symlink.zip"
+            destination = root / "extract"
+            destination.mkdir()
+            info = zipfile.ZipInfo("link")
+            info.create_system = 3
+            info.external_attr = (stat.S_IFLNK | 0o777) << 16
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr(info, "../target")
+            with self.assertRaises(ValueError):
+                safe_extract_zip(archive, destination)
+            self.assertEqual(list(destination.iterdir()), [])
+
+    def test_safe_extract_zip_enforces_size_limits_and_requires_empty_destination(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "payload.zip"
+            destination = root / "extract"
+            destination.mkdir()
+            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr("large.txt", "x" * 128)
+            with self.assertRaises(ValueError):
+                safe_extract_zip(archive, destination, max_unpacked_bytes=32)
+            self.assertEqual(list(destination.iterdir()), [])
+            (destination / "keep.txt").write_text("keep")
+            with self.assertRaises(ValueError):
+                safe_extract_zip(archive, destination)
+            self.assertEqual((destination / "keep.txt").read_text(), "keep")
 
     def test_filename(self):
         value = safe_filename_part('A<>:"/\\\\|?*B')

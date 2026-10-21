@@ -1004,6 +1004,8 @@ class MediaDownloaderApp:
         self._loading_overlay_canvas = None
         self._loading_animation_job = None
         self._loading_started_at = 0.0
+        self._loading_splash_hold = False
+        self._loading_splash_duration = 1.85
         self._loading_background_photo = None
         self._loading_atom_photo = None
         self.page_frames: dict[str, ttk.Frame] = {}
@@ -1374,11 +1376,13 @@ class MediaDownloaderApp:
         except (tk.TclError, ValueError, TypeError):
             self._ambient_job = None
 
-    def _start_loading_splash(self):
-        """Show a real animated startup screen with rotating rings and orbiting electrons."""
+    def _start_loading_splash(self, *, hold_until_dismissed: bool = False):
+        """Show the atom loading screen, either as a short preview or while an operation runs."""
         try:
             self._dismiss_loading_splash(immediate=True)
             self._loading_started_at = time.monotonic()
+            self._loading_splash_hold = bool(hold_until_dismissed)
+            self._loading_splash_duration = 1.85
             # Hide the real shell while the splash is active instead of relying
             # on platform-specific child-window stacking behavior.
             shell = getattr(self, "shell", None)
@@ -1427,8 +1431,9 @@ class MediaDownloaderApp:
                 self._loading_animation_job = self.root.after(60, self._animate_loading_splash)
                 return
             elapsed = max(0.0, time.monotonic() - self._loading_started_at)
-            duration = 1.85
-            progress = max(0.0, min(1.0, elapsed / duration))
+            duration = max(0.5, float(getattr(self, "_loading_splash_duration", 1.85)))
+            hold = bool(getattr(self, "_loading_splash_hold", False))
+            progress = (0.08 + 0.84 * ((elapsed * 0.36) % 1.0)) if hold else max(0.0, min(1.0, elapsed / duration))
             width, height = canvas.winfo_width(), canvas.winfo_height()
             palette = palette_colors(str(self.config.get("visual_palette", "cosmic")))
             canvas.delete("all")
@@ -1496,7 +1501,7 @@ class MediaDownloaderApp:
                                         fill=palette[0], outline="")
             canvas.create_text(width/2, height*0.89, text="Gradientes e órbitas · inicialização local",
                                fill="#7C76B2", font=("Segoe UI", 8))
-            if elapsed < duration:
+            if elapsed < duration or hold:
                 self._loading_animation_job = self.root.after(33, self._animate_loading_splash)
             else:
                 self._loading_animation_job = self.root.after(90, self._dismiss_loading_splash)
@@ -1536,7 +1541,7 @@ class MediaDownloaderApp:
                 canvas.create_oval(cx-10, cy-10, cx+10, cy+10, fill="#F5F3FF", outline="#A78BFA", width=2)
                 canvas.create_text(width/2, height*0.615, text="Carregando...", fill="#F7F4FF", font=("Segoe UI", 22, "bold"))
                 canvas.create_text(width/2, height*0.657, text="Preparando sua experiência visual", fill="#C5BDF4", font=("Segoe UI", 10))
-                if elapsed < 1.85:
+                if elapsed < float(getattr(self, "_loading_splash_duration", 1.85)) or bool(getattr(self, "_loading_splash_hold", False)):
                     self._loading_animation_job = self.root.after(50, self._animate_loading_splash)
                 else:
                     self._loading_animation_job = self.root.after(90, self._dismiss_loading_splash)
@@ -1550,6 +1555,7 @@ class MediaDownloaderApp:
                     pass
 
     def _dismiss_loading_splash(self, immediate: bool = False):
+        self._loading_splash_hold = False
         job = getattr(self, "_loading_animation_job", None)
         if job is not None:
             try:
@@ -2266,6 +2272,17 @@ class MediaDownloaderApp:
         self.visual_hover_reveal_var.trace_add("write", lambda *_: self._preview_visual_effect_settings())
         self.visual_preview_canvas.bind("<Configure>", lambda _event: self._render_static_visuals(), add="+")
         self._preview_visual_effect_settings()
+        loader_preview = ttk.Frame(effects, style="Card.TFrame")
+        loader_preview.pack(fill="x", pady=(0, 9))
+        ttk.Label(
+            loader_preview,
+            text="Teste a tela animada com átomo usada na inicialização e nas atualizações.",
+            style="Card.TLabel", wraplength=500, justify="left",
+        ).pack(side="left", fill="x", expand=True, padx=(0, 12))
+        RoundedGlowButton(
+            loader_preview, text="Testar animação", style="Secondary.TButton",
+            command=self._start_loading_splash,
+        ).pack(side="right")
         appearance=self._card(body,15)
         appearance.pack(fill="x",pady=(0,12))
         ttk.Label(appearance,text="Aparência",style="CardTitle.TLabel").pack(anchor="w")
@@ -2833,6 +2850,7 @@ class MediaDownloaderApp:
             return
         self._app_update_checking = True
         self._app_update_show_current = user_initiated
+        self._start_loading_splash(hold_until_dismissed=True)
         if hasattr(self, "app_update_check_button"):
             self.app_update_check_button.configure(state="disabled")
         self.app_update_status_var.set("Consultando o GitHub…")
@@ -2853,6 +2871,7 @@ class MediaDownloaderApp:
 
     def _handle_app_update_check(self, data):
         update, error, user_initiated = data
+        self._dismiss_loading_splash(immediate=True)
         self._app_update_checking = False
         if hasattr(self, "app_update_check_button"):
             self.app_update_check_button.configure(state="normal")
@@ -3085,6 +3104,7 @@ class MediaDownloaderApp:
             messagebox.showwarning("Atualização", "Termine ou cancele downloads e instalações antes de atualizar o aplicativo.", parent=self.root)
             return
         self._app_update_busy = True
+        self._start_loading_splash(hold_until_dismissed=True)
         for name in ("app_update_check_button", "app_update_install_button", "app_update_repair_button"):
             if hasattr(self, name):
                 getattr(self, name).configure(state="disabled")
@@ -3111,6 +3131,7 @@ class MediaDownloaderApp:
 
     def _handle_app_update_prepared(self, data):
         update, prepared, launch_after, repair, error = data
+        self._dismiss_loading_splash(immediate=True)
         self.app_update_progress.stop()
         self.app_update_progress.configure(mode="determinate", value=0)
         self._app_update_busy = False
