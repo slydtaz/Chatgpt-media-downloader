@@ -64,7 +64,7 @@ def render_ambient_gradient(
         cx, cy = round(width * x_ratio), round(height * y_ratio)
         radius = max(8, round(scale * radius_ratio))
         color = _rgb(colors[color_index % len(colors)])
-        alpha = round((23 + 48 * strength) * strength)
+        alpha = round((55 + 100 * strength) * strength)
         draw.ellipse((cx-radius, cy-radius, cx+radius, cy+radius), fill=(*color, alpha))
     blurred = glow.filter(ImageFilter.GaussianBlur(radius=max(4, round(scale * 0.20))))
     base.alpha_composite(blurred)
