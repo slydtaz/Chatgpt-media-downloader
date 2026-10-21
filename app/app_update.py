@@ -369,29 +369,7 @@ def check_for_update(
             if update:
                 return update
 
-    # Beta builds may check later prereleases without exposing beta builds to
-    # stable installations. Stable builds never query or adopt prerelease tags.
-    if re.search(r"(?i)-(?:alpha|beta|rc)\.\d+$", str(current_version or "")):
-        try:
-            releases = _request_json_list(f"{API_ROOT}/releases?per_page=50")
-        except AppUpdateError:
-            if frozen:
-                raise
-            releases = []
-        prereleases = [
-            item for item in releases
-            if item.get("prerelease") and not item.get("draft")
-            and _release_version(item)
-        ]
-        prereleases.sort(
-            key=lambda item: _version_order_key(_release_version(item)),
-            reverse=True,
-        )
-        for release in prereleases:
-            update = _release_candidate(current_version, release, frozen=frozen)
-            if update:
-                return update
-
+    # Prereleases are only considered by the explicit include_prereleases preference above.
     if frozen:
         return None
     # Source builds can still check the public main branch if no published Release
