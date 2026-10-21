@@ -212,7 +212,7 @@ def render_atom_art(
     image.alpha_composite(glow)
     draw = ImageDraw.Draw(image)
     for orbit in range(orbit_count):
-        rotation = math.pi * orbit / orbit_count
+        rotation = math.pi * orbit / orbit_count + phase * (0.32 + 0.10 * (orbit + 1)) * (-1 if orbit % 2 else 1)
         points = []
         for step in range(241):
             angle = math.tau * step / 240
