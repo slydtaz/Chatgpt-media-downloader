@@ -21,6 +21,7 @@ from app.app_update import (
     _release_version,
     _windows_update_helper_script,
     _safe_extract_zip,
+    _download_file,
     _stage_source_tree,
     _verify_executable_hash,
     _trusted_url,
@@ -265,6 +266,35 @@ class AppUpdateDiscoveryTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(result.returncode, 0, msg=result.stdout + "\n" + result.stderr)
+
+
+class DownloadSizeSecurityTests(unittest.TestCase):
+    def test_download_rejects_declared_size_mismatch_before_writing_payload(self):
+        class FakeResponse:
+            headers = {"Content-Length": "12"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def geturl(self):
+                return "https://github.com/vendor/project/releases/download/v1/tool.exe"
+
+            def read(self, _size=-1):
+                raise AssertionError("The body should not be read after size mismatch.")
+
+        with tempfile.TemporaryDirectory() as td:
+            destination = Path(td) / "tool.exe"
+            with patch("app.app_update.trusted_urlopen", return_value=FakeResponse()):
+                with self.assertRaises(AppUpdateError):
+                    _download_file(
+                        "https://github.com/vendor/project/releases/download/v1/tool.exe",
+                        destination,
+                        expected_size=11,
+                    )
+            self.assertFalse(destination.exists())
 
 
 class SafeArchiveTests(unittest.TestCase):
