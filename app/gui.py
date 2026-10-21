@@ -1228,7 +1228,9 @@ class MediaDownloaderApp:
             canvas.place(x=0, y=0, relwidth=1, relheight=1)
             canvas._ambient_image_id = canvas.create_image(0, 0, anchor="nw", tags=("ambient-light",))
             canvas._ambient_photo = None
-            canvas.lower()
+            # Canvas.lower() lowers an item *inside* the canvas; use Tk's
+            # window-stacking command to place this widget behind real controls.
+            canvas.tk.call("lower", canvas._w)
             canvas.bind("<Configure>", lambda _event, layer=canvas: self._paint_ambient_layer(layer), add="+")
             parent._cgmd_ambient_layer = canvas
             self._ambient_canvases.append(canvas)
@@ -1361,7 +1363,9 @@ class MediaDownloaderApp:
                 borderwidth=0, bd=0, takefocus=0, cursor="watch",
             )
             canvas.place(x=0, y=0, relwidth=1, relheight=1)
-            canvas.lift()
+            # Canvas.lift() is a canvas-item alias, not the widget stacking API.
+            # Raise the actual Tk window so the temporary splash truly overlays UI.
+            canvas.tk.call("raise", canvas._w)
             self._loading_overlay_canvas = canvas
             self._loading_animation_job = self.root.after(40, self._animate_loading_splash)
         except tk.TclError:
