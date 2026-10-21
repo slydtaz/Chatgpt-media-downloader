@@ -13,6 +13,7 @@ from typing import Any
 APP_NAME = "ChatGPT Media Downloader"
 PRODUCT_ID = "com.chatgpt.mediadownloader"
 VENDOR = "ChatGPT"
+# Keep the captured window title and UI version badge aligned with the published beta.
 VERSION = "5.4.0-beta.3"
 
 
