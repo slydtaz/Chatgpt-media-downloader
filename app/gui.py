@@ -1365,9 +1365,9 @@ class MediaDownloaderApp:
                 borderwidth=0, bd=0, takefocus=0, cursor="watch",
             )
             canvas.place(x=0, y=0, relwidth=1, relheight=1)
-            # Canvas.lift() is a canvas-item alias, not the widget stacking API.
-            # Raise the actual Tk window so the temporary splash truly overlays UI.
-            canvas.tk.call("raise", canvas._w)
+            # Widget-level tkraise puts this child window above the packed shell;
+            # Canvas tag_raise would only move drawing items inside the canvas.
+            canvas.tkraise()
             self._loading_overlay_canvas = canvas
             self._loading_animation_job = self.root.after(40, self._animate_loading_splash)
         except tk.TclError:
@@ -1382,6 +1382,8 @@ class MediaDownloaderApp:
             if not self.root.winfo_viewable() or canvas.winfo_width() < 200 or canvas.winfo_height() < 200:
                 self._loading_animation_job = self.root.after(60, self._animate_loading_splash)
                 return
+            # Keep the splash above every page during the complete startup sequence.
+            canvas.tkraise()
             elapsed = max(0.0, time.monotonic() - self._loading_started_at)
             duration = 1.85
             progress = max(0.0, min(1.0, elapsed / duration))
