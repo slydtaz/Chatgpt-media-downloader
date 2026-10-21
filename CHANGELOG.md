@@ -1,3 +1,15 @@
+## 5.4.0-beta.3 - beta (pré-release)
+
+- Anima o campo de luz neon sobre o preto OLED, com faixas diagonais e paletas configuráveis, mantendo a iluminação como camada independente do fundo.
+- Reforça a tela de carregamento com o átomo e as órbitas animadas, incluindo fallback de Canvas para manter a inicialização visível quando o renderizador gráfico falhar.
+- Corrige o fundo quadrado escuro em botões arredondados usando a cor de superfície efetiva do widget pai antes de compor os pixels transparentes antialias.
+- Adiciona preferência para aceitar pré-releases nas atualizações automáticas; por padrão, o aplicativo continua verificando somente versões estáveis.
+- Adiciona catálogo de versões publicadas para escolher uma Release específica, inclusive versões Beta/RC e versões anteriores, com confirmação antes da instalação.
+- Para instalações executáveis, o catálogo só oferece versões com o EXE e o manifesto SHA-256; as verificações de tamanho, origem e integridade permanecem obrigatórias.
+- Corrige o atualizador para respeitar o canal escolhido e acrescenta testes para descoberta de Releases, seleção de versões e persistência das preferências.
+
+**Aviso beta:** versão para avaliação, não estável. Leia os relatórios VirusTotal-Status.txt e Windows-Signature-Status.txt e confira os hashes em SHA256SUMS.txt antes de executar os binários. Uma aprovação dos testes automatizados não equivale a certificação de segurança.
+
 ## 5.4.0-beta.2 - beta (pré-release)
 
 - Adiciona ícone do produto ao executável, à janela do aplicativo e ao desinstalador, com metadados PE específicos para o desinstalador.

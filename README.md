@@ -9,7 +9,7 @@
 [Sugerir uma melhoria](https://github.com/slydtaz/chatgpt-media-downloader/issues/new?template=feature_request.yml)
 
 ![Sistema: Windows](https://img.shields.io/badge/SO-Windows-0078D6)
-![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.4.0--beta.2-orange)
+![Versão-fonte](https://img.shields.io/badge/vers%C3%A3o-fonte%205.4.0--beta.3-orange)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green)
 
 </div>
@@ -18,7 +18,7 @@
 
 > **Aviso de nome:** “ChatGPT” no nome é apenas parte do identificador do projeto. Este software é independente e **não é afiliado, patrocinado, certificado ou distribuído pela OpenAI**.
 
-> **UI customizada 5.4.0-beta.2:** além das correções visuais, esta beta traz relatório por mecanismo do VirusTotal para o executável, desinstalador, ZIP do código-fonte e as versões exatas de `yt-dlp`, `ffmpeg.exe` e `ffprobe.exe` baixadas e validadas pelos mesmos verificadores usados pelo app.
+> **UI customizada 5.4.0-beta.3:** gradiente neon animado, correção dos cantos dos botões, tela orbital de carregamento e seletor de versões no atualizador. Esta beta também mantém o relatório do VirusTotal para o executável, desinstalador, ZIP do código-fonte e as versões exatas de `yt-dlp`, `ffmpeg.exe` e `ffprobe.exe` verificadas pelo aplicativo.
 >
 > **Pré-release para avaliação:** a beta poderá ser publicada com detecções explícitas, desde que todos os scans terminem e o relatório completo seja anexado. Leia `VirusTotal-Status.txt` antes de executar qualquer binário. Uma publicação beta não significa que a versão foi aprovada como estável; a pipeline estável continua exigindo assinatura Authenticode confiável e ausência de detecções.
 
@@ -42,7 +42,7 @@ A página hospedada de downloads só é publicada quando GitHub Pages estiver ha
 
 ## 📥 Download oficial para usuários
 
-**Uso normal:** abra **[Releases estáveis — baixar](https://github.com/slydtaz/chatgpt-media-downloader/releases/latest)** e baixe `ChatGPTMediaDownloader.exe`. Confira o `SHA256SUMS.txt` da mesma Release. Para testar esta versão, use a **pré-release beta 5.4.0-beta.2** somente depois que a publicação aparecer na aba Releases; leia primeiro `VirusTotal-Status.txt` e verifique `SHA256SUMS.txt`. Não confunda artefatos de CI com um instalador oficial. **Desinstalador emergencial:** baixe `GPT-Media-Uninstaller.exe` da release correspondente.
+**Uso normal:** abra **[Releases estáveis — baixar](https://github.com/slydtaz/chatgpt-media-downloader/releases/latest)** e baixe `ChatGPTMediaDownloader.exe`. Confira o `SHA256SUMS.txt` da mesma Release. Para testar esta versão, use a **pré-release beta 5.4.0-beta.3** somente depois que a publicação aparecer na aba Releases; leia primeiro `VirusTotal-Status.txt` e verifique `SHA256SUMS.txt`. Não confunda artefatos de CI com um instalador oficial. **Desinstalador emergencial:** baixe `GPT-Media-Uninstaller.exe` da release correspondente.
 
 1. Baixe `ChatGPTMediaDownloader.exe` da Release estável.
 2. (Recomendado) Compare o SHA-256 do arquivo com `SHA256SUMS.txt` da mesma Release.
