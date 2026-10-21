@@ -503,7 +503,7 @@ def _safe_extract_zip(archive: Path, destination: Path) -> Path:
                         raise AppUpdateError("O pacote de origem contém um arquivo usado como diretório.")
                 seen[key] = is_directory
                 for depth in range(1, len(parts)):
-                    known_prefixes.add("/".join(parts[:depth))
+                    known_prefixes.add("/".join(parts[:depth]))
             zf.extractall(destination)
     except AppUpdateError:
         raise
