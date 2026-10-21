@@ -1500,9 +1500,11 @@ class MediaDownloaderApp:
     def _build_home(self):
         frame=ttk.Frame(self.pages_area)
         self.page_frames["home"]=frame
+        self._attach_ambient_layer(frame)
         scroll=ScrollableFrame(frame)
         scroll.pack(fill="both",expand=True)
         body=scroll.body
+        self._attach_ambient_layer(body)
         hero=RoundedCard(body,self,padding=(22,20),surface="panel2")
         hero.pack(fill="x",pady=(0,13))
         self.hero_accent_bar=tk.Frame(hero,bg=self.colors["accent"],width=4,bd=0,highlightthickness=0)
@@ -1921,6 +1923,7 @@ class MediaDownloaderApp:
         frame = ttk.Frame(self.pages_area)
         self.page_frames["playlist"] = frame
 
+        self._attach_ambient_layer(frame)
         intro = self._card(frame, 14)
         intro.pack(fill="x", pady=(0, 10))
         head = ttk.Frame(intro, style="Card.TFrame")
@@ -2026,9 +2029,11 @@ class MediaDownloaderApp:
     def _build_settings(self):
         frame=ttk.Frame(self.pages_area)
         self.page_frames["settings"]=frame
+        self._attach_ambient_layer(frame)
         scroll=ScrollableFrame(frame)
         scroll.pack(fill="both",expand=True)
         body=scroll.body
+        self._attach_ambient_layer(body)
         ttk.Label(body,text="Personalize cores, efeitos gerados e comportamento do downloader.",style="Subtitle.TLabel").pack(anchor="w",pady=(0,12))
 
         effects = self._card(body, 15)
@@ -2323,9 +2328,11 @@ class MediaDownloaderApp:
     def _build_dependencies(self):
         frame = ttk.Frame(self.pages_area)
         self.page_frames["dependencies"] = frame
+        self._attach_ambient_layer(frame)
         scroll = ScrollableFrame(frame)
         scroll.pack(fill="both", expand=True)
         body = scroll.body
+        self._attach_ambient_layer(body)
         ttk.Label(body, text="Dependências locais", style="Subtitle.TLabel").pack(anchor="w", pady=(0, 12))
         ttk.Label(body, text="A inicialização tenta preparar automaticamente os executáveis compatíveis antes da tela principal. Esta página permite repetir a tentativa ou selecionar arquivos manualmente.", style="TLabel", wraplength=760, justify="left").pack(anchor="w", pady=(0, 15))
         self.dep_cards: dict[str, dict[str, tk.StringVar]] = {}
@@ -2454,10 +2461,12 @@ class MediaDownloaderApp:
     def _build_updates(self):
         frame = ttk.Frame(self.pages_area)
         self.page_frames["updates"] = frame
+        self._attach_ambient_layer(frame)
         scroll = ScrollableFrame(frame)
         scroll.pack(fill="both", expand=True)
         body = scroll.body
 
+        self._attach_ambient_layer(body)
         current = self._card(body, 16)
         current.pack(fill="x", pady=(0, 12))
         ttk.Label(current, text="Atualizações do aplicativo", style="CardTitle.TLabel").pack(anchor="w")
@@ -2781,9 +2790,11 @@ class MediaDownloaderApp:
     def _build_help(self):
         frame = ttk.Frame(self.pages_area)
         self.page_frames["help"] = frame
+        self._attach_ambient_layer(frame)
         scroll = ScrollableFrame(frame)
         scroll.pack(fill="both", expand=True)
         body = scroll.body
+        self._attach_ambient_layer(body)
         ttk.Label(body, text="Como usar", style="CardTitle.TLabel").pack(anchor="w", pady=(0, 6))
         items = [
             ("Modo automático", "Aceita uma URL HTTP/HTTPS e trata o conteúdo como vídeo. A resolução usa a qualidade configurada."),
@@ -2810,9 +2821,11 @@ class MediaDownloaderApp:
     def _build_developer(self):
         frame = ttk.Frame(self.pages_area)
         self.page_frames["developer"] = frame
+        self._attach_ambient_layer(frame)
         scroll = ScrollableFrame(frame)
         scroll.pack(fill="both", expand=True)
         body = scroll.body
+        self._attach_ambient_layer(body)
         ttk.Label(body, text="Informações técnicas", style="CardTitle.TLabel").pack(anchor="w", pady=(0, 10))
         self.dev_vars = {}
         fields = [
