@@ -40,55 +40,124 @@ def render_ambient_gradient(
     height: int,
     palette: str = "cosmic",
     strength: float = 0.55,
+    *,
+    phase: float = 0.0,
+    style: str = "cosmic",
 ):
-    """Return a deterministic dark image with soft static, space-like color blooms."""
+    """Render moving translucent light over a true OLED-black base.
+
+    Most drawing happens on a downsampled work image, then Lanczos scales it to
+    the widget/window size. Phase is continuous, so repeated calls animate the
+    same light field smoothly without random flicker.
+    """
     if Image is None or ImageDraw is None or ImageFilter is None:
         return None
     width = max(1, min(2400, int(width)))
     height = max(1, min(1600, int(height)))
     strength = _clamp_strength(strength)
-    base = Image.new("RGBA", (width, height), (5, 5, 16, 255))
+    try:
+        phase = float(phase)
+        if not math.isfinite(phase):
+            phase = 0.0
+    except (TypeError, ValueError):
+        phase = 0.0
+    style = str(style or "cosmic").strip().lower()
+    if style not in {"cosmic", "nebula", "aurora", "edge-light"}:
+        style = "cosmic"
+
+    # Keep the loop cheap at fullscreen sizes; blur at 520 px and upscale.
+    render_factor = min(1.0, 520.0 / max(width, height))
+    work_w = max(120, round(width * render_factor))
+    work_h = max(90, round(height * render_factor))
+    base = Image.new("RGBA", (work_w, work_h), (0, 0, 0, 255))
     if strength <= 0.001:
-        return base
+        resampling = getattr(Image, "Resampling", Image).LANCZOS
+        return base.resize((width, height), resampling) if base.size != (width, height) else base
+
     colors = palette_colors(palette)
-    glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    glow = Image.new("RGBA", (work_w, work_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(glow)
-    scale = min(width, height)
-    blobs = (
-        (0.04, 0.14, 0.58, 0),
-        (0.91, 0.18, 0.50, 2),
-        (0.66, 0.93, 0.50, 1),
-        (0.38, 0.48, 0.30, 3),
-    )
-    for x_ratio, y_ratio, radius_ratio, color_index in blobs:
-        cx, cy = round(width * x_ratio), round(height * y_ratio)
-        radius = max(8, round(scale * radius_ratio))
+    short_side = min(work_w, work_h)
+    motion = phase
+    if style == "edge-light":
+        blobs = (
+            (0.00, 0.08, 0.57, 0), (1.00, 0.18, 0.53, 2),
+            (0.85, 1.02, 0.51, 1), (0.12, 0.96, 0.44, 4),
+        )
+    elif style == "aurora":
+        blobs = (
+            (-0.02, 0.28, 0.52, 0), (0.93, 0.05, 0.52, 2),
+            (0.52, 1.04, 0.52, 1), (0.04, 0.80, 0.40, 4),
+        )
+    elif style == "nebula":
+        blobs = (
+            (0.04, 0.12, 0.63, 0), (0.95, 0.17, 0.56, 4),
+            (0.67, 0.97, 0.58, 2), (0.26, 0.55, 0.45, 1),
+        )
+    else:
+        blobs = (
+            (0.01, 0.10, 0.60, 0), (0.97, 0.20, 0.54, 2),
+            (0.72, 1.02, 0.56, 1), (0.38, 0.48, 0.36, 4),
+        )
+
+    # The strongest light stays near the perimeter; the center retains contrast.
+    for index, (x_ratio, y_ratio, radius_ratio, color_index) in enumerate(blobs):
+        drift_x = math.sin(motion + index * 1.71) * work_w * (0.045 if style == "edge-light" else 0.085)
+        drift_y = math.cos(motion * 0.78 + index * 1.13) * work_h * 0.105
+        cx = round(work_w * x_ratio + drift_x)
+        cy = round(work_h * y_ratio + drift_y)
+        radius = max(10, round(short_side * radius_ratio))
         color = _rgb(colors[color_index % len(colors)])
-        alpha = round((55 + 100 * strength) * strength)
-        draw.ellipse((cx-radius, cy-radius, cx+radius, cy+radius), fill=(*color, alpha))
-    blurred = glow.filter(ImageFilter.GaussianBlur(radius=max(4, round(scale * 0.20))))
+        alpha = round((95 + 88 * strength) * strength)
+        draw.ellipse((cx-radius, cy-radius, cx+radius, cy+radius),
+                     fill=(*color, min(220, alpha)))
+
+    if style == "aurora":
+        # A few wide, saturated ribbons add a more ribbon-like alternative.
+        for index, color_value in enumerate(colors[:4]):
+            ribbon = []
+            for step in range(81):
+                x = work_w * step / 80
+                y = work_h * (0.22 + index * 0.16)
+                y += math.sin(step * 0.085 + motion * (0.75 + index * 0.08) + index) * work_h * 0.13
+                y += math.cos(step * 0.04 - motion) * work_h * 0.035
+                ribbon.append((round(x), round(y)))
+            draw.line(ribbon, fill=(*_rgb(color_value), round(65 + 85 * strength)),
+                      width=max(7, round(short_side * 0.085)), joint="curve")
+
+    blurred = glow.filter(ImageFilter.GaussianBlur(radius=max(5, round(short_side * 0.19))))
     base.alpha_composite(blurred)
-    # A subtle vertical shade preserves readability in the central content area.
-    shade = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+
+    # A gentle black vignette is another layer above the glows, not a colored fill.
+    shade = Image.new("RGBA", (work_w, work_h), (0, 0, 0, 0))
     shade_draw = ImageDraw.Draw(shade)
-    for y in range(height):
-        edge_distance = abs((y / max(1, height - 1)) - 0.5) * 2.0
-        alpha = round((4 + 17 * edge_distance) * strength)
-        shade_draw.line((0, y, width, y), fill=(0, 0, 10, alpha))
+    for y in range(work_h):
+        vertical_edge = abs((y / max(1, work_h - 1)) - 0.5) * 2.0
+        center_dark = max(0.0, 1.0 - vertical_edge * 1.3)
+        alpha = round((5 + 31 * center_dark) * strength)
+        if alpha:
+            shade_draw.line((0, y, work_w, y), fill=(0, 0, 5, alpha))
     base.alpha_composite(shade)
-    return base
+
+    resampling = getattr(Image, "Resampling", Image).LANCZOS
+    return base.resize((width, height), resampling) if base.size != (width, height) else base
+
 
 def render_gradient_preview(
     width: int = 520,
     height: int = 120,
     palette: str = "cosmic",
     strength: float = 0.55,
+    *,
+    phase: float = 0.0,
+    style: str = "cosmic",
 ):
-    """Create the exact static background-style preview used by Appearance settings."""
-    image = render_ambient_gradient(width, height, palette, strength)
+    """Render a reference preview of the same animated light-over-black effect."""
+    image = render_ambient_gradient(width, height, palette, strength, phase=phase, style=style)
     if image is None:
         return None
     return image.convert("RGB")
+
 
 def render_atom_art(
     width: int = 280,
