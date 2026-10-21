@@ -1179,6 +1179,255 @@ class MediaDownloaderApp:
         except tk.TclError:
             pass
 
+    def _attach_ambient_layer(self, parent):
+        """Place a shared translucent light texture behind the parent's real widgets."""
+        if not hasattr(self, "_ambient_canvases"):
+            self._ambient_canvases = []
+        existing = getattr(parent, "_cgmd_ambient_layer", None)
+        if existing is not None:
+            return existing
+        try:
+            canvas = tk.Canvas(
+                parent, background="#000000", highlightthickness=0,
+                borderwidth=0, bd=0, takefocus=0,
+            )
+            canvas.place(x=0, y=0, relwidth=1, relheight=1)
+            canvas._ambient_image_id = canvas.create_image(0, 0, anchor="nw", tags=("ambient-light",))
+            canvas._ambient_photo = None
+            canvas.lower()
+            canvas.bind("<Configure>", lambda _event, layer=canvas: self._paint_ambient_layer(layer), add="+")
+            parent._cgmd_ambient_layer = canvas
+            self._ambient_canvases.append(canvas)
+            return canvas
+        except tk.TclError:
+            return None
+
+    def _paint_ambient_layer(self, canvas):
+        try:
+            photo = getattr(self, "_ambient_photo", None)
+            if photo is None or not canvas.winfo_exists():
+                return
+            offset_x = self.root.winfo_rootx() - canvas.winfo_rootx()
+            offset_y = self.root.winfo_rooty() - canvas.winfo_rooty()
+            image_id = getattr(canvas, "_ambient_image_id", None)
+            if image_id is None:
+                image_id = canvas.create_image(0, 0, anchor="nw", tags=("ambient-light",))
+                canvas._ambient_image_id = image_id
+            canvas.coords(image_id, offset_x, offset_y)
+            canvas.itemconfigure(image_id, image=photo)
+            canvas._ambient_photo = photo
+            canvas.tag_lower("ambient-light")
+        except tk.TclError:
+            pass
+
+    def _render_ambient_layers(self):
+        if Image is None or ImageTk is None or not getattr(self, "_ambient_canvases", None):
+            return
+        try:
+            width = max(640, self.root.winfo_width())
+            height = max(480, self.root.winfo_height())
+            if not self.root.winfo_viewable():
+                return
+            enabled = bool(self.config.get("visual_effects_enabled", True))
+            strength = float(self.config.get("visual_strength", 0.80)) if enabled else 0.0
+            palette = str(self.config.get("visual_palette", "cosmic"))
+            style = str(self.config.get("visual_background_style", "cosmic"))
+            image = render_ambient_gradient(
+                width, height, palette, strength,
+                phase=self._ambient_phase if enabled else 0.0,
+                style=style,
+            )
+            if image is None:
+                return
+            photo = ImageTk.PhotoImage(image, master=self.root)
+            self._ambient_photo = photo
+            self._ambient_size = (width, height)
+            for canvas in list(self._ambient_canvases):
+                try:
+                    if canvas.winfo_exists():
+                        self._paint_ambient_layer(canvas)
+                except tk.TclError:
+                    continue
+            self._render_animated_gradient_preview()
+        except (tk.TclError, ValueError, TypeError, OSError) as exc:
+            try:
+                self.logger.debug("Não foi possível atualizar a luz ambiente: %s", type(exc).__name__)
+            except Exception:
+                pass
+
+    def _render_animated_gradient_preview(self):
+        preview = getattr(self, "visual_preview_canvas", None)
+        try:
+            if preview is None or not preview.winfo_exists() or not preview.winfo_ismapped():
+                return
+            width = max(320, preview.winfo_width())
+            height = max(54, preview.winfo_height())
+            enabled = bool(self.config.get("visual_effects_enabled", True))
+            strength = float(self.config.get("visual_strength", 0.80)) if enabled else 0.0
+            image = render_gradient_preview(
+                width, height,
+                str(self.config.get("visual_palette", "cosmic")),
+                strength,
+                phase=self._ambient_phase,
+                style=str(self.config.get("visual_background_style", "cosmic")),
+            )
+            if image is None or ImageTk is None:
+                return
+            photo = ImageTk.PhotoImage(image, master=self.root)
+            self.visual_preview_photo = photo
+            preview.delete("animated-preview")
+            preview.create_image(0, 0, image=photo, anchor="nw", tags=("animated-preview",))
+        except (tk.TclError, ValueError, TypeError, OSError):
+            pass
+
+    def _start_ambient_animation(self):
+        job = getattr(self, "_ambient_job", None)
+        if job is not None:
+            try:
+                self.root.after_cancel(job)
+            except tk.TclError:
+                pass
+        self._ambient_started = True
+        self._ambient_last_tick = time.monotonic()
+        self._ambient_job = self.root.after(35, self._ambient_frame_tick)
+
+    def _restart_ambient_animation(self):
+        """Apply palette/strength/style changes immediately, then resume the loop."""
+        if not getattr(self, "_ambient_started", False):
+            return
+        self._start_ambient_animation()
+
+    def _ambient_frame_tick(self):
+        self._ambient_job = None
+        try:
+            if not self.root.winfo_exists():
+                return
+            now = time.monotonic()
+            elapsed = max(0.001, min(0.10, now - self._ambient_last_tick))
+            self._ambient_last_tick = now
+            motion_enabled = bool(self.config.get("visual_effects_enabled", True)) and bool(
+                self.config.get("visual_background_animated", True)
+            )
+            if motion_enabled:
+                speed = float(self.config.get("visual_background_speed", 0.85))
+                self._ambient_phase = (self._ambient_phase + elapsed * 0.95 * speed) % math.tau
+            self._render_ambient_layers()
+            if motion_enabled:
+                self._ambient_job = self.root.after(33, self._ambient_frame_tick)
+        except (tk.TclError, ValueError, TypeError):
+            self._ambient_job = None
+
+    def _start_loading_splash(self):
+        """Show a real animated startup screen with rotating rings and orbiting electrons."""
+        try:
+            self._dismiss_loading_splash(immediate=True)
+            self._loading_started_at = time.monotonic()
+            canvas = tk.Canvas(
+                self.root, background="#000000", highlightthickness=0,
+                borderwidth=0, bd=0, takefocus=0, cursor="watch",
+            )
+            canvas.place(x=0, y=0, relwidth=1, relheight=1)
+            canvas.lift()
+            self._loading_overlay_canvas = canvas
+            self._loading_animation_job = self.root.after(40, self._animate_loading_splash)
+        except tk.TclError:
+            self._loading_overlay_canvas = None
+
+    def _animate_loading_splash(self):
+        canvas = getattr(self, "_loading_overlay_canvas", None)
+        self._loading_animation_job = None
+        try:
+            if canvas is None or not canvas.winfo_exists() or not self.root.winfo_exists():
+                return
+            if not self.root.winfo_viewable() or canvas.winfo_width() < 200 or canvas.winfo_height() < 200:
+                self._loading_animation_job = self.root.after(60, self._animate_loading_splash)
+                return
+            elapsed = max(0.0, time.monotonic() - self._loading_started_at)
+            duration = 1.85
+            progress = max(0.0, min(1.0, elapsed / duration))
+            width, height = canvas.winfo_width(), canvas.winfo_height()
+            palette = str(self.config.get("visual_palette", "cosmic"))
+            style = str(self.config.get("visual_background_style", "cosmic"))
+            strength = float(self.config.get("visual_strength", 0.80))
+            # The light remains a translucent layer above OLED black; it never
+            # replaces the surface with a solid purple or blue fill.
+            backdrop = render_ambient_gradient(
+                width, height, palette, strength,
+                phase=elapsed * 0.78, style=style,
+            )
+            artwork = render_atom_art(
+                min(340, max(180, round(width * 0.25))),
+                min(250, max(150, round(height * 0.29))),
+                palette=palette, strength=strength,
+                orbit_count=int(self.config.get("visual_orbits", 3)),
+                background=False, phase=elapsed * 2.4, style=style,
+            )
+            canvas.delete("all")
+            if backdrop is not None and ImageTk is not None:
+                self._loading_background_photo = ImageTk.PhotoImage(backdrop, master=self.root)
+                canvas.create_image(0, 0, image=self._loading_background_photo, anchor="nw")
+            if artwork is not None and ImageTk is not None:
+                self._loading_atom_photo = ImageTk.PhotoImage(artwork, master=self.root)
+                canvas.create_image(
+                    width / 2, height * 0.385,
+                    image=self._loading_atom_photo, anchor="center",
+                )
+            center_x = width / 2
+            canvas.create_text(
+                center_x, height * 0.615, text="Carregando...",
+                fill="#F7F4FF", font=("Segoe UI", 22, "bold"), anchor="center",
+            )
+            canvas.create_text(
+                center_x, height * 0.657, text="Preparando sua experiência visual",
+                fill="#C5BDF4", font=("Segoe UI", 10), anchor="center",
+            )
+            bar_width = min(340, max(220, round(width * 0.30)))
+            bar_height = 9
+            bar_x = round(center_x - bar_width / 2)
+            bar_y = round(height * 0.715)
+            canvas.create_polygon(
+                _rounded_polygon(bar_x, bar_y, bar_x + bar_width, bar_y + bar_height, bar_height / 2),
+                fill="#100D27", outline="#31245D", width=1,
+            )
+            fill_width = round((bar_width - 4) * progress)
+            if fill_width > 0:
+                for x in range(fill_width):
+                    color = _cyclic_palette_color(palette_colors(palette), x / max(1, fill_width - 1))
+                    canvas.create_line(
+                        bar_x + 2 + x, bar_y + 2, bar_x + 2 + x, bar_y + bar_height - 2,
+                        fill=color, width=1,
+                    )
+            canvas.create_text(
+                center_x, height * 0.89,
+                text="Gradientes e órbitas · inicialização local",
+                fill="#7C76B2", font=("Segoe UI", 8), anchor="center",
+            )
+            if elapsed < duration:
+                self._loading_animation_job = self.root.after(33, self._animate_loading_splash)
+            else:
+                self._loading_animation_job = self.root.after(90, self._dismiss_loading_splash)
+        except (tk.TclError, ValueError, TypeError, OSError):
+            self._dismiss_loading_splash(immediate=True)
+
+    def _dismiss_loading_splash(self, immediate: bool = False):
+        job = getattr(self, "_loading_animation_job", None)
+        if job is not None:
+            try:
+                self.root.after_cancel(job)
+            except tk.TclError:
+                pass
+        self._loading_animation_job = None
+        canvas = getattr(self, "_loading_overlay_canvas", None)
+        if canvas is not None:
+            try:
+                if canvas.winfo_exists():
+                    canvas.destroy()
+            except tk.TclError:
+                pass
+        self._loading_overlay_canvas = None
+        self._loading_background_photo = None
+        self._loading_atom_photo = None
+
     # ---------- Shell ----------
     def _build_shell(self):
         outer = ttk.Frame(self.root, padding=13)
