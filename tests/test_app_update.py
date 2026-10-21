@@ -322,6 +322,35 @@ class SafeArchiveTests(unittest.TestCase):
                 with self.assertRaises(AppUpdateError):
                     _safe_extract_zip(archive, root / "extract")
 
+    def test_duplicate_case_insensitive_archive_paths_are_rejected_before_extract(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            archive = root / "duplicate.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("project/PROJECT_ID", PRODUCT_ID)
+                zf.writestr("project/app/main.py", "first")
+                zf.writestr("project/APP/MAIN.PY", "second")
+            destination = root / "extract"
+            destination.mkdir()
+            with self.assertRaises(AppUpdateError):
+                _safe_extract_zip(archive, destination)
+            self.assertEqual(list(destination.iterdir()), [])
+
+    def test_windows_alternate_data_stream_names_are_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            archive = root / "ads.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("project/PROJECT_ID", PRODUCT_ID)
+                zf.writestr("project/app/main.py", "pass")
+                zf.writestr("project/app/config.py", 'VERSION = "5.4.0"')
+                zf.writestr("project/payload.txt:stream", "not an ordinary file")
+            destination = root / "extract"
+            destination.mkdir()
+            with self.assertRaises(AppUpdateError):
+                _safe_extract_zip(archive, destination)
+            self.assertEqual(list(destination.iterdir()), [])
+
     def test_parent_traversal_is_rejected(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
