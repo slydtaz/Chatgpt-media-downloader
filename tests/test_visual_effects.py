@@ -63,6 +63,19 @@ class VisualEffectsTests(unittest.TestCase):
         self.assertEqual(first.tobytes(), second.tobytes())
 
     @unittest.skipIf(visual_effects.Image is None, "Pillow is an optional runtime dependency")
+    def test_atom_rings_and_orbiting_particles_move_with_phase(self):
+        first = visual_effects.render_atom_art(
+            280, 190, palette="nebula", strength=0.65, orbit_count=3,
+            background=False, phase=0.0,
+        )
+        second = visual_effects.render_atom_art(
+            280, 190, palette="nebula", strength=0.65, orbit_count=3,
+            background=False, phase=1.2,
+        )
+        self.assertEqual(first.size, second.size)
+        self.assertNotEqual(first.tobytes(), second.tobytes())
+
+    @unittest.skipIf(visual_effects.Image is None, "Pillow is an optional runtime dependency")
     def test_disabling_glow_keeps_a_pure_black_canvas(self):
         image = visual_effects.render_ambient_gradient(120, 60, strength=0.0)
         self.assertEqual(image.size, (120, 60))
