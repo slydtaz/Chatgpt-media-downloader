@@ -3,7 +3,7 @@ from __future__ import annotations
 import ipaddress
 import os
 import re
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from urllib.parse import urlsplit
 import urllib.error
 import urllib.request
@@ -142,7 +142,9 @@ def safe_archive_member_path(root: Path, member_name: str) -> Path:
     raw = member_name
     if not raw or "\x00" in raw or any(ord(char) < 32 or ord(char) == 127 for char in raw):
         raise ValueError("Arquivo compactado contém caminho inseguro.")
-    normalized = raw.replace("\\", "/")
+    if "\\" in raw:
+        raise ValueError("Arquivo compactado contém separador de caminho ambíguo.")
+    normalized = raw
     # Archive directory names commonly end in one slash; do not otherwise
     # normalize empty or dot components away before validating them.
     if normalized.endswith("/"):
