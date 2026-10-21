@@ -88,7 +88,7 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("nao afiliado a OpenAI", version_info)
         uninstaller_info = (ROOT / "windows_uninstaller_version_info.txt").read_text(encoding="utf-8")
         self.assertIn("GPT-Media-Uninstaller.exe", uninstaller_info)
-        self.assertIn("5.4.0-beta.2", uninstaller_info)
+        self.assertIn("5.4.0-beta.3", uninstaller_info)
 
     def test_beta_release_scans_all_runtime_inputs_and_keeps_stable_gate_strict(self):
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")

@@ -18,13 +18,13 @@ VSVersionInfo(
         [
           StringStruct('CompanyName', 'ChatGPT Media Downloader contributors'),
           StringStruct('FileDescription', 'Aplicativo independente para baixar videos, audio e playlists'),
-          StringStruct('FileVersion', '5.4.0-beta.2'),
+          StringStruct('FileVersion', '5.4.0-beta.3'),
           StringStruct('InternalName', 'ChatGPTMediaDownloader'),
           StringStruct('LegalCopyright', 'Copyright (c) 2026 ChatGPT Media Downloader contributors'),
           StringStruct('LegalTrademarks', 'Projeto independente; nao afiliado a OpenAI'),
           StringStruct('OriginalFilename', 'ChatGPTMediaDownloader.exe'),
           StringStruct('ProductName', 'ChatGPT Media Downloader'),
-          StringStruct('ProductVersion', '5.4.0-beta.2'),
+          StringStruct('ProductVersion', '5.4.0-beta.3'),
           StringStruct('Comments', 'Codigo-fonte e releases: https://github.com/slydtaz/Chatgpt-media-downloader'),
         ]
       )

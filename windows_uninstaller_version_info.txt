@@ -18,12 +18,12 @@ VSVersionInfo(
         [
           StringStruct('CompanyName', 'ChatGPT Media Downloader contributors'),
           StringStruct('FileDescription', 'Desinstalador de emergência do ChatGPT Media Downloader'),
-          StringStruct('FileVersion', '5.4.0-beta.2'),
+          StringStruct('FileVersion', '5.4.0-beta.3'),
           StringStruct('InternalName', 'GPT-Media-Uninstaller'),
           StringStruct('LegalCopyright', 'Copyright (c) 2026 ChatGPT Media Downloader contributors'),
           StringStruct('OriginalFilename', 'GPT-Media-Uninstaller.exe'),
           StringStruct('ProductName', 'ChatGPT Media Downloader'),
-          StringStruct('ProductVersion', '5.4.0-beta.2'),
+          StringStruct('ProductVersion', '5.4.0-beta.3'),
           StringStruct('Comments', 'Projeto independente; nao afiliado a OpenAI. https://github.com/slydtaz/Chatgpt-media-downloader'),
         ]
       )
