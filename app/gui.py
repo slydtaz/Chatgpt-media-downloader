@@ -1305,32 +1305,32 @@ class MediaDownloaderApp:
         canvas = self.brand_logo_canvas
         try:
             canvas.delete("all")
-            width = max(76, canvas.winfo_width())
-            height = max(62, canvas.winfo_height())
+            width = max(54, canvas.winfo_width(), canvas.winfo_reqwidth())
+            height = max(54, canvas.winfo_height(), canvas.winfo_reqheight())
             cx, cy = width / 2, height / 2
+            scale = min(width, height) / 62.0
             colors = [
-                self.colors.get("pink", "#EC4899"),
                 self.colors.get("accent", "#8B5CF6"),
                 self.colors.get("space", "#22D3EE"),
+                self.colors.get("pink", "#C026D3"),
             ]
             for orbit_index, rotation in enumerate((0, math.pi / 3, -math.pi / 3)):
                 points = []
                 for step in range(49):
                     angle = 2 * math.pi * step / 48
-                    x = 22 * math.cos(angle)
-                    y = 11.5 * math.sin(angle)
+                    x = 22 * scale * math.cos(angle)
+                    y = 11.5 * scale * math.sin(angle)
                     px = cx + x * math.cos(rotation) - y * math.sin(rotation)
                     py = cy + x * math.sin(rotation) + y * math.cos(rotation)
                     points.extend((px, py))
-                canvas.create_line(
-                    *points, fill=colors[orbit_index], width=2.2,
-                    smooth=True, splinesteps=24, capstyle=tk.ROUND, joinstyle=tk.ROUND,
-                )
-            canvas.create_oval(cx-5, cy-5, cx+5, cy+5,
+                canvas.create_line(*points, fill=colors[orbit_index], width=max(1.2, 2.2*scale),
+                                   smooth=True, splinesteps=24, capstyle=tk.ROUND, joinstyle=tk.ROUND)
+            nucleus = 5 * scale
+            canvas.create_oval(cx-nucleus, cy-nucleus, cx+nucleus, cy+nucleus,
                                fill=self.colors.get("accent", "#8B5CF6"),
-                               outline=self.colors.get("pink", "#EC4899"), width=1.4)
-            canvas.create_oval(cx-1.6, cy-1.6, cx+1.6, cy+1.6,
-                               fill="#FFFFFF", outline="")
+                               outline=self.colors.get("pink", "#C026D3"), width=max(1, 1.4*scale))
+            core = max(1, 1.6*scale)
+            canvas.create_oval(cx-core, cy-core, cx+core, cy+core, fill="#FFFFFF", outline="")
         except tk.TclError:
             pass
 
