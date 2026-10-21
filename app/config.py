@@ -130,6 +130,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "visual_palette": "cosmic",
     "visual_strength": 0.55,
     "visual_orbits": 3,
+    "visual_background_animated": True,
+    "visual_background_style": "cosmic",
+    "visual_background_speed": 0.85,
+    "visual_hover_enabled": True,
+    "visual_hover_scale": 1.06,
+    "visual_hover_reveal_seconds": 1.0,
     "playlist_strategy": "sequential",
     "playlist_parallelism": 3,
     "concurrent_fragments": 4,
@@ -138,7 +144,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "subtitle_mode": "off",
     "update_open_after": True,
     "update_check_on_startup": True,
-    "settings_schema_version": 3,
+    "settings_schema_version": 4,
 }
 
 
@@ -218,11 +224,39 @@ def load_config() -> dict[str, Any]:
         data["visual_orbits"] = 3
     if data["visual_orbits"] not in {2, 3, 4}:
         data["visual_orbits"] = 3
+    if data.get("visual_background_style") not in {"cosmic", "nebula", "aurora", "edge-light"}:
+        data["visual_background_style"] = "cosmic"
+    try:
+        data["visual_background_speed"] = float(data.get("visual_background_speed", 0.85))
+    except (TypeError, ValueError):
+        data["visual_background_speed"] = 0.85
+    if data["visual_background_speed"] not in {0.45, 0.85, 1.25}:
+        data["visual_background_speed"] = 0.85
+    try:
+        data["visual_hover_scale"] = float(data.get("visual_hover_scale", 1.06))
+    except (TypeError, ValueError):
+        data["visual_hover_scale"] = 1.06
+    if data["visual_hover_scale"] not in {1.04, 1.06, 1.10}:
+        data["visual_hover_scale"] = 1.06
+    try:
+        data["visual_hover_reveal_seconds"] = float(data.get("visual_hover_reveal_seconds", 1.0))
+    except (TypeError, ValueError):
+        data["visual_hover_reveal_seconds"] = 1.0
+    if data["visual_hover_reveal_seconds"] not in {0.5, 1.0, 1.5}:
+        data["visual_hover_reveal_seconds"] = 1.0
     visual_enabled = data.get("visual_effects_enabled", True)
     if isinstance(visual_enabled, bool):
         data["visual_effects_enabled"] = visual_enabled
     else:
         data["visual_effects_enabled"] = str(visual_enabled).strip().lower() in {"1", "true", "yes", "sim", "on"}
+    for option in ("visual_background_animated", "visual_hover_enabled"):
+        value = data.get(option, True)
+        if isinstance(value, bool):
+            data[option] = value
+        elif isinstance(value, (int, float)):
+            data[option] = bool(value)
+        else:
+            data[option] = str(value).strip().lower() in {"1", "true", "yes", "sim", "on"}
     if data.get("playlist_strategy") not in {"sequential", "parallel"}:
         data["playlist_strategy"] = "sequential"
     try:
@@ -255,7 +289,7 @@ def load_config() -> dict[str, Any]:
             data[option] = bool(value)
         else:
             data[option] = str(value).strip().lower() in {"1", "true", "yes", "sim", "on"}
-    data["settings_schema_version"] = 3
+    data["settings_schema_version"] = 4
     return data
 
 
