@@ -1230,10 +1230,21 @@ class MediaDownloaderApp:
         ttk.Label(hero_top,text="VÍDEO  ·  ÁUDIO  ·  PLAYLISTS",style="HeroMuted.TLabel",font=("Segoe UI",8,"bold")).pack(side="right")
         ttk.Label(hero_body,text="Downloads de mídia, com controle.",style="HeroTitle.TLabel").pack(anchor="w",pady=(7,2))
         ttk.Label(hero_body,text="Cole um link, escolha o formato e acompanhe o progresso.",style="HeroMuted.TLabel",wraplength=760).pack(anchor="w",pady=(0,15))
-        self.url_entry=ttk.Entry(hero_body,textvariable=self.url_var,font=("Segoe UI",12))
+        url_entry_wrap = ttk.Frame(hero_body, style="Hero.TFrame")
+        url_entry_wrap.pack(fill="x")
+        self.url_entry=ttk.Entry(url_entry_wrap,textvariable=self.url_var,font=("Segoe UI",12))
         self.url_entry.pack(fill="x")
-        self.url_entry.focus_set()
+        self.url_placeholder_label = tk.Label(
+            url_entry_wrap, text="Cole o link do vídeo ou playlist…",
+            bg=self.colors["field"], fg=self.colors["muted"],
+            anchor="w", font=("Segoe UI", 10), padx=0, cursor="xterm",
+        )
+        self.url_placeholder_label.place(relx=0, rely=0.5, x=12, anchor="w")
+        self.url_placeholder_label.bind("<Button-1>", lambda _event: self.url_entry.focus_set())
+        self.url_entry.bind("<FocusIn>", lambda _event: self.url_placeholder_label.place_forget())
+        self.url_entry.bind("<FocusOut>", lambda _event: self._refresh_url_placeholder())
         self.url_entry.bind("<Return>",lambda _e:self.start_download())
+        self.url_var.trace_add("write",self._refresh_url_placeholder)
         self.url_var.trace_add("write",self._update_playlist_warning)
         self.url_var.trace_add("write", self._schedule_media_preview)
         self.playlist_warning=tk.Label(hero_body,text="⚠  Link de playlist detectado — analise os itens antes de baixar.",bg=self.colors["panel2"],fg=self.colors["warn"],anchor="w",font=("Segoe UI",9,"bold"),padx=3)
@@ -1267,14 +1278,25 @@ class MediaDownloaderApp:
             ("Áudio MP3", "MP3 · bitrate configurável", lambda: self._select_download_mode("Música — MP3")),
             ("Playlists", "Escolha itens individuais", lambda: self.show_page("playlist")),
         ]
+        self.home_action_icons = []
         for index, (title, description, action) in enumerate(quick_specs):
             card = self._card(quick_actions, 11)
             left = 0 if index == 0 else 6
             right = 6 if index < len(quick_specs)-1 else 0
             card.pack(side="left", fill="both", expand=True, padx=(left, right))
-            ttk.Label(card, text=title, style="CardTitle.TLabel").pack(anchor="w")
-            ttk.Label(card, text=description, style="Muted.TLabel", wraplength=220).pack(anchor="w", pady=(4, 8))
-            RoundedGlowButton(card, text="Abrir  →", style="Secondary.TButton", command=action).pack(anchor="e")
+            card_row = ttk.Frame(card, style="Card.TFrame")
+            card_row.pack(fill="x")
+            glyph = {"Vídeos":"▣", "Áudio MP3":"♫", "Playlists":"≡"}[title]
+            icon = tk.Canvas(card_row, width=46, height=46, bg=self.colors["panel"], bd=0, highlightthickness=0)
+            icon.home_glyph = glyph
+            icon.pack(side="left", padx=(0, 9))
+            self.home_action_icons.append(icon)
+            copy = ttk.Frame(card_row, style="Card.TFrame")
+            copy.pack(side="left", fill="both", expand=True)
+            ttk.Label(copy, text=title, style="CardTitle.TLabel").pack(anchor="w")
+            ttk.Label(copy, text=description, style="Muted.TLabel", wraplength=180).pack(anchor="w", pady=(4, 0))
+            RoundedGlowButton(card, text="Abrir  →", style="Secondary.TButton", command=action).pack(anchor="e", pady=(7, 0))
+        self._draw_home_action_icons()
 
         self.media_preview_placeholder = self._make_thumbnail_placeholder(220, 124)
         self.playlist_thumbnail_placeholder = self._make_thumbnail_placeholder(76, 43)
@@ -1350,6 +1372,36 @@ class MediaDownloaderApp:
         ttk.Label(footer,text="Dica: use o gerenciador de playlists para escolher itens individualmente.",style="Muted.TLabel").pack(side="left")
         self.cancel_btn=RoundedGlowButton(footer,text="Cancelar download",style="Secondary.TButton",command=self.cancel_download,state="disabled")
         self.cancel_btn.pack(side="right")
+    def _refresh_url_placeholder(self, *_args):
+        """Show hint text only while the URL is empty and the entry lacks focus."""
+        label = getattr(self, "url_placeholder_label", None)
+        if label is None:
+            return
+        try:
+            if self.url_var.get().strip() or self.root.focus_get() is self.url_entry:
+                label.place_forget()
+            else:
+                label.place(relx=0, rely=0.5, x=12, anchor="w")
+        except tk.TclError:
+            pass
+
+    def _draw_home_action_icons(self):
+        palette = palette_colors(self.config.get("visual_palette", "cosmic"))
+        for canvas in getattr(self, "home_action_icons", []):
+            try:
+                if not canvas.winfo_exists():
+                    continue
+                canvas.delete("all")
+                width = max(46, canvas.winfo_width(), canvas.winfo_reqwidth())
+                height = max(46, canvas.winfo_height(), canvas.winfo_reqheight())
+                fill = _blend_hex(palette[0], self.colors.get("panel2", "#111022"), 0.48)
+                canvas.create_polygon(_rounded_polygon(1, 1, width-1, height-1, 11),
+                                      fill=fill, outline=palette[1], width=1.2)
+                canvas.create_text(width/2, height/2, text=getattr(canvas, "home_glyph", "•"),
+                                   fill=palette[2], font=("Segoe UI Symbol", 18, "bold"))
+            except tk.TclError:
+                pass
+
     def _draw_brand_logo(self):
         if not hasattr(self, "brand_logo_canvas"):
             return
@@ -2563,6 +2615,7 @@ class MediaDownloaderApp:
             for button in getattr(self, "nav_buttons", {}).values():
                 if hasattr(button, "refresh_theme"):
                     button.refresh_theme()
+            self._draw_home_action_icons()
             def refresh_buttons(parent):
                 for child in parent.winfo_children():
                     if isinstance(child, RoundedGlowButton):
