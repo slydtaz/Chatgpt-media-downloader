@@ -454,6 +454,14 @@ def _verify_executable_hash(update: AppUpdate, staged: Path, computed_hash: str,
 def _safe_extract_zip(archive: Path, destination: Path) -> Path:
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
+    if destination.is_symlink() or not destination.is_dir():
+        raise AppUpdateError("A pasta de extração precisa ser um diretório real, não um link.")
+    is_junction = getattr(destination, "is_junction", None)
+    try:
+        if is_junction is not None and is_junction():
+            raise AppUpdateError("A pasta de extração não pode ser uma junction.")
+    except OSError as exc:
+        raise AppUpdateError("Não foi possível validar a pasta de extração.") from exc
     dest_resolved = destination.resolve()
     try:
         archive_info = archive.lstat()
