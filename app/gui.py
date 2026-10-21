@@ -34,6 +34,7 @@ from .uninstall import launch_uninstaller
 from .brand_assets import load_brand_images
 from .media_preview import fetch_thumbnail_bytes, inspect_media_preview
 from .visual_effects import PALETTES as EFFECT_PALETTES, render_atom_art, render_gradient_preview, palette_colors
+from .ui_rendering import render_rounded_panel, render_rounded_button
 
 try:
     from PIL import Image, ImageDraw, ImageFont, ImageTk
@@ -348,17 +349,25 @@ class RoundedCard(ttk.Frame):
             colors = self.app.colors
             backdrop = colors.get(self.backdrop_key, colors["bg"])
             surface = colors.get(self.surface_key, colors["panel"])
+            border = _blend_hex(colors.get("accent", "#8B5CF6"), colors.get("border", surface), 0.70)
             self._canvas.configure(background=backdrop)
             self._canvas.delete("surface")
-            if width > 8 and height > 8:
+            artwork = render_rounded_panel(
+                width, height, backdrop=backdrop, surface=surface, border=border,
+                radius=15, border_width=1, scale=3,
+            )
+            if artwork is not None and ImageTk is not None:
+                self._card_photo = ImageTk.PhotoImage(artwork, master=self.app.root)
+                self._canvas.create_image(0, 0, image=self._card_photo, anchor="nw", tags="surface")
+            elif width > 8 and height > 8:
+                # Pillow-free fallback; supersampled rendering is used whenever Pillow exists.
                 self._canvas.create_polygon(
                     _rounded_polygon(1, 1, width - 2, height - 2, 15),
                     smooth=False, splinesteps=14, fill=surface,
-                    outline=_blend_hex(colors.get("accent", "#8B5CF6"), colors.get("border", surface), 0.70),
-                    width=1, tags="surface",
+                    outline=border, width=1, tags="surface",
                 )
             self._canvas.lower()
-        except tk.TclError:
+        except (tk.TclError, ValueError, TypeError):
             pass
 
 
@@ -491,23 +500,26 @@ class IconNavButton(tk.Canvas):
             palette = palette_colors(self.app.config.get("visual_palette", "cosmic"))
             if self.active or self.hovered:
                 surface = _blend_hex(accent, panel, 0.66 if self.active else 0.86)
-                self.create_polygon(_rounded_polygon(2, 1, width - 2, height - 1, 12),
-                                    smooth=False, fill=surface,
-                                    outline=_blend_hex(palette[1], panel, 0.18 if self.active else 0.58),
-                                    width=1.2 if self.active else 1)
+                border = _blend_hex(palette[1], panel, 0.18 if self.active else 0.58)
+                artwork = render_rounded_panel(
+                    width, height, backdrop=panel, surface=surface, border=border,
+                    radius=12, border_width=1.2 if self.active else 1,
+                    fill_palette=palette if self.active else (), scale=3,
+                )
+                if artwork is not None and ImageTk is not None:
+                    self._background_photo = ImageTk.PhotoImage(artwork, master=self.app.root)
+                    self.create_image(0, 0, image=self._background_photo, anchor="nw")
+                else:
+                    self.create_polygon(
+                        _rounded_polygon(2, 1, width - 2, height - 1, 12),
+                        smooth=False, fill=surface, outline=border,
+                        width=1.2 if self.active else 1,
+                    )
                 if self.active:
-                    # Horizontal, static gradient inside the selected tab; edges stay rounded.
-                    radius = 12
-                    for x in range(3, width - 3):
-                        depth = min(x - 2, width - 2 - x)
-                        inset = radius - math.sqrt(max(0.0, radius * radius - (radius - min(radius, depth)) ** 2)) if depth < radius else 0.0
-                        tint = _cyclic_palette_color(palette, 0.08 + 0.32 * x / max(1, width - 1))
-                        line_color = _blend_hex(surface, tint, 0.62)
-                        self.create_line(x, 1 + inset, x, height - 1 - inset, fill=line_color, width=1)
-                    self.create_polygon(_rounded_polygon(2, 1, width - 2, height - 1, 12),
-                                        fill="", outline=_blend_hex(palette[1], panel, 0.20), width=1.2)
-                    self.create_polygon(_rounded_polygon(1, height / 2 - 8, 4, height / 2 + 8, 2),
-                                        fill=palette[0], outline="", smooth=False)
+                    self.create_line(
+                        2, height / 2 - 7, 2, height / 2 + 7,
+                        fill=palette[0], width=3, capstyle=tk.ROUND,
+                    )
             icon_color = palette[0] if self.active else (colors["fg"] if self.hovered else colors["muted"])
             icon_size = max(19, int(21 * self._scale))
             photo = _render_nav_icon(self.app.root, self.app._nav_icon_cache, self.page_key, icon_size, icon_color)
@@ -716,7 +728,7 @@ class RoundedGlowButton(tk.Canvas):
             self._schedule_gradient_animation()
 
     def _draw(self):
-        """Draw crisp, static dual neon borders; only the button fill changes on hover."""
+        """Render rounded backgrounds at 4x resolution and downsample with Lanczos."""
         try:
             width = max(self._natural_width, self.winfo_width(), 38)
             height = max(self._height, self.winfo_height(), 26)
@@ -727,36 +739,45 @@ class RoundedGlowButton(tk.Canvas):
             edge, top, bottom, text_color = self._palette()
             has_gradient = self._gradient_is_available()
             hovering = (self._hovered or self._focused) and has_gradient
-            strength = 1.0 if hovering else 0.0
-            outer_inset, inner_inset = 1.0, 3.0
-            outer_radius = max(9, height / 2 - outer_inset)
-            inner_radius = max(7, height / 2 - inner_inset)
-            self.create_polygon(_rounded_polygon(outer_inset, outer_inset, width-outer_inset, height-outer_inset, outer_radius),
-                                fill=_blend_hex(edge, bg, 0.24), outline="", width=1)
-            x0, y0, x1, y1 = inner_inset, inner_inset, width-inner_inset, height-inner_inset
-            self.create_polygon(_rounded_polygon(x0, y0, x1, y1, inner_radius), fill=bottom, outline="")
-            for y in range(int(y0+1), int(y1)):
-                left, right = self._span(y, y0+1, y1-1, x0+1, x1-1, inner_radius-1)
-                if left <= right:
-                    t = (y-y0) / max(1, y1-y0)
-                    color = _blend_hex(top, bottom, max(0.0, min(1.0, t)))
-                    if strength:
-                        tint = _cyclic_palette_color(palette_colors(self.app.config.get("visual_palette", "cosmic")), t*0.36)
-                        color = _blend_hex(color, tint, 0.36)
-                    self.create_line(left, y, right, y, fill=color, width=1)
-            self.create_polygon(_rounded_polygon(outer_inset, outer_inset, width-outer_inset, height-outer_inset, outer_radius),
-                                fill="", outline=_blend_hex(edge, "#FFFFFF", 0.20), width=0.8)
-            if has_gradient:
-                palette = palette_colors(self.app.config.get("visual_palette", "cosmic"))
-                inner_palette = tuple(_blend_hex(value, "#D8D5FF", 0.24) for value in reversed(palette))
-                # Two continuously colored outlines remain visible even when not hovered.
-                self._draw_gradient_outline(width, height, outer_inset, outer_radius, palette, 0.03, 1.55)
-                self._draw_gradient_outline(width, height, inner_inset+0.7, inner_radius, inner_palette, 0.39, 0.95)
+            palette = palette_colors(self.app.config.get("visual_palette", "cosmic"))
+            inner_palette = tuple(_blend_hex(value, "#D8D5FF", 0.24) for value in reversed(palette))
+            artwork = render_rounded_button(
+                width, height, backdrop=bg, edge=edge, top=top, bottom=bottom,
+                outer_palette=palette if has_gradient else (),
+                inner_palette=inner_palette if has_gradient else (),
+                hover_palette=palette if hovering else (),
+                hover=hovering, radius=max(9, height / 2 - 1), scale=4,
+            )
+            if artwork is not None and ImageTk is not None:
+                self._button_background_photo = ImageTk.PhotoImage(artwork, master=self.app.root)
+                self.create_image(0, 0, image=self._button_background_photo, anchor="nw")
             else:
-                self.create_polygon(_rounded_polygon(outer_inset, outer_inset, width-outer_inset, height-outer_inset, outer_radius),
-                                    fill="", outline=edge, width=1.1)
-            self.create_text(width/2, height/2 + (0.5 if self._pressed else 0), text=self.text,
-                             fill=text_color, font=self._font, anchor="center", width=max(10, width-20))
+                # Retain a compatibility path for source runs without Pillow.
+                outer_inset, inner_inset = 1.0, 3.0
+                outer_radius = max(9, height / 2 - outer_inset)
+                inner_radius = max(7, height / 2 - inner_inset)
+                self.create_polygon(
+                    _rounded_polygon(outer_inset, outer_inset, width-outer_inset, height-outer_inset, outer_radius),
+                    fill=_blend_hex(edge, bg, 0.24), outline="", width=1,
+                )
+                x0, y0, x1, y1 = inner_inset, inner_inset, width-inner_inset, height-inner_inset
+                self.create_polygon(_rounded_polygon(x0, y0, x1, y1, inner_radius), fill=bottom, outline="")
+                for y in range(int(y0+1), int(y1)):
+                    left, right = self._span(y, y0+1, y1-1, x0+1, x1-1, inner_radius-1)
+                    if left <= right:
+                        t = (y-y0) / max(1, y1-y0)
+                        self.create_line(left, y, right, y, fill=_blend_hex(top, bottom, t), width=1)
+                self.create_polygon(
+                    _rounded_polygon(outer_inset, outer_inset, width-outer_inset, height-outer_inset, outer_radius),
+                    fill="", outline=edge, width=1.1,
+                )
+                if has_gradient:
+                    self._draw_gradient_outline(width, height, outer_inset, outer_radius, palette, 0.03, 1.55)
+                    self._draw_gradient_outline(width, height, inner_inset+0.7, inner_radius, inner_palette, 0.39, 0.95)
+            self.create_text(
+                width/2, height/2 + (0.5 if self._pressed else 0), text=self.text,
+                fill=text_color, font=self._font, anchor="center", width=max(10, width-20),
+            )
         except tk.TclError:
             pass
 
@@ -1397,11 +1418,25 @@ class MediaDownloaderApp:
                 canvas.delete("all")
                 width = max(46, canvas.winfo_width(), canvas.winfo_reqwidth())
                 height = max(46, canvas.winfo_height(), canvas.winfo_reqheight())
-                fill = _blend_hex(palette[0], self.colors.get("panel2", "#111022"), 0.48)
-                canvas.create_polygon(_rounded_polygon(1, 1, width-1, height-1, 11),
-                                      fill=fill, outline=palette[1], width=1.2)
-                canvas.create_text(width/2, height/2, text=getattr(canvas, "home_glyph", "•"),
-                                   fill=palette[2], font=("Segoe UI Symbol", 18, "bold"))
+                backdrop = self.colors.get("panel", "#0B0D20")
+                fill = _blend_hex(palette[0], self.colors.get("panel2", "#10142C"), 0.48)
+                artwork = render_rounded_panel(
+                    width, height, backdrop=backdrop, surface=fill,
+                    border=palette[1], radius=11, border_width=1.2,
+                    fill_palette=tuple(palette[:3]), scale=3,
+                )
+                if artwork is not None and ImageTk is not None:
+                    canvas._action_icon_background = ImageTk.PhotoImage(artwork, master=self.root)
+                    canvas.create_image(0, 0, image=canvas._action_icon_background, anchor="nw")
+                else:
+                    canvas.create_polygon(
+                        _rounded_polygon(1, 1, width-1, height-1, 11),
+                        fill=fill, outline=palette[1], width=1.2,
+                    )
+                canvas.create_text(
+                    width/2, height/2, text=getattr(canvas, "home_glyph", "•"),
+                    fill=palette[2], font=("Segoe UI Symbol", 18, "bold"),
+                )
             except tk.TclError:
                 pass
 
