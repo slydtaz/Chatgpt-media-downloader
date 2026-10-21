@@ -1360,6 +1360,12 @@ class MediaDownloaderApp:
         try:
             self._dismiss_loading_splash(immediate=True)
             self._loading_started_at = time.monotonic()
+            # Hide the real shell while the splash is active instead of relying
+            # on platform-specific child-window stacking behavior.
+            shell = getattr(self, "shell", None)
+            self._loading_shell_was_packed = bool(shell is not None and shell.winfo_manager() == "pack")
+            if self._loading_shell_was_packed:
+                shell.pack_forget()
             canvas = tk.Canvas(
                 self.root, background="#000000", highlightthickness=0,
                 borderwidth=0, bd=0, takefocus=0, cursor="watch",
@@ -1383,7 +1389,6 @@ class MediaDownloaderApp:
             if not self.root.winfo_viewable() or canvas.winfo_width() < 200 or canvas.winfo_height() < 200:
                 self._loading_animation_job = self.root.after(60, self._animate_loading_splash)
                 return
-            canvas.tkraise()
             elapsed = max(0.0, time.monotonic() - self._loading_started_at)
             duration = 1.85
             progress = max(0.0, min(1.0, elapsed / duration))
@@ -1468,6 +1473,14 @@ class MediaDownloaderApp:
         self._loading_overlay_canvas = None
         self._loading_background_photo = None
         self._loading_atom_photo = None
+        shell = getattr(self, "shell", None)
+        if getattr(self, "_loading_shell_was_packed", False) and shell is not None:
+            try:
+                if shell.winfo_exists() and shell.winfo_manager() != "pack":
+                    shell.pack(fill="both", expand=True)
+                self._loading_shell_was_packed = False
+            except tk.TclError:
+                pass
 
     # ---------- Shell ----------
     def _build_shell(self):
