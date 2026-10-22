@@ -390,6 +390,8 @@ class IconNavButton(tk.Canvas):
         self._scale = 1.0
         self._target_scale = 1.0
         self._scale_job = None
+        self._gradient_phase = 0.0
+        self._gradient_job = None
         self.bind("<Configure>", lambda _event: self._draw(), add="+")
         self.bind("<Enter>", self._on_enter, add="+")
         self.bind("<Leave>", self._on_leave, add="+")
@@ -402,6 +404,7 @@ class IconNavButton(tk.Canvas):
         self._target_scale = configured_scale * 0.98 if self.active else (configured_scale if self.hovered else 1.0)
         self._draw()
         self._animate_scale()
+        self._ensure_gradient_animation()
 
     def refresh_theme(self):
         self.configure(background=self.app.colors["panel2"])
@@ -413,6 +416,7 @@ class IconNavButton(tk.Canvas):
         self._target_scale = configured_scale if not self.active else configured_scale * 0.98
         self._animate_scale()
         self._draw()
+        self._ensure_gradient_animation()
 
     def _on_leave(self, _event=None):
         self.hovered = False
@@ -423,6 +427,28 @@ class IconNavButton(tk.Canvas):
 
     def _on_click(self, _event=None):
         self.command()
+
+    def _ensure_gradient_animation(self):
+        if self._gradient_job is None and (self.active or self.hovered):
+            try:
+                self._gradient_job = self.after(33, self._animate_gradient)
+            except tk.TclError:
+                self._gradient_job = None
+
+    def _animate_gradient(self):
+        self._gradient_job = None
+        try:
+            if not self.winfo_exists():
+                return
+            enabled = bool(self.app.config.get("visual_effects_enabled", True))
+            moving = bool(self.app.config.get("visual_background_animated", True))
+            if (self.active or self.hovered) and enabled and moving:
+                speed = float(self.app.config.get("visual_background_speed", 0.85))
+                self._gradient_phase = (self._gradient_phase + 0.009 * speed) % 1.0
+                self._draw()
+                self._gradient_job = self.after(33, self._animate_gradient)
+        except (tk.TclError, ValueError, TypeError):
+            self._gradient_job = None
 
     def _animate_scale(self):
         if self._scale_job is not None:
@@ -502,14 +528,18 @@ class IconNavButton(tk.Canvas):
             colors = self.app.colors
             panel = colors.get("panel2", "#090814")
             accent = colors.get("accent", "#8B5CF6")
-            palette = palette_colors(self.app.config.get("visual_palette", "cosmic"))
+            palette = palette_colors(self.app.config.get("visual_palette", "cosmic"), self.app.config.get("visual_custom_colors"))
+            glow_strength = float(self.app.config.get("visual_border_glow_strength", 0.90))
+            glow_width = float(self.app.config.get("visual_border_glow_width", 2.5))
             if self.active or self.hovered:
                 surface = _blend_hex(accent, panel, 0.66 if self.active else 0.86)
-                border = _blend_hex(palette[1], panel, 0.18 if self.active else 0.58)
+                border = _blend_hex(palette[1], panel, (1.0 - glow_strength) * 0.72 if self.active else 0.58)
                 artwork = render_rounded_panel(
                     width, height, backdrop=panel, surface=surface, border=border,
-                    radius=12, border_width=1.2 if self.active else 1,
-                    fill_palette=palette if self.active else (), scale=3,
+                    radius=12, border_width=max(1.0, glow_width * (1.0 if self.active else 0.55)),
+                    fill_palette=palette if (self.active or self.hovered) else (),
+                    gradient_phase=self._gradient_phase,
+                    glow_strength=glow_strength, scale=3,
                 )
                 if artwork is not None and ImageTk is not None:
                     self._background_photo = ImageTk.PhotoImage(artwork, master=self.app.root)
@@ -775,7 +805,7 @@ class RoundedGlowButton(tk.Canvas):
             has_gradient = self._gradient_is_available()
             hover_enabled = bool(self.app.config.get("visual_hover_enabled", True))
             hovering = (self._hovered or self._focused) and hover_enabled and has_gradient
-            palette = palette_colors(self.app.config.get("visual_palette", "cosmic"))
+            palette = palette_colors(self.app.config.get("visual_palette", "cosmic"), self.app.config.get("visual_custom_colors"))
             inner_palette = tuple(_blend_hex(value, "#E6E2FF", 0.12) for value in reversed(palette))
 
             max_scale = float(self.app.config.get("visual_hover_scale", 1.06)) if hover_enabled and has_gradient else 1.0
@@ -786,7 +816,8 @@ class RoundedGlowButton(tk.Canvas):
             target_height = max(24, min(height, round(height * current_scale / max_scale)))
             offset_x = (width - target_width) // 2
             offset_y = (height - target_height) // 2
-            glow_strength = self._gradient_strength if hover_enabled and has_gradient else 0.0
+            configured_glow = max(0.0, min(1.0, float(self.app.config.get("visual_border_glow_strength", 0.90))))
+            glow_strength = self._gradient_strength * configured_glow if hover_enabled and has_gradient else 0.0
 
             artwork = render_rounded_button(
                 target_width, target_height,
@@ -798,6 +829,7 @@ class RoundedGlowButton(tk.Canvas):
                 hover_strength=glow_strength,
                 gradient_phase=self._gradient_phase,
                 radius=max(9, target_height / 2 - 1), scale=4,
+                border_width=float(self.app.config.get("visual_border_glow_width", 2.5)),
             )
             if artwork is not None and ImageTk is not None:
                 self._button_background_photo = ImageTk.PhotoImage(artwork, master=self.app.root)
@@ -1293,6 +1325,10 @@ class MediaDownloaderApp:
                 width, height, palette, strength,
                 phase=self._ambient_phase if enabled else 0.0,
                 style=style,
+                custom_colors=self.config.get("visual_custom_colors"),
+                brightness_min=self.config.get("visual_brightness_min", 0.10),
+                brightness_max=self.config.get("visual_brightness_max", 1.0),
+                pulse_depth=self.config.get("visual_pulse_depth", 0.65),
             )
             if image is None:
                 return
@@ -1327,6 +1363,10 @@ class MediaDownloaderApp:
                 strength,
                 phase=self._ambient_phase,
                 style=str(self.config.get("visual_background_style", "cosmic")),
+                custom_colors=self.config.get("visual_custom_colors"),
+                brightness_min=self.config.get("visual_brightness_min", 0.10),
+                brightness_max=self.config.get("visual_brightness_max", 1.0),
+                pulse_depth=self.config.get("visual_pulse_depth", 0.65),
             )
             if image is None or ImageTk is None:
                 return
@@ -1392,7 +1432,7 @@ class MediaDownloaderApp:
             canvas.place(x=0, y=0, relwidth=1, relheight=1)
             # Paint a complete first frame synchronously so Tk never shows a
             # blank black sheet while waiting for the first after() callback.
-            palette = palette_colors(str(self.config.get("visual_palette", "cosmic")))
+            palette = palette_colors(str(self.config.get("visual_palette", "cosmic")), self.config.get("visual_custom_colors"))
             width = max(320, self.root.winfo_width())
             height = max(240, self.root.winfo_height())
             cx, cy = width / 2, height * 0.385
@@ -1430,7 +1470,7 @@ class MediaDownloaderApp:
             duration = 1.85
             progress = max(0.0, min(1.0, elapsed / duration))
             width, height = canvas.winfo_width(), canvas.winfo_height()
-            palette = palette_colors(str(self.config.get("visual_palette", "cosmic")))
+            palette = palette_colors(str(self.config.get("visual_palette", "cosmic")), self.config.get("visual_custom_colors"))
             canvas.delete("all")
             canvas.configure(background="#000000")
             # Reuse the same local light-field generator as the main UI. It draws
@@ -1513,7 +1553,7 @@ class MediaDownloaderApp:
                     return
                 elapsed = max(0.0, time.monotonic() - self._loading_started_at)
                 width, height = max(320, canvas.winfo_width()), max(240, canvas.winfo_height())
-                palette = palette_colors(str(self.config.get("visual_palette", "cosmic")))
+                palette = palette_colors(str(self.config.get("visual_palette", "cosmic")), self.config.get("visual_custom_colors"))
                 canvas.delete("all")
                 canvas.configure(background="#000000")
                 cx, cy = width/2, height*0.385
@@ -3355,34 +3395,7 @@ class MediaDownloaderApp:
 
     def _render_static_visuals(self):
         """Render settings-driven local artwork without animating gradients."""
-        canvas = getattr(self, "hero_visual", None)
         try:
-            if canvas is not None and canvas.winfo_exists():
-                width = max(canvas.winfo_width(), canvas.winfo_reqwidth(), 150)
-                height = max(canvas.winfo_height(), canvas.winfo_reqheight(), 100)
-                enabled = bool(self.config.get("visual_effects_enabled", True))
-                palette = str(self.config.get("visual_palette", "cosmic"))
-                strength = float(self.config.get("visual_strength", 0.55)) if enabled else 0.0
-                orbits = int(self.config.get("visual_orbits", 3))
-                background_style = str(self.config.get("visual_background_style", "cosmic"))
-                artwork = render_atom_art(
-                    width, height, palette=palette, strength=strength,
-                    orbit_count=orbits, background=enabled,
-                    phase=self._atom_phase, style=background_style,
-                )
-                canvas.delete("all")
-                if artwork is not None and ImageTk is not None:
-                    photo = ImageTk.PhotoImage(artwork, master=self.root)
-                    self.hero_visual_photo = photo
-                    canvas.create_image(width/2, height/2, image=photo)
-                else:
-                    canvas.configure(background=self.colors.get("panel2", "#090814"))
-                    cx, cy = width/2, height/2
-                    chosen = palette_colors(palette)
-                    for index in range(orbits):
-                        canvas.create_oval(cx-width*0.31, cy-height*0.20, cx+width*0.31, cy+height*0.20,
-                                           outline=chosen[index % len(chosen)], width=2)
-                    canvas.create_oval(cx-7, cy-7, cx+7, cy+7, fill=chosen[0], outline="#F4F2FF", width=2)
             preview = getattr(self, "visual_preview_canvas", None)
             if preview is not None and preview.winfo_exists():
                 width = max(420, preview.winfo_width(), preview.winfo_reqwidth())
