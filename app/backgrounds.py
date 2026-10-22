@@ -313,7 +313,8 @@ def resolve_asset(asset_id: str) -> tuple[dict, Path]:
     path = _asset_path(root, record)
     if not path.is_file() or path.stat().st_size != int(record.get("size", -1)):
         raise ValueError("O arquivo de fundo está ausente ou foi alterado.")
-    extension, kind = _classify_header(path.open("rb").read(64), record.get("name", path.name))
+    with path.open("rb") as stream:
+        extension, kind = _classify_header(stream.read(64), record.get("name", path.name))
     if kind != record.get("kind") or extension not in _ALLOWED_EXTENSIONS:
         raise ValueError("A assinatura do arquivo não corresponde ao registro.")
     if _hash_file(path) != str(record.get("sha256", "")):
