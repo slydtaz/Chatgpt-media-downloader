@@ -60,6 +60,7 @@ def render_ambient_gradient(
     brightness_min: float = 0.10,
     brightness_max: float = 1.0,
     pulse_depth: float = 0.0,
+    base_image=None,
 ):
     """Render moving translucent light over a true OLED-black base.
 
@@ -96,7 +97,27 @@ def render_ambient_gradient(
     render_factor = min(1.0, 520.0 / max(width, height))
     work_w = max(120, round(width * render_factor))
     work_h = max(90, round(height * render_factor))
-    base = Image.new("RGBA", (work_w, work_h), (0, 0, 0, 255))
+    if base_image is not None:
+        try:
+            source = base_image.convert("RGB")
+            source_ratio = source.width / max(1, source.height)
+            target_ratio = work_w / max(1, work_h)
+            if source_ratio > target_ratio:
+                fit_h = work_h
+                fit_w = max(work_w, round(fit_h * source_ratio))
+            else:
+                fit_w = work_w
+                fit_h = max(work_h, round(fit_w / max(0.001, source_ratio)))
+            resampling = getattr(Image, "Resampling", Image).LANCZOS
+            source = source.resize((fit_w, fit_h), resampling)
+            left = max(0, (fit_w - work_w) // 2)
+            top = max(0, (fit_h - work_h) // 2)
+            source = source.crop((left, top, left + work_w, top + work_h))
+            base = source.convert("RGBA")
+        except (AttributeError, OSError, ValueError, TypeError):
+            base = Image.new("RGBA", (work_w, work_h), (0, 0, 0, 255))
+    else:
+        base = Image.new("RGBA", (work_w, work_h), (0, 0, 0, 255))
     if strength <= 0.001:
         resampling = getattr(Image, "Resampling", Image).LANCZOS
         return base.resize((width, height), resampling) if base.size != (width, height) else base
@@ -237,12 +258,14 @@ def render_gradient_preview(
     brightness_min: float = 0.10,
     brightness_max: float = 1.0,
     pulse_depth: float = 0.0,
+    base_image=None,
 ):
     """Render a reference preview of the same animated light-over-black effect."""
     image = render_ambient_gradient(
         width, height, palette, strength, phase=phase, style=style,
         custom_colors=custom_colors, brightness_min=brightness_min,
         brightness_max=brightness_max, pulse_depth=pulse_depth,
+        base_image=base_image,
     )
     if image is None:
         return None
