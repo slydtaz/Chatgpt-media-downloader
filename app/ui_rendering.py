@@ -60,12 +60,19 @@ def render_rounded_panel(
     border_width: float = 1.0,
     fill_palette: Sequence[str] = (),
     scale: int = 3,
+    gradient_phase: float = 0.0,
+    glow_strength: float = 0.0,
 ):
     """Return an opaque RGB panel whose rounded perimeter is antialiased."""
     if Image is None or ImageDraw is None:
         return None
     width, height = _dimensions(width, height)
     scale = max(2, min(4, int(scale)))
+    try:
+        gradient_phase = float(gradient_phase) % 1.0
+        glow_strength = max(0.0, min(1.0, float(glow_strength)))
+    except (TypeError, ValueError):
+        gradient_phase, glow_strength = 0.0, 0.0
     w, h = width * scale, height * scale
     r = max(0, min(int(radius * scale), w // 2, h // 2))
     edge = max(1, min(round(float(border_width) * scale), 4 * scale))
@@ -78,12 +85,25 @@ def render_rounded_panel(
         fill_draw = ImageDraw.Draw(fill)
         # Draw a continuous horizontal gradient at supersampled resolution.
         for x in range(w):
-            fill_draw.line((x, 0, x, h - 1), fill=_rgb(_cyclic_color(fill_palette, x / max(1, w - 1))))
+            fill_draw.line((x, 0, x, h - 1), fill=_rgb(_cyclic_color(fill_palette, x / max(1, w - 1) + gradient_phase)))
         mask = Image.new("L", (w, h), 0)
         ImageDraw.Draw(mask).rounded_rectangle(box, radius=corner, fill=255)
         image.paste(fill, mask=mask)
     else:
         ImageDraw.Draw(image).rounded_rectangle(box, radius=corner, fill=_rgb(surface))
+
+    if fill_palette and glow_strength > 0.001 and ImageFilter is not None:
+        halo_mask = Image.new("L", (w, h), 0)
+        halo_draw = ImageDraw.Draw(halo_mask)
+        expanded = (max(0, box[0] - 3 * scale), max(0, box[1] - 3 * scale),
+                    min(w - 1, box[2] + 3 * scale), min(h - 1, box[3] + 3 * scale))
+        halo_draw.rounded_rectangle(expanded, radius=corner + 3 * scale, fill=round(80 * glow_strength))
+        inner_mask = Image.new("L", (w, h), 0)
+        ImageDraw.Draw(inner_mask).rounded_rectangle(box, radius=corner, fill=255)
+        halo_mask = ImageChops.subtract(halo_mask, inner_mask)
+        halo_mask = halo_mask.filter(ImageFilter.GaussianBlur(radius=max(1, 2 * scale)))
+        halo = Image.new("RGB", (w, h), _rgb(fill_palette[0]))
+        image.paste(halo, (0, 0), halo_mask)
 
     ImageDraw.Draw(image).rounded_rectangle(
         box, radius=corner, outline=_rgb(border), width=edge,
