@@ -2610,7 +2610,7 @@ class MediaDownloaderApp:
         self._preview_animations()
         if hasattr(self, "visual_effects_var"):
             self.visual_effects_var.set(bool(source_config.get("visual_effects_enabled", True)))
-                self.visual_palette_var.set(self._display_setting_value("visual_palette", source_config.get("visual_palette", "cosmic")))
+            self.visual_palette_var.set(self._display_setting_value("visual_palette", source_config.get("visual_palette", "cosmic")))
             self.visual_strength_var.set(self._display_setting_value("visual_strength", source_config.get("visual_strength", 0.55)))
             self.visual_orbits_var.set(str(source_config.get("visual_orbits", 3)))
             self.visual_background_animated_var.set(bool(source_config.get("visual_background_animated", True)))
