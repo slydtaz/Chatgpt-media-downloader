@@ -13,7 +13,9 @@
     "src/reusable_neon_ui/rounded_rendering.py"
   ],
   "validation": {
-    "unit_tests": "included; CI run pending",
-    "windows_gui": "not validated in this run"
+    "unit_tests": "GitHub Actions run 39787096094 passed on Ubuntu and Windows with Python 3.10 and 3.12; 13 tests per job, 1 skipped",
+    "application_tests": "GitHub Actions run 39787096130 passed on Ubuntu and Windows with Python 3.10 and 3.12; latest pre-confirmation-change commit",
+    "windows_gui": "not manually validated in this run",
+    "latest_wallpaper_confirmation_change": "committed; CI result must be checked after this commit"
   }
 }
