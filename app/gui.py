@@ -3384,7 +3384,7 @@ class MediaDownloaderApp:
             messagebox.showerror("Editor de fundos", f"Não foi possível editar o arquivo: {exc}", parent=self.root)
 
     def _update_custom_background_indicator(self):
-        active = bool(self.config.get("app_background_mode") == "image" and self.config.get("app_background_asset"))
+        active = self._custom_background_active()
         if hasattr(self, "settings_vars") and "theme" in self.settings_vars:
             if active:
                 self.settings_vars["theme"].set("Personalizada")
@@ -3400,7 +3400,7 @@ class MediaDownloaderApp:
         if label is not None:
             label.configure(
                 text=("Personalizada · o fundo de imagem está ativo; a cor de fundo não pode ser alterada. Remova o fundo na aba Fundos para voltar a escolher um tema."
-                      if active else "Quando um fundo personalizado está ativo, a cor do fundo é controlada pela imagem escolhida."),
+                      if active else "Escolha uma imagem na aba Fundos para ativar o modo Personalizada."),
                 foreground="#34D399" if active else self.colors["muted"],
             )
 
@@ -4282,6 +4282,8 @@ class MediaDownloaderApp:
 
         if name == "settings":
             self._sync_settings_form()
+        elif name == "backgrounds":
+            self._refresh_background_library()
         elif name == "dependencies":
             self._refresh_dependencies()
         elif name == "developer":
@@ -4350,6 +4352,15 @@ class MediaDownloaderApp:
             self.visual_hover_enabled_var.set(bool(self.config.get("visual_hover_enabled", True)))
             self.visual_hover_scale_var.set(self._display_setting_value("visual_hover_scale", self.config.get("visual_hover_scale", 1.06)))
             self.visual_hover_reveal_var.set(self._display_setting_value("visual_hover_reveal_seconds", self.config.get("visual_hover_reveal_seconds", 1.0)))
+            custom_colors = self.config.get("visual_custom_colors", DEFAULT_CONFIG["visual_custom_colors"])
+            for index, variable in enumerate(getattr(self, "visual_custom_color_vars", [])):
+                if index < len(custom_colors):
+                    variable.set(custom_colors[index])
+            self.visual_pulse_depth_var.set(self._display_setting_value("visual_pulse_depth", self.config.get("visual_pulse_depth", 0.65)))
+            self.visual_brightness_min_var.set(self._display_setting_value("visual_brightness_min", self.config.get("visual_brightness_min", 0.10)))
+            self.visual_brightness_max_var.set(self._display_setting_value("visual_brightness_max", self.config.get("visual_brightness_max", 1.0)))
+            self.visual_border_glow_strength_var.set(self._display_setting_value("visual_border_glow_strength", self.config.get("visual_border_glow_strength", 0.90)))
+            self.visual_border_glow_width_var.set(self._display_setting_value("visual_border_glow_width", self.config.get("visual_border_glow_width", 2.5)))
             self._preview_visual_effect_settings()
         self._apply_theme(self.config.get("theme","dark"))
         self._update_custom_background_indicator()
