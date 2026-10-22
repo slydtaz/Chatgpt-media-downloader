@@ -19,7 +19,7 @@ class EffectsTests(unittest.TestCase):
     def test_trusted_effect_registration(self):
         register_effect("test_magenta",lambda config,x,y,phase:"#FF00CC")
         try:
-            cfg=GradientConfig()
+            cfg=GradientConfig(intensity=1,pulse_strength=0)
             cfg.mode="test_magenta"
             self.assertEqual(sample_gradient(cfg,.5,.5,0),"#FF00CC")
             self.assertIn("test_magenta",effect_names())
