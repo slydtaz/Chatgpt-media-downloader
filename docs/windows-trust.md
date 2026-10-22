@@ -19,11 +19,13 @@ Fontes oficiais:
 
 A versão 5.3.0 endurece a verificação de URL, redirecionamentos, tamanhos e hashes das dependências, e rejeita links simbólicos e caminhos perigosos em arquivos compactados. Essas verificações são medidas preventivas, não uma certificação do executável. A situação Authenticode continua indicada no `Windows-Signature-Status.txt` da release; sem certificado confiável configurado, o EXE continua sem assinatura.
 
-## Requisitos de publicação da versão 5.3.1
+## Política de publicação da beta e da versão estável
 
-O workflow de release bloqueia a publicação de executáveis que não tenham uma assinatura Authenticode válida verificada pelo SignTool e dois resultados completos do VirusTotal sem classificações `malicious` ou `suspicious`. O fluxo depende de credenciais legítimas do mantenedor; ele não cria uma identidade de editor, não usa certificado autoassinado como substituto e não tenta ignorar o SmartScreen.
+A pré-release beta exige que o VirusTotal conclua a análise do executável, do desinstalador, do ZIP público do código-fonte e dos binários exatos de `yt-dlp`, `ffmpeg.exe` e `ffprobe.exe` baixados a partir das origens oficiais com verificação SHA-256. A beta pode ser publicada com detecções, mas o relatório identifica cada mecanismo/resultado e a página da release precisa ser lida antes de executar os arquivos. Isso não confirma que os alertas sejam falsos positivos.
 
-Também é anexado `VirusTotal-Status.txt`. A ausência de um resultado não significa que o binário está limpo. A submissão ao VirusTotal é feita apenas para os dois executáveis destinados à distribuição pública e compartilha esses arquivos com o serviço.
+As releases estáveis usam um gate mais rigoroso: todos os seis scans têm de terminar sem detecções `malicious` ou `suspicious`, e os executáveis devem ter uma assinatura Authenticode confiável verificada pelo SignTool. Sem certificado confiável configurado, a versão permanece sem assinatura e o canal estável não é publicado.
+
+**Privacidade:** os arquivos enviados à API pública do VirusTotal passam a integrar o conjunto de dados compartilhado do serviço. O workflow envia apenas builds públicos do projeto, o arquivo ZIP público do código-fonte e dependências públicas upstream; não use esse scanner para segredos ou arquivos confidenciais.
 
 ## Como é habilitada uma assinatura real
 
@@ -33,7 +35,7 @@ O workflow de publicação oferece assinatura Authenticode no runner Windows qua
 
 O workflow usa SignTool com SHA-256, timestamp e, em seguida, verifica a assinatura. O PFX não deve ser commitado no Git nem incluído em artefatos públicos. Uma cadeia de certificado confiável é necessária para uma identidade de editor verificada; o SmartScreen ainda pode avisar enquanto não houver reputação suficiente.
 
-Na ausência desses secrets, a compilação não simula assinatura: publica `Windows-Signature-Status.txt` declarando que o executável está sem assinatura Authenticode. Essa é a situação atual até o mantenedor fornecer um certificado válido.
+Na ausência desses secrets, a compilação não simula assinatura: a beta pode declarar no `Windows-Signature-Status.txt` que o executável está sem assinatura Authenticode; a release estável permanece bloqueada. Uma beta unsigned pode mostrar o aviso de publicador desconhecido; Smart App Control ou políticas corporativas podem continuar bloqueando a execução.
 
 ## Como obter o executável correto
 

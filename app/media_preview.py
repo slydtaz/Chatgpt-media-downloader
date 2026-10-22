@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
+from .config import VERSION
 from .process_utils import hidden_subprocess_kwargs
 from .security import redact_sensitive, validate_url
 
@@ -130,10 +131,14 @@ def choose_thumbnail_url(payload: dict[str, Any], source_url: str = "") -> str:
         return candidates[0]
     video_id = payload.get("id")
     extractor = str(payload.get("extractor_key") or payload.get("extractor") or "").lower()
-    source_host = (urlsplit(source_url).hostname or "").lower()
+    source_host = (urlsplit(source_url).hostname or "").rstrip(".").lower()
+    youtube_domains = ("youtube.com", "youtube-nocookie.com", "youtu.be")
     is_youtube = (
         "youtube" in extractor
-        or source_host.endswith(("youtube.com", "youtube-nocookie.com", "youtu.be"))
+        or any(
+            source_host == domain or source_host.endswith("." + domain)
+            for domain in youtube_domains
+        )
     )
     if is_youtube and isinstance(video_id, str) and len(video_id) == 11 and all(
         char.isalnum() or char in "_-" for char in video_id
@@ -181,7 +186,7 @@ def fetch_thumbnail_bytes(url: str, *, timeout: float = 6.0) -> bytes | None:
     request = urllib.request.Request(
         url,
         headers={
-            "User-Agent": "ChatGPT-Media-Downloader/5.3.2 (thumbnail preview)",
+            "User-Agent": f"ChatGPT-Media-Downloader/{VERSION} (thumbnail preview)",
             "Accept": "image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.9,*/*;q=0.1",
         },
         method="GET",

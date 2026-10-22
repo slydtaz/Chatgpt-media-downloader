@@ -90,6 +90,8 @@ def _is_product_install(path: Path) -> bool:
         data = json.loads(marker.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
+    if not isinstance(data, dict):
+        return False
     return data.get("vendor") == VENDOR and data.get("product_id") == PRODUCT_ID
 
 
@@ -99,6 +101,8 @@ def _is_ours(path: Path, install_id: str) -> bool:
     try:
         data = json.loads((path / INSTALL_MARKER).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(data, dict):
         return False
     return data.get("install_id") == install_id
 
@@ -389,7 +393,8 @@ def _transactional_install_executable(source_exe: Path, destination: Path, insta
             encoding="utf-8",
         )
         marker_data = json.loads((stage / INSTALL_MARKER).read_text(encoding="utf-8"))
-        if (marker_data.get("vendor") != VENDOR or marker_data.get("product_id") != PRODUCT_ID
+        if (not isinstance(marker_data, dict)
+                or marker_data.get("vendor") != VENDOR or marker_data.get("product_id") != PRODUCT_ID
                 or marker_data.get("install_id") != install_id):
             raise RuntimeError("O marcador da instalação preparada não passou na validação.")
 

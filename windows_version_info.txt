@@ -2,8 +2,8 @@
 # This resource identifies the software but is NOT a digital signature or certificate.
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(5, 3, 2, 0),
-    prodvers=(5, 3, 2, 0),
+    filevers=(5, 4, 0, 0),
+    prodvers=(5, 4, 0, 0),
     mask=0x3F,
     flags=0x0,
     OS=0x40004,
@@ -18,13 +18,13 @@ VSVersionInfo(
         [
           StringStruct('CompanyName', 'ChatGPT Media Downloader contributors'),
           StringStruct('FileDescription', 'Aplicativo independente para baixar videos, audio e playlists'),
-          StringStruct('FileVersion', '5.3.2.0'),
+          StringStruct('FileVersion', '5.4.0-beta.3'),
           StringStruct('InternalName', 'ChatGPTMediaDownloader'),
           StringStruct('LegalCopyright', 'Copyright (c) 2026 ChatGPT Media Downloader contributors'),
           StringStruct('LegalTrademarks', 'Projeto independente; nao afiliado a OpenAI'),
           StringStruct('OriginalFilename', 'ChatGPTMediaDownloader.exe'),
           StringStruct('ProductName', 'ChatGPT Media Downloader'),
-          StringStruct('ProductVersion', '5.3.2.0'),
+          StringStruct('ProductVersion', '5.4.0-beta.3'),
           StringStruct('Comments', 'Codigo-fonte e releases: https://github.com/slydtaz/Chatgpt-media-downloader'),
         ]
       )

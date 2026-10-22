@@ -258,5 +258,15 @@ class BootstrapTests(unittest.TestCase):
             self.assertTrue(migrated)
             self.assertTrue((user_root / bootstrap.INSTALL_MARKER).is_file())
 
+    def test_non_object_install_marker_fails_closed(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            marker = root / bootstrap.INSTALL_MARKER
+            for payload in ("[]", "null", '"string"', "42"):
+                with self.subTest(payload=payload):
+                    marker.write_text(payload, encoding="utf-8")
+                    self.assertFalse(bootstrap._is_product_install(root))
+                    self.assertFalse(bootstrap._is_ours(root, "install-id"))
+
 if __name__ == "__main__":
     unittest.main()

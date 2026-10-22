@@ -13,7 +13,7 @@ from typing import Any
 APP_NAME = "ChatGPT Media Downloader"
 PRODUCT_ID = "com.chatgpt.mediadownloader"
 VENDOR = "ChatGPT"
-VERSION = "5.3.2"
+VERSION = "5.4.0-beta.3"
 
 
 def _windows_local_appdata() -> Path:
@@ -121,11 +121,37 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "yt_dlp_path": "",
     "ffmpeg_path": "",
     "ffprobe_path": "",
-    "theme": "dark",
+    "theme": "oled",
     "accent_color": "#8B5CF6",
     "ui_density": "comfortable",
     "developer_mode": False,
     "animations_enabled": False,
+    "visual_effects_enabled": True,
+    "visual_palette": "cosmic",
+    "visual_custom_colors": ["#743BEB", "#4F46E5", "#1687F8", "#21B6EB", "#B52CE3"],
+    "visual_strength": 0.80,
+    "visual_orbits": 3,
+    "visual_background_animated": True,
+    "visual_background_style": "cosmic",
+    "visual_background_speed": 0.85,
+    "visual_pulse_depth": 0.65,
+    "visual_brightness_min": 0.10,
+    "visual_brightness_max": 1.0,
+    "visual_border_glow_strength": 0.90,
+    "visual_border_glow_width": 2.5,
+    "app_background_asset": "",
+    "app_background_mode": "none",
+    "lively_executable": "",
+    "background_editor_brightness": 0.0,
+    "background_editor_saturation": 1.0,
+    "background_editor_duration": 0,
+    "wallpaper_monitor": 1,
+    "windows_wallpaper_mode": "none",
+    "windows_wallpaper_asset": "",
+    "windows_wallpaper_previous": "",
+    "visual_hover_enabled": True,
+    "visual_hover_scale": 1.06,
+    "visual_hover_reveal_seconds": 1.0,
     "playlist_strategy": "sequential",
     "playlist_parallelism": 3,
     "concurrent_fragments": 4,
@@ -134,7 +160,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "subtitle_mode": "off",
     "update_open_after": True,
     "update_check_on_startup": True,
-    "settings_schema_version": 3,
+    "update_include_prereleases": False,
+    "settings_schema_version": 5,
 }
 
 
@@ -200,6 +227,102 @@ def load_config() -> dict[str, Any]:
     data["accent_color"] = accent.upper()
     if data.get("ui_density") not in {"comfortable", "compact"}:
         data["ui_density"] = "comfortable"
+    if data.get("visual_palette") not in {"cosmic", "nebula", "aurora", "ocean", "custom"}:
+        data["visual_palette"] = "cosmic"
+    custom_colors = data.get("visual_custom_colors", DEFAULT_CONFIG["visual_custom_colors"])
+    if not isinstance(custom_colors, list):
+        custom_colors = list(DEFAULT_CONFIG["visual_custom_colors"])
+    custom_colors = [
+        str(color).strip().upper() for color in custom_colors[:8]
+        if isinstance(color, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", color.strip())
+    ]
+    if len(custom_colors) < 3:
+        custom_colors = list(DEFAULT_CONFIG["visual_custom_colors"])
+    while len(custom_colors) < 5:
+        custom_colors.append(custom_colors[len(custom_colors) % len(custom_colors)])
+    data["visual_custom_colors"] = custom_colors[:8]
+    try:
+        data["visual_strength"] = max(0.0, min(1.0, float(data.get("visual_strength", 0.55))))
+    except (TypeError, ValueError):
+        data["visual_strength"] = 0.55
+    try:
+        data["visual_orbits"] = int(data.get("visual_orbits", 3))
+    except (TypeError, ValueError):
+        data["visual_orbits"] = 3
+    if data["visual_orbits"] not in {2, 3, 4}:
+        data["visual_orbits"] = 3
+    if data.get("visual_background_style") not in {"cosmic", "nebula", "aurora", "edge-light", "diagonal", "bottom-up", "bubbles", "pulse"}:
+        data["visual_background_style"] = "cosmic"
+    try:
+        data["visual_background_speed"] = float(data.get("visual_background_speed", 0.85))
+    except (TypeError, ValueError):
+        data["visual_background_speed"] = 0.85
+    if not (0.1 <= data["visual_background_speed"] <= 3.0):
+        data["visual_background_speed"] = 0.85
+    try:
+        data["visual_hover_scale"] = float(data.get("visual_hover_scale", 1.06))
+    except (TypeError, ValueError):
+        data["visual_hover_scale"] = 1.06
+    data["visual_hover_scale"] = max(1.0, min(1.15, data["visual_hover_scale"]))
+    try:
+        data["visual_hover_reveal_seconds"] = float(data.get("visual_hover_reveal_seconds", 1.0))
+    except (TypeError, ValueError):
+        data["visual_hover_reveal_seconds"] = 1.0
+    data["visual_hover_reveal_seconds"] = max(0.1, min(3.0, data["visual_hover_reveal_seconds"]))
+    for key, default in (("visual_pulse_depth", 0.65), ("visual_brightness_min", 0.10),
+                          ("visual_brightness_max", 1.0), ("visual_border_glow_strength", 0.90),
+                          ("visual_border_glow_width", 2.5)):
+        try:
+            data[key] = float(data.get(key, default))
+        except (TypeError, ValueError):
+            data[key] = default
+        if not __import__("math").isfinite(data[key]):
+            data[key] = default
+    data["visual_pulse_depth"] = max(0.0, min(1.0, data["visual_pulse_depth"]))
+    data["visual_brightness_min"] = max(0.0, min(1.0, data["visual_brightness_min"]))
+    data["visual_brightness_max"] = max(data["visual_brightness_min"], min(1.0, data["visual_brightness_max"]))
+    data["visual_border_glow_strength"] = max(0.0, min(1.0, data["visual_border_glow_strength"]))
+    data["visual_border_glow_width"] = max(1.0, min(6.0, data["visual_border_glow_width"]))
+    asset_id = str(data.get("app_background_asset", "") or "").strip().lower()
+    data["app_background_asset"] = asset_id if re.fullmatch(r"[a-f0-9]{32}", asset_id) else ""
+    if data.get("app_background_mode") not in {"none", "image"}:
+        data["app_background_mode"] = "none"
+    data["lively_executable"] = str(data.get("lively_executable") or "")[:1024]
+    try:
+        data["background_editor_brightness"] = max(-0.5, min(0.5, float(data.get("background_editor_brightness", 0.0))))
+    except (TypeError, ValueError):
+        data["background_editor_brightness"] = 0.0
+    try:
+        data["background_editor_saturation"] = max(0.0, min(3.0, float(data.get("background_editor_saturation", 1.0))))
+    except (TypeError, ValueError):
+        data["background_editor_saturation"] = 1.0
+    try:
+        data["background_editor_duration"] = max(0, min(3600, int(data.get("background_editor_duration", 0))))
+    except (TypeError, ValueError):
+        data["background_editor_duration"] = 0
+    try:
+        data["wallpaper_monitor"] = max(1, min(16, int(data.get("wallpaper_monitor", 1))))
+    except (TypeError, ValueError):
+        data["wallpaper_monitor"] = 1
+    if data.get("windows_wallpaper_mode") not in {"none", "image", "video"}:
+        data["windows_wallpaper_mode"] = "none"
+    windows_asset = str(data.get("windows_wallpaper_asset", "") or "").strip().lower()
+    data["windows_wallpaper_asset"] = windows_asset if re.fullmatch(r"[a-f0-9]{32}", windows_asset) else ""
+    data["windows_wallpaper_previous"] = str(data.get("windows_wallpaper_previous") or "")[:2048]
+
+    visual_enabled = data.get("visual_effects_enabled", True)
+    if isinstance(visual_enabled, bool):
+        data["visual_effects_enabled"] = visual_enabled
+    else:
+        data["visual_effects_enabled"] = str(visual_enabled).strip().lower() in {"1", "true", "yes", "sim", "on"}
+    for option in ("visual_background_animated", "visual_hover_enabled"):
+        value = data.get(option, True)
+        if isinstance(value, bool):
+            data[option] = value
+        elif isinstance(value, (int, float)):
+            data[option] = bool(value)
+        else:
+            data[option] = str(value).strip().lower() in {"1", "true", "yes", "sim", "on"}
     if data.get("playlist_strategy") not in {"sequential", "parallel"}:
         data["playlist_strategy"] = "sequential"
     try:
@@ -224,7 +347,7 @@ def load_config() -> dict[str, Any]:
         data["video_container"] = "mp4"
     if data.get("subtitle_mode") not in {"off", "manual", "all"}:
         data["subtitle_mode"] = "off"
-    for option in ("update_open_after", "update_check_on_startup"):
+    for option in ("update_open_after", "update_check_on_startup", "update_include_prereleases"):
         value = data.get(option, True)
         if isinstance(value, bool):
             data[option] = value
@@ -232,7 +355,7 @@ def load_config() -> dict[str, Any]:
             data[option] = bool(value)
         else:
             data[option] = str(value).strip().lower() in {"1", "true", "yes", "sim", "on"}
-    data["settings_schema_version"] = 3
+    data["settings_schema_version"] = 5
     return data
 
 

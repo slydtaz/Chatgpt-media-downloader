@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -13,12 +14,12 @@ import urllib.request
 import uuid
 import zipfile
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import urlsplit
 
 from .config import APP_DATA, INSTALL_ID_PATH, INSTALL_ROOT, PRODUCT_ID, STARTUP_REPAIR_PENDING_PATH, VENDOR, VERSION
-from .security import trusted_urlopen
+from .security import trusted_urlopen, safe_archive_member_path
 
 OWNER = "slydtaz"
 REPOSITORY = "Chatgpt-media-downloader"
@@ -77,10 +78,37 @@ def version_key(value: str) -> tuple[int, ...]:
         return (0,)
 
 
+def _version_order_key(value: str) -> tuple[tuple[int, ...], int, int, int]:
+    """Compare semantic versions, including alpha/beta/rc prerelease precedence.
+
+    Keep version_key() backwards-compatible for callers that only need the numeric
+    version. A stable release sorts after every prerelease of the same core version.
+    """
+    text = str(value or "").strip()
+    match = re.fullmatch(
+        r"(?i)v?(\d+(?:\.\d+){0,5})(?:-([a-z]+)(?:[.-]?(\d+))?)?",
+        text,
+    )
+    if not match:
+        numeric = version_key(text)
+        core = (numeric + (0,) * 6)[:6]
+        return core, 1, 0, 0
+    numeric = tuple(int(part) for part in match.group(1).split("."))
+    core = (numeric + (0,) * 6)[:6]
+    label = (match.group(2) or "").lower()
+    if not label:
+        return core, 1, 0, 0
+    rank = {"alpha": 0, "a": 0, "beta": 1, "b": 1, "rc": 2}.get(label, -1)
+    try:
+        sequence = int(match.group(3) or 0)
+    except ValueError:
+        sequence = 0
+    return core, 0, rank, sequence
+
+
 def is_newer_version(candidate: str, current: str) -> bool:
-    left, right = version_key(candidate), version_key(current)
-    width = max(len(left), len(right))
-    return left + (0,) * (width - len(left)) > right + (0,) * (width - len(right))
+    """Return True when candidate is semantically newer, including prereleases."""
+    return _version_order_key(candidate) > _version_order_key(current)
 
 
 def _trusted_url(url: str, *, metadata: bool = False) -> bool:
@@ -113,7 +141,7 @@ def _request_bytes(url: str, *, timeout: int = 20, maximum: int = MAX_DOWNLOAD_B
             if not _trusted_url(final_url, metadata=True):
                 raise AppUpdateError("O GitHub redirecionou para um endereço não autorizado.")
             declared = int(response.headers.get("Content-Length", "0") or 0)
-            if declared > maximum:
+            if declared < 0 or declared > maximum:
                 raise AppUpdateError("O arquivo informado pelo servidor excede o limite de segurança.")
             data = response.read(maximum + 1)
             if len(data) > maximum:
@@ -140,6 +168,18 @@ def _request_json(url: str, *, allow_404: bool = False) -> Optional[dict]:
         raise AppUpdateError("O GitHub retornou informações de atualização inválidas.") from exc
     if not isinstance(result, dict):
         raise AppUpdateError("O GitHub retornou um formato de atualização inesperado.")
+    return result
+
+
+def _request_json_list(url: str) -> list[dict]:
+    """Fetch a bounded JSON list from a trusted GitHub metadata URL."""
+    raw = _request_bytes(url, timeout=20, maximum=5 * 1024 * 1024)
+    try:
+        result = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AppUpdateError("O GitHub retornou uma lista de Releases inválida.") from exc
+    if not isinstance(result, list) or any(not isinstance(item, dict) for item in result):
+        raise AppUpdateError("O GitHub retornou um formato de Releases inesperado.")
     return result
 
 
@@ -190,7 +230,10 @@ def _release_version(release: dict) -> str:
     'stable' as a version number.
     """
     tag = str(release.get("tag_name") or "").strip()
-    match = re.fullmatch(r"v?(\d+(?:\.\d+){1,5})", tag, re.IGNORECASE)
+    match = re.fullmatch(
+        r"(?i)v?(\d+(?:\.\d+){1,5}(?:-(?:alpha|beta|rc)\.\d+)?)",
+        tag,
+    )
     if match:
         return match.group(1)
     title = str(release.get("name") or "").strip()
@@ -198,10 +241,17 @@ def _release_version(release: dict) -> str:
     return match.group(1) if match else ""
 
 
-def _release_candidate(current: str, release: dict, *, frozen: bool) -> Optional[AppUpdate]:
+def _release_candidate(
+    current: str,
+    release: dict,
+    *,
+    frozen: bool,
+    require_newer: bool = True,
+    allow_unavailable: bool = False,
+) -> Optional[AppUpdate]:
     tag = str(release.get("tag_name") or "").strip()
     candidate_version = _release_version(release)
-    if not tag or not candidate_version or not is_newer_version(candidate_version, current):
+    if not tag or not candidate_version or (require_newer and not is_newer_version(candidate_version, current)):
         return None
     html_url = str(release.get("html_url") or f"https://github.com/{OWNER}/{REPOSITORY}/releases")
     body = str(release.get("body") or "").strip()
@@ -210,6 +260,8 @@ def _release_candidate(current: str, release: dict, *, frozen: bool) -> Optional
         exe = _asset(release, "ChatGPTMediaDownloader.exe")
         sums = _asset(release, "SHA256SUMS.txt")
         if not exe or not sums:
+            if allow_unavailable:
+                return None
             raise AppUpdateError(
                 f"A Release {tag} não contém ChatGPTMediaDownloader.exe e SHA256SUMS.txt. "
                 "A atualização automática foi cancelada por segurança."
@@ -232,10 +284,73 @@ def _release_candidate(current: str, release: dict, *, frozen: bool) -> Optional
     )
 
 
-def check_for_update(current_version: str = VERSION, *, frozen: Optional[bool] = None) -> Optional[AppUpdate]:
-    """Choose the newest published release first, then fall back to stable alias/source."""
+def list_available_releases(
+    current_version: str = VERSION,
+    *,
+    frozen: Optional[bool] = None,
+    include_prereleases: bool = True,
+    limit: int = 100,
+) -> list[AppUpdate]:
+    """Return downloadable, versioned GitHub Releases newest-first.
+
+    Only real semantic-version tags are offered (not the mutable 'stable' alias).
+    Frozen installations list releases that contain both the executable and the
+    SHA256 manifest; source installations can select any published versioned tag.
+    """
     if frozen is None:
         frozen = bool(getattr(sys, "frozen", False))
+    try:
+        limit = max(1, min(100, int(limit)))
+    except (TypeError, ValueError):
+        limit = 100
+    releases = _request_json_list(f"{API_ROOT}/releases?per_page=100")
+    candidates: list[AppUpdate] = []
+    seen_tags: set[str] = set()
+    versioned_tag = re.compile(r"(?i)^v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$")
+    for release in releases:
+        if release.get("draft"):
+            continue
+        tag = str(release.get("tag_name") or "").strip()
+        if not versioned_tag.fullmatch(tag) or tag.casefold() in seen_tags:
+            continue
+        seen_tags.add(tag.casefold())
+        version = _release_version(release)
+        if not version:
+            continue
+        prerelease = bool(release.get("prerelease")) or bool(re.search(r"(?i)-(?:alpha|beta|rc)\.\d+$", version))
+        if prerelease and not include_prereleases:
+            continue
+        candidate = _release_candidate(
+            current_version, release, frozen=frozen,
+            require_newer=False, allow_unavailable=True,
+        )
+        if candidate is not None:
+            candidates.append(candidate)
+    candidates.sort(key=lambda update: (_version_order_key(update.version), update.published_at), reverse=True)
+    return candidates[:limit]
+
+
+def check_for_update(
+    current_version: str = VERSION,
+    *,
+    frozen: Optional[bool] = None,
+    include_prereleases: bool = False,
+) -> Optional[AppUpdate]:
+    """Find the newest applicable release; prereleases are opt-in for every channel."""
+    if frozen is None:
+        frozen = bool(getattr(sys, "frozen", False))
+
+    if include_prereleases:
+        try:
+            for candidate in list_available_releases(
+                current_version, frozen=frozen, include_prereleases=True,
+            ):
+                if is_newer_version(candidate.version, current_version):
+                    return candidate
+        except AppUpdateError:
+            # A failed all-releases query must not prevent a stable-only fallback.
+            if frozen:
+                raise
 
     # Versioned releases are the historical source of truth. Prefer GitHub's
     # latest versioned stable release; only use the mutable stable alias when
@@ -254,6 +369,7 @@ def check_for_update(current_version: str = VERSION, *, frozen: Optional[bool] =
             if update:
                 return update
 
+    # Prereleases are only considered by the explicit include_prereleases preference above.
     if frozen:
         return None
     # Source builds can still check the public main branch if no published Release
@@ -315,9 +431,17 @@ def check_repair_candidate(current_version: str = VERSION, *, frozen: Optional[b
                      "main", source_ref="main")
 
 
-def _download_file(url: str, destination: Path, progress: Optional[Callable[[int, int], None]] = None) -> tuple[int, str]:
+def _download_file(
+    url: str,
+    destination: Path,
+    progress: Optional[Callable[[int, int], None]] = None,
+    *,
+    expected_size: int | None = None,
+) -> tuple[int, str]:
     if not _trusted_url(url):
         raise AppUpdateError("O endereço do arquivo não é um asset autorizado do GitHub.")
+    if expected_size is not None and (expected_size <= 0 or expected_size > MAX_DOWNLOAD_BYTES):
+        raise AppUpdateError("O tamanho esperado do arquivo de atualização é inválido.")
     destination.parent.mkdir(parents=True, exist_ok=True)
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/octet-stream"})
     digest = hashlib.sha256()
@@ -328,21 +452,25 @@ def _download_file(url: str, destination: Path, progress: Optional[Callable[[int
             if not _trusted_url(final_url):
                 raise AppUpdateError("O GitHub redirecionou o download para um domínio não autorizado.")
             total = int(response.headers.get("Content-Length", "0") or 0)
-            if total > MAX_DOWNLOAD_BYTES:
+            if total < 0 or total > MAX_DOWNLOAD_BYTES:
                 raise AppUpdateError("O arquivo de atualização é maior que o limite de segurança.")
+            if expected_size is not None and total and total != expected_size:
+                raise AppUpdateError("O tamanho recebido não corresponde ao tamanho anunciado pelo GitHub.")
             while True:
                 block = response.read(1024 * 1024)
                 if not block:
                     break
                 done += len(block)
-                if done > MAX_DOWNLOAD_BYTES:
-                    raise AppUpdateError("O download excedeu o limite de segurança.")
+                if done > MAX_DOWNLOAD_BYTES or (expected_size is not None and done > expected_size):
+                    raise AppUpdateError("O download excedeu o tamanho esperado ou o limite de segurança.")
                 out.write(block)
                 digest.update(block)
                 if progress:
                     progress(done, total)
         if total and done != total:
             raise AppUpdateError("O download terminou antes do tamanho informado pelo GitHub.")
+        if expected_size is not None and done != expected_size:
+            raise AppUpdateError("O tamanho final do arquivo não corresponde ao metadado da Release.")
         return done, digest.hexdigest()
     except AppUpdateError:
         destination.unlink(missing_ok=True)
@@ -374,8 +502,25 @@ def _verify_executable_hash(update: AppUpdate, staged: Path, computed_hash: str,
 
 
 def _safe_extract_zip(archive: Path, destination: Path) -> Path:
+    destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
+    if destination.is_symlink() or not destination.is_dir():
+        raise AppUpdateError("A pasta de extração precisa ser um diretório real, não um link.")
+    is_junction = getattr(destination, "is_junction", None)
+    try:
+        if is_junction is not None and is_junction():
+            raise AppUpdateError("A pasta de extração não pode ser uma junction.")
+    except OSError as exc:
+        raise AppUpdateError("Não foi possível validar a pasta de extração.") from exc
     dest_resolved = destination.resolve()
+    try:
+        archive_info = archive.lstat()
+    except OSError as exc:
+        raise AppUpdateError("O pacote ZIP não pôde ser inspecionado.") from exc
+    if archive.is_symlink() or not stat.S_ISREG(archive_info.st_mode):
+        raise AppUpdateError("O pacote ZIP precisa ser um arquivo regular, não um link.")
+    if archive_info.st_size <= 0 or archive_info.st_size > MAX_DOWNLOAD_BYTES:
+        raise AppUpdateError("O pacote ZIP está vazio ou excede o limite permitido.")
     try:
         with zipfile.ZipFile(archive) as zf:
             members = zf.infolist()
@@ -384,20 +529,35 @@ def _safe_extract_zip(archive: Path, destination: Path) -> Path:
             unpacked_size = sum(max(0, int(member.file_size)) for member in members)
             if unpacked_size > MAX_SOURCE_UNPACKED_BYTES:
                 raise AppUpdateError("O pacote de origem excede o limite de tamanho após extração.")
+            seen: dict[str, bool] = {}
+            known_prefixes: set[str] = set()
             for member in members:
-                pure = PurePosixPath(member.filename)
-                if pure.is_absolute() or ".." in pure.parts or "\\" in member.filename:
-                    raise AppUpdateError("O pacote de origem contém um caminho inseguro.")
-                target = (destination / Path(*pure.parts)).resolve()
-                if target != dest_resolved and dest_resolved not in target.parents:
-                    raise AppUpdateError("O pacote de origem tenta gravar fora da pasta temporária.")
-                mode = (member.external_attr >> 16) & 0o170000
-                if mode == 0o120000:
-                    raise AppUpdateError("O pacote de origem contém um link simbólico não permitido.")
+                try:
+                    target = safe_archive_member_path(destination, member.filename)
+                    key = target.relative_to(dest_resolved).as_posix().casefold()
+                except (ValueError, OSError) as exc:
+                    raise AppUpdateError("O pacote de origem contém um caminho inseguro ou ambíguo.") from exc
+                mode = (member.external_attr >> 16) & 0xFFFF
+                file_type = stat.S_IFMT(mode)
+                if file_type and file_type not in {stat.S_IFREG, stat.S_IFDIR}:
+                    raise AppUpdateError("O pacote de origem contém um link ou arquivo especial não permitido.")
+                is_directory = member.is_dir() or file_type == stat.S_IFDIR
+                if key in seen:
+                    raise AppUpdateError("O pacote de origem contém caminhos duplicados, inclusive diferenças de maiúsculas.")
+                if not is_directory and key in known_prefixes:
+                    raise AppUpdateError("O pacote de origem contém conflito entre arquivo e diretório.")
+                parts = key.split("/")
+                for depth in range(1, len(parts)):
+                    parent = "/".join(parts[:depth])
+                    if parent in seen and not seen[parent]:
+                        raise AppUpdateError("O pacote de origem contém um arquivo usado como diretório.")
+                seen[key] = is_directory
+                for depth in range(1, len(parts)):
+                    known_prefixes.add("/".join(parts[:depth]))
             zf.extractall(destination)
     except AppUpdateError:
         raise
-    except (OSError, zipfile.BadZipFile, RuntimeError) as exc:
+    except (OSError, zipfile.BadZipFile, RuntimeError, ValueError) as exc:
         raise AppUpdateError(f"O pacote ZIP não pôde ser extraído com segurança: {exc}") from exc
 
     for candidate in destination.iterdir():
@@ -435,7 +595,8 @@ def _stage_source_tree(source_root: Path, target_root: Path, version: str) -> Pa
         if marker.is_file():
             try:
                 candidate = json.loads(marker.read_text(encoding="utf-8"))
-                if candidate.get("vendor") == VENDOR and candidate.get("product_id") == PRODUCT_ID:
+                if (isinstance(candidate, dict) and candidate.get("vendor") == VENDOR
+                        and candidate.get("product_id") == PRODUCT_ID):
                     marker_data = candidate
             except (OSError, json.JSONDecodeError):
                 marker_data = None
@@ -478,8 +639,11 @@ def prepare_update(
             staged = temp_dir / "ChatGPTMediaDownloader.exe"
             if progress:
                 progress("Baixando o executável completo", 0, update.download_size)
-            size, sha = _download_file(update.download_url, staged,
-                                      lambda done, total: progress("Baixando o executável completo", done, total) if progress else None)
+            size, sha = _download_file(
+                update.download_url, staged,
+                lambda done, total: progress("Baixando o executável completo", done, total) if progress else None,
+                expected_size=update.download_size if update.download_size else None,
+            )
             if update.download_size and size != update.download_size:
                 raise AppUpdateError("O tamanho do executável difere dos metadados da Release.")
             _verify_executable_hash(update, staged, sha, temp_dir)

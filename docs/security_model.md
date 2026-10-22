@@ -13,9 +13,16 @@ Nenhum teste de unidade, hash de arquivo ou verificação automática prova que 
 - Os logs removem caminhos de URL, query strings e padrões que aparentem conter credenciais.
 - Os instaladores de dependências aceitam apenas hosts HTTPS explicitamente permitidos do GitHub, validam redirecionamentos, aplicam limites de tamanho e verificam SHA-256 quando o projeto de origem publica um manifesto. Um manifesto ausente ou inválido interrompe a instalação automática. Quando a API do GitHub fornece seu próprio digest SHA-256 para o asset e/ou manifesto, os bytes baixados também são comparados a esse valor; divergências interrompem a instalação.
 - Antes da extração, arquivos compactados têm seus caminhos validados; caminhos de travessia, links simbólicos e entradas especiais são rejeitados. A extração usa staging exclusivo, limites para tamanho compactado/descompactado e número de entradas, rejeita caminhos e nomes de ferramenta ambíguos e preserva/restaura os binários existentes quando a promoção falha.
+- Na atualização do aplicativo, arquivos ZIP também rejeitam nomes de caminho ambíguos, colisões sem distinção entre maiúsculas/minúsculas, entradas especiais, nomes de dispositivo reservados e Alternate Data Streams do Windows. A pasta de extração precisa ser um diretório real, não um link/junction.
+- Downloads do executável da Release são limitados pelo tamanho máximo e comparados ao tamanho anunciado pela API durante o fluxo de bytes, além da validação SHA-256; respostas com `Content-Length` inválido ou divergente são recusadas.
+- Marcadores locais de instalação com JSON que não seja um objeto são tratados como não confiáveis e não estabelecem propriedade do diretório.
 - As atualizações do aplicativo verificam o host final, tamanho, hash e identidade de produto esperada antes de substituir os arquivos existentes. Os dados pessoais de configuração e as mídias baixadas ficam separados da instalação.
 - O download de playlists exige seleção dos itens disponíveis. O paralelismo tem limites explícitos e não habilita acesso a conteúdo privado.
 - O binário é empacotado sem ofuscação deliberada. Metadados PE identificam o produto, mas não autenticam o publicador.
+
+## Auditoria automatizada de dependências Python
+
+A workflow `.github/workflows/dependency-audit.yml` executa o `pip-audit` contra a árvore de dependências versionadas usadas para empacotar o aplicativo (PyInstaller e Pillow), em pushes, pull requests e semanalmente. Uma auditoria aprovada indica apenas que essa árvore auditada não apresentou avisos conhecidos para as fontes consultadas naquele momento. Ela não analisa o código-fonte, os executáveis externos de yt-dlp/FFmpeg/FFprobe, DLLs do sistema ou o executável final; esses componentes precisam das verificações próprias descritas neste documento.
 
 ## Distribuição e verificação
 

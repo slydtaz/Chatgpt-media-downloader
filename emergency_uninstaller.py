@@ -6,8 +6,8 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
+import sys
 import time
 import tkinter as tk
 from dataclasses import dataclass
@@ -648,34 +648,36 @@ class UninstallerWindow:
 
         if remove_self and getattr(sys, "frozen", False):
             try:
-                schedule_self_delete()
-            except Exception:
-                pass
+                if not schedule_self_delete():
+                    messagebox.showwarning(
+                        APP_TITLE,
+                        "A limpeza terminou, mas não foi possível agendar a remoção automática do executável. "
+                        "Se ele continuar na pasta de downloads após reiniciar, remova-o manualmente.",
+                        parent=self.root,
+                    )
+            except OSError as exc:
+                messagebox.showwarning(
+                    APP_TITLE,
+                    "A limpeza terminou, mas o Windows não conseguiu agendar a remoção do desinstalador. "
+                    f"Detalhe: {exc}",
+                    parent=self.root,
+                )
         self.root.destroy()
 
 
-def schedule_self_delete() -> None:
+def schedule_self_delete() -> bool:
+    """Schedule this frozen helper for deletion at reboot without launching a shell."""
     if os.name != "nt" or not getattr(sys, "frozen", False):
-        return
+        return False
     executable = Path(sys.executable).resolve()
-    script = Path(tempfile.gettempdir()) / f"gpt-media-uninstaller-delete-{os.getpid()}.cmd"
-    exe_q = str(executable).replace("%", "%%").replace('"', '""')
-    content = (
-        "@echo off\r\n"
-        "setlocal\r\n"
-        f"set TARGET_PID={os.getpid()}\r\n"
-        ":wait_for_exit\r\n"
-        'tasklist /FI "PID eq %TARGET_PID%" /NH 2>nul | find "%TARGET_PID%" >nul\r\n'
-        "if not errorlevel 1 (timeout /t 1 /nobreak >nul & goto wait_for_exit)\r\n"
-        f'del /f /q "{exe_q}" >nul 2>&1\r\n'
-        'del /f /q "%~f0" >nul 2>&1\r\n'
-    )
-    script.write_text(content, encoding="utf-8")
-    subprocess.Popen(
-        ["cmd.exe", "/d", "/c", str(script)],
-        close_fds=True,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-    )
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    move_file_ex = kernel32.MoveFileExW
+    move_file_ex.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint32]
+    move_file_ex.restype = ctypes.c_int
+    MOVEFILE_DELAY_UNTIL_REBOOT = 0x00000004
+    if not move_file_ex(str(executable), None, MOVEFILE_DELAY_UNTIL_REBOOT):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return True
 
 
 def _parse_args():
