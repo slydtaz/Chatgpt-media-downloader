@@ -146,6 +146,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "background_editor_saturation": 1.0,
     "background_editor_duration": 0,
     "wallpaper_monitor": 1,
+    "windows_wallpaper_mode": "none",
+    "windows_wallpaper_asset": "",
+    "windows_wallpaper_previous": "",
     "visual_hover_enabled": True,
     "visual_hover_scale": 1.06,
     "visual_hover_reveal_seconds": 1.0,
@@ -301,6 +304,11 @@ def load_config() -> dict[str, Any]:
         data["wallpaper_monitor"] = max(1, min(16, int(data.get("wallpaper_monitor", 1))))
     except (TypeError, ValueError):
         data["wallpaper_monitor"] = 1
+    if data.get("windows_wallpaper_mode") not in {"none", "image", "video"}:
+        data["windows_wallpaper_mode"] = "none"
+    windows_asset = str(data.get("windows_wallpaper_asset", "") or "").strip().lower()
+    data["windows_wallpaper_asset"] = windows_asset if re.fullmatch(r"[a-f0-9]{32}", windows_asset) else ""
+    data["windows_wallpaper_previous"] = str(data.get("windows_wallpaper_previous") or "")[:2048]
 
     visual_enabled = data.get("visual_effects_enabled", True)
     if isinstance(visual_enabled, bool):
