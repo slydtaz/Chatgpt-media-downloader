@@ -2249,7 +2249,7 @@ class MediaDownloaderApp:
             tk.StringVar(value=color) for color in self.config.get("visual_custom_colors", DEFAULT_CONFIG["visual_custom_colors"])
         ]
         ttk.Checkbutton(
-            effects, text="Usar a camada de luz ambiente e a arte do átomo",
+            effects, text="Usar a camada de luz ambiente",
             variable=self.visual_effects_var, command=self._preview_visual_effect_settings,
         ).pack(anchor="w", pady=(0, 4))
         ttk.Checkbutton(
@@ -3479,6 +3479,10 @@ class MediaDownloaderApp:
                     width, height, palette, strength,
                     phase=self._ambient_phase,
                     style=str(self.config.get("visual_background_style", "cosmic")),
+                    custom_colors=self.config.get("visual_custom_colors"),
+                    brightness_min=self.config.get("visual_brightness_min", 0.10),
+                    brightness_max=self.config.get("visual_brightness_max", 1.0),
+                    pulse_depth=self.config.get("visual_pulse_depth", 0.65),
                 )
                 preview.delete("all")
                 if image is not None and ImageTk is not None:
@@ -3486,7 +3490,7 @@ class MediaDownloaderApp:
                     self.visual_preview_photo = photo
                     preview.create_image(0, 0, image=photo, anchor="nw")
                 else:
-                    chosen = palette_colors(palette)
+                    chosen = palette_colors(palette, self.config.get("visual_custom_colors"))
                     for x in range(width):
                         color = chosen[min(len(chosen)-1, int(x*len(chosen)/max(1, width)))] if enabled else "#090814"
                         preview.create_line(x, 0, x, height, fill=color)
@@ -3562,6 +3566,7 @@ class MediaDownloaderApp:
         self.current_page = name
         title = {
             "home": "Início", "playlist": "Playlists", "settings": "Aparência e ajustes",
+            "backgrounds": "Fundos personalizados",
             "dependencies": "Dependências", "updates": "Atualizações", "help": "Central de ajuda",
             "developer": "Diagnóstico",
         }[name]
@@ -3569,6 +3574,7 @@ class MediaDownloaderApp:
             "home": "Seu espaço para vídeos, músicas e playlists.",
             "playlist": "Escolha exatamente o que baixar e defina opções por item.",
             "settings": "Personalize o visual e ajuste o comportamento do downloader.",
+            "backgrounds": "Importe, organize, pré-visualize e prepare seus fundos.",
             "dependencies": "Ferramentas locais e estado da instalação.",
             "updates": "Atualizações verificadas, reparação e recuperação da instalação.",
             "help": "Orientações rápidas para tirar o melhor do aplicativo.",
