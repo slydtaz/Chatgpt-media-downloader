@@ -2456,26 +2456,58 @@ class MediaDownloaderApp:
             except tk.TclError:
                 pass
 
+    def _choose_visual_gradient_color(self, index: int):
+        """Open the native color picker for one stop in the custom gradient."""
+        try:
+            color_var = self.visual_custom_color_vars[index]
+            initial = color_var.get()
+            chosen = colorchooser.askcolor(
+                color=initial, parent=self.root, title=f"Cor {index + 1} do gradiente",
+            )[1]
+            if chosen and _valid_hex_color(chosen):
+                color_var.set(chosen.upper())
+                self.visual_palette_var.set("Personalizada")
+                if index < len(getattr(self, "visual_custom_color_buttons", [])):
+                    button = self.visual_custom_color_buttons[index]
+                    button.configure(background=chosen.upper(), foreground=_contrast_text(chosen.upper()),
+                                     activebackground=chosen.upper())
+        except (IndexError, tk.TclError, AttributeError):
+            return
+
     def _preview_visual_effect_settings(self):
         """Apply generator options live; saving to disk is reserved for Save."""
         try:
             palette = self._stored_setting_value("visual_palette", self.visual_palette_var.get())
-            strength = self._stored_setting_value("visual_strength", self.visual_strength_var.get())
+            strength = float(self._stored_setting_value("visual_strength", self.visual_strength_var.get()))
             orbits = int(self.visual_orbits_var.get())
             self.config["visual_effects_enabled"] = bool(self.visual_effects_var.get())
-            self.config["visual_palette"] = palette if palette in EFFECT_PALETTES else "cosmic"
-            self.config["visual_strength"] = strength if strength in {0.30, 0.55, 0.80} else 0.55
+            self.config["visual_palette"] = palette if palette in set(EFFECT_PALETTES) | {"custom"} else "cosmic"
+            self.config["visual_strength"] = max(0.0, min(1.0, strength))
+            self.config["visual_custom_colors"] = [var.get().upper() for var in self.visual_custom_color_vars if _valid_hex_color(var.get())]
             self.config["visual_orbits"] = orbits if orbits in {2, 3, 4} else 3
             self.config["visual_background_animated"] = bool(self.visual_background_animated_var.get())
             style = self._stored_setting_value("visual_background_style", self.visual_background_style_var.get())
-            self.config["visual_background_style"] = style if style in {"cosmic", "nebula", "aurora", "edge-light"} else "cosmic"
-            speed = self._stored_setting_value("visual_background_speed", self.visual_background_speed_var.get())
-            self.config["visual_background_speed"] = speed if speed in {0.45, 0.85, 1.25} else 0.85
+            self.config["visual_background_style"] = style if style in {"cosmic", "nebula", "aurora", "edge-light", "diagonal", "bottom-up", "bubbles", "pulse"} else "cosmic"
+            speed = float(self._stored_setting_value("visual_background_speed", self.visual_background_speed_var.get()))
+            self.config["visual_background_speed"] = max(0.1, min(3.0, speed))
             self.config["visual_hover_enabled"] = bool(self.visual_hover_enabled_var.get())
-            scale = self._stored_setting_value("visual_hover_scale", self.visual_hover_scale_var.get())
-            self.config["visual_hover_scale"] = scale if scale in {1.04, 1.06, 1.10} else 1.06
-            reveal = self._stored_setting_value("visual_hover_reveal_seconds", self.visual_hover_reveal_var.get())
-            self.config["visual_hover_reveal_seconds"] = reveal if reveal in {0.5, 1.0, 1.5} else 1.0
+            scale = float(self._stored_setting_value("visual_hover_scale", self.visual_hover_scale_var.get()))
+            self.config["visual_hover_scale"] = max(1.0, min(1.15, scale))
+            reveal = float(self._stored_setting_value("visual_hover_reveal_seconds", self.visual_hover_reveal_var.get()))
+            self.config["visual_hover_reveal_seconds"] = max(0.1, min(3.0, reveal))
+            self.config["visual_pulse_depth"] = float(self._stored_setting_value("visual_pulse_depth", self.visual_pulse_depth_var.get()))
+            self.config["visual_brightness_min"] = float(self._stored_setting_value("visual_brightness_min", self.visual_brightness_min_var.get()))
+            self.config["visual_brightness_max"] = float(self._stored_setting_value("visual_brightness_max", self.visual_brightness_max_var.get()))
+            if self.config["visual_brightness_max"] < self.config["visual_brightness_min"]:
+                self.config["visual_brightness_min"] = self.config["visual_brightness_max"]
+            self.config["visual_border_glow_strength"] = float(self._stored_setting_value("visual_border_glow_strength", self.visual_border_glow_strength_var.get()))
+            self.config["visual_border_glow_width"] = float(self._stored_setting_value("visual_border_glow_width", self.visual_border_glow_width_var.get()))
+            for index, button in enumerate(getattr(self, "visual_custom_color_buttons", [])):
+                color = self.visual_custom_color_vars[index].get().upper()
+                button.configure(background=color, foreground=_contrast_text(color), activebackground=color)
+            for button in getattr(self, "nav_buttons", {}).values():
+                if hasattr(button, "_draw"):
+                    button._draw()
             self._draw_visual_palette_swatches()
             self._render_static_visuals()
             self._restart_ambient_animation()
@@ -2515,7 +2547,7 @@ class MediaDownloaderApp:
         self._preview_animations()
         if hasattr(self, "visual_effects_var"):
             self.visual_effects_var.set(bool(source_config.get("visual_effects_enabled", True)))
-            self.visual_palette_var.set(self._display_setting_value("visual_palette", source_config.get("visual_palette", "cosmic")))
+                self.visual_palette_var.set(self._display_setting_value("visual_palette", source_config.get("visual_palette", "cosmic")))
             self.visual_strength_var.set(self._display_setting_value("visual_strength", source_config.get("visual_strength", 0.55)))
             self.visual_orbits_var.set(str(source_config.get("visual_orbits", 3)))
             self.visual_background_animated_var.set(bool(source_config.get("visual_background_animated", True)))
@@ -2524,6 +2556,15 @@ class MediaDownloaderApp:
             self.visual_hover_enabled_var.set(bool(source_config.get("visual_hover_enabled", True)))
             self.visual_hover_scale_var.set(self._display_setting_value("visual_hover_scale", source_config.get("visual_hover_scale", 1.06)))
             self.visual_hover_reveal_var.set(self._display_setting_value("visual_hover_reveal_seconds", source_config.get("visual_hover_reveal_seconds", 1.0)))
+            for index, variable in enumerate(getattr(self, "visual_custom_color_vars", [])):
+                colors = source_config.get("visual_custom_colors", DEFAULT_CONFIG["visual_custom_colors"])
+                if index < len(colors):
+                    variable.set(colors[index])
+            self.visual_pulse_depth_var.set(self._display_setting_value("visual_pulse_depth", source_config.get("visual_pulse_depth", 0.65)))
+            self.visual_brightness_min_var.set(self._display_setting_value("visual_brightness_min", source_config.get("visual_brightness_min", 0.10)))
+            self.visual_brightness_max_var.set(self._display_setting_value("visual_brightness_max", source_config.get("visual_brightness_max", 1.0)))
+            self.visual_border_glow_strength_var.set(self._display_setting_value("visual_border_glow_strength", source_config.get("visual_border_glow_strength", 0.90)))
+            self.visual_border_glow_width_var.set(self._display_setting_value("visual_border_glow_width", source_config.get("visual_border_glow_width", 2.5)))
             self._preview_visual_effect_settings()
         self._preview_theme_from_setting()
         messagebox.showinfo("Configurações","Os valores foram revertidos nesta tela. Clique em Salvar personalização para gravá-los.")
@@ -2536,29 +2577,44 @@ class MediaDownloaderApp:
         if key=="theme":
             return {"system":"Sistema","dark":"Escuro","light":"Claro","oled":"Preto OLED"}.get(str(value),"Escuro")
         if key=="visual_palette":
-            return {"cosmic":"Cósmica · roxo/azul","nebula":"Nebulosa violeta","aurora":"Aurora","ocean":"Oceano"}.get(str(value),"Cósmica · roxo/azul")
+            return {"cosmic":"Cósmica · roxo/azul","nebula":"Nebulosa violeta","aurora":"Aurora","ocean":"Oceano","custom":"Personalizada"}.get(str(value),"Cósmica · roxo/azul")
         if key=="visual_strength":
             try:
-                return {0.30:"Suave",0.55:"Equilibrado",0.80:"Vibrante"}.get(round(float(value), 2),"Equilibrado")
+                return {0.15:"Muito suave",0.30:"Suave",0.45:"Equilibrado",0.60:"Vibrante",0.80:"Muito vibrante",1.0:"Máxima"}.get(round(float(value), 2),"Equilibrado")
             except (TypeError, ValueError):
                 return "Equilibrado"
         if key=="visual_background_style":
-            return {"cosmic":"Cósmica · roxo/azul/rosa","nebula":"Nebulosa difusa","aurora":"Aurora ondulada","edge-light":"Luz nas bordas"}.get(str(value),"Cósmica · roxo/azul/rosa")
+            return {"cosmic":"Cósmica · roxo/azul/rosa","nebula":"Nebulosa difusa","aurora":"Aurora ondulada","edge-light":"Luz nas bordas","diagonal":"Diagonal","bottom-up":"De baixo para cima","bubbles":"Bolhas em movimento","pulse":"Pulso de brilho"}.get(str(value),"Cósmica · roxo/azul/rosa")
         if key=="visual_background_speed":
             try:
-                return {0.45:"Lenta",0.85:"Normal",1.25:"Rápida"}.get(round(float(value),2),"Normal")
+                return {0.2:"Muito lenta",0.45:"Lenta",0.85:"Normal",1.25:"Rápida",2.0:"Muito rápida"}.get(round(float(value),2),"Normal")
             except (TypeError,ValueError):
                 return "Normal"
         if key=="visual_hover_scale":
             try:
-                return {1.04:"Suave · 1,04×",1.06:"Referência · 1,06×",1.10:"Forte · 1,10×"}.get(round(float(value),2),"Referência · 1,06×")
+                return {1.0:"Desativado · 1,00×",1.03:"Suave · 1,03×",1.06:"Referência · 1,06×",1.10:"Forte · 1,10×",1.15:"Máximo · 1,15×"}.get(round(float(value),2),"Referência · 1,06×")
             except (TypeError,ValueError):
                 return "Referência · 1,06×"
         if key=="visual_hover_reveal_seconds":
             try:
-                return {0.5:"Rápido · 0,5 s",1.0:"Referência · 1 s",1.5:"Suave · 1,5 s"}.get(round(float(value),2),"Referência · 1 s")
+                return {0.1:"Instantâneo · 0,1 s",0.5:"Rápido · 0,5 s",1.0:"Referência · 1 s",1.5:"Suave · 1,5 s",2.0:"Lento · 2 s",3.0:"Muito lento · 3 s"}.get(round(float(value),2),"Referência · 1 s")
             except (TypeError,ValueError):
                 return "Referência · 1 s"
+        if key=="visual_pulse_depth":
+            try: return {0.0:"Sem pulso",0.25:"Sutil",0.5:"Médio",0.75:"Forte",1.0:"Extremo"}.get(round(float(value),2),"Forte")
+            except (TypeError,ValueError): return "Forte"
+        if key=="visual_brightness_min":
+            try: return {0.05:"Quase escuro · 5%",0.15:"Escuro · 15%",0.30:"Médio · 30%",0.50:"Claro · 50%"}.get(round(float(value),2),"Quase escuro · 5%")
+            except (TypeError,ValueError): return "Quase escuro · 5%"
+        if key=="visual_brightness_max":
+            try: return {0.60:"Moderado · 60%",0.80:"Forte · 80%",1.0:"Máximo · 100%"}.get(round(float(value),2),"Máximo · 100%")
+            except (TypeError,ValueError): return "Máximo · 100%"
+        if key=="visual_border_glow_strength":
+            try: return {0.25:"Discreto · 25%",0.55:"Médio · 55%",0.80:"Forte · 80%",1.0:"Máximo · 100%"}.get(round(float(value),2),"Forte · 80%")
+            except (TypeError,ValueError): return "Forte · 80%"
+        if key=="visual_border_glow_width":
+            try: return {1.0:"Fina · 1 px",2.5:"Média · 2,5 px",4.0:"Grossa · 4 px",6.0:"Muito grossa · 6 px"}.get(round(float(value),2),"Média · 2,5 px")
+            except (TypeError,ValueError): return "Média · 2,5 px"
         if key=="ui_density":
             return {"comfortable":"Confortável","compact":"Compacto"}.get(str(value),"Confortável")
         return str(value)
@@ -2571,17 +2627,27 @@ class MediaDownloaderApp:
         if key=="theme":
             return {"Sistema":"system","Escuro":"dark","Claro":"light","Preto OLED":"oled"}.get(str(value),str(value))
         if key=="visual_palette":
-            return {"Cósmica · roxo/azul":"cosmic","Nebulosa violeta":"nebula","Aurora":"aurora","Oceano":"ocean"}.get(str(value),str(value))
+            return {"Cósmica · roxo/azul":"cosmic","Nebulosa violeta":"nebula","Aurora":"aurora","Oceano":"ocean","Personalizada":"custom"}.get(str(value),str(value))
         if key=="visual_strength":
-            return {"Suave":0.30,"Equilibrado":0.55,"Vibrante":0.80}.get(str(value),0.55)
+            return {"Muito suave":0.15,"Suave":0.30,"Equilibrado":0.45,"Vibrante":0.60,"Muito vibrante":0.80,"Máxima":1.0}.get(str(value),0.45)
         if key=="visual_background_style":
-            return {"Cósmica · roxo/azul/rosa":"cosmic","Nebulosa difusa":"nebula","Aurora ondulada":"aurora","Luz nas bordas":"edge-light"}.get(str(value),str(value))
+            return {"Cósmica · roxo/azul/rosa":"cosmic","Nebulosa difusa":"nebula","Aurora ondulada":"aurora","Luz nas bordas":"edge-light","Diagonal":"diagonal","De baixo para cima":"bottom-up","Bolhas em movimento":"bubbles","Pulso de brilho":"pulse"}.get(str(value),str(value))
         if key=="visual_background_speed":
-            return {"Lenta":0.45,"Normal":0.85,"Rápida":1.25}.get(str(value),0.85)
+            return {"Muito lenta":0.2,"Lenta":0.45,"Normal":0.85,"Rápida":1.25,"Muito rápida":2.0}.get(str(value),0.85)
         if key=="visual_hover_scale":
-            return {"Suave · 1,04×":1.04,"Referência · 1,06×":1.06,"Forte · 1,10×":1.10}.get(str(value),1.06)
+            return {"Desativado · 1,00×":1.0,"Suave · 1,03×":1.03,"Referência · 1,06×":1.06,"Forte · 1,10×":1.10,"Máximo · 1,15×":1.15}.get(str(value),1.06)
         if key=="visual_hover_reveal_seconds":
-            return {"Rápido · 0,5 s":0.5,"Referência · 1 s":1.0,"Suave · 1,5 s":1.5}.get(str(value),1.0)
+            return {"Instantâneo · 0,1 s":0.1,"Rápido · 0,5 s":0.5,"Referência · 1 s":1.0,"Suave · 1,5 s":1.5,"Lento · 2 s":2.0,"Muito lento · 3 s":3.0}.get(str(value),1.0)
+        if key=="visual_pulse_depth":
+            return {"Sem pulso":0.0,"Sutil":0.25,"Médio":0.5,"Forte":0.75,"Extremo":1.0}.get(str(value),0.65)
+        if key=="visual_brightness_min":
+            return {"Quase escuro · 5%":0.05,"Escuro · 15%":0.15,"Médio · 30%":0.30,"Claro · 50%":0.50}.get(str(value),0.10)
+        if key=="visual_brightness_max":
+            return {"Moderado · 60%":0.60,"Forte · 80%":0.80,"Máximo · 100%":1.0}.get(str(value),1.0)
+        if key=="visual_border_glow_strength":
+            return {"Discreto · 25%":0.25,"Médio · 55%":0.55,"Forte · 80%":0.80,"Máximo · 100%":1.0}.get(str(value),0.90)
+        if key=="visual_border_glow_width":
+            return {"Fina · 1 px":1.0,"Média · 2,5 px":2.5,"Grossa · 4 px":4.0,"Muito grossa · 6 px":6.0}.get(str(value),2.5)
         if key=="ui_density":
             return {"Confortável":"comfortable","Compacto":"compact"}.get(str(value),str(value))
         if key in {"auto_video_quality","audio_bitrate","playlist_parallelism","concurrent_fragments","retries"}:
@@ -2624,6 +2690,12 @@ class MediaDownloaderApp:
         new_config["visual_hover_enabled"]=bool(self.visual_hover_enabled_var.get())
         new_config["visual_hover_scale"]=self._stored_setting_value("visual_hover_scale",self.visual_hover_scale_var.get())
         new_config["visual_hover_reveal_seconds"]=self._stored_setting_value("visual_hover_reveal_seconds",self.visual_hover_reveal_var.get())
+        new_config["visual_custom_colors"]=[var.get().upper() for var in self.visual_custom_color_vars if _valid_hex_color(var.get())]
+        new_config["visual_pulse_depth"]=self._stored_setting_value("visual_pulse_depth",self.visual_pulse_depth_var.get())
+        new_config["visual_brightness_min"]=self._stored_setting_value("visual_brightness_min",self.visual_brightness_min_var.get())
+        new_config["visual_brightness_max"]=self._stored_setting_value("visual_brightness_max",self.visual_brightness_max_var.get())
+        new_config["visual_border_glow_strength"]=self._stored_setting_value("visual_border_glow_strength",self.visual_border_glow_strength_var.get())
+        new_config["visual_border_glow_width"]=self._stored_setting_value("visual_border_glow_width",self.visual_border_glow_width_var.get())
         new_config["audio_bitrate"]=b
         try:
             save_config(new_config)
