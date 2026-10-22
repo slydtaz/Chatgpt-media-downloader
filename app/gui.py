@@ -35,6 +35,11 @@ from .brand_assets import load_brand_images
 from .media_preview import fetch_thumbnail_bytes, inspect_media_preview
 from .visual_effects import PALETTES as EFFECT_PALETTES, render_atom_art, render_gradient_preview, render_ambient_gradient, palette_colors
 from .ui_rendering import render_rounded_panel, render_rounded_button
+from .backgrounds import (
+    import_file as import_background_file, import_url as import_background_url,
+    list_assets as list_background_assets, resolve_asset as resolve_background_asset,
+    delete_asset as delete_background_asset, background_store_dir,
+)
 
 try:
     from PIL import Image, ImageDraw, ImageFont, ImageTk
@@ -161,6 +166,10 @@ def _render_nav_icon(root, cache: dict, page_key: str, size: int, color: str):
         if font is None:
             font = ImageFont.load_default()
         draw.text(point(0, 0), "?", font=font, fill=color, anchor="mm")
+    elif page_key == "backgrounds":
+        rect(-10, -8, 10, 8, radius=2, fill=None)
+        circle(-4, -3, 1.7, fill=color, outline=color, width=1)
+        line([(-8, 5), (-3, 0), (1, 4), (5, 0), (8, 3)])
     elif page_key == "developer":
         rect(-10, -8, 10, 6, radius=2, fill=None)
         line([(-5, 10), (5, 10)])
@@ -1033,6 +1042,10 @@ class MediaDownloaderApp:
         self._ambient_photo = None
         self._ambient_size: tuple[int, int] | None = None
         self._ambient_canvases: list[tk.Canvas] = []
+        self._app_background_source_image = None
+        self._background_preview_photo = None
+        self._background_selected_id = ""
+        self._background_import_busy = False
         self._loading_overlay_canvas = None
         self._loading_animation_job = None
         self._loading_started_at = 0.0
@@ -1099,6 +1112,7 @@ class MediaDownloaderApp:
         self._build_home()
         self._build_playlist_page()
         self._build_settings()
+        self._build_backgrounds()
         self._build_dependencies()
         self._build_updates()
         self._build_help()
@@ -1643,6 +1657,7 @@ class MediaDownloaderApp:
             ("home", "⌂", "Início", "Baixe vídeo ou áudio, acompanhe progresso e consulte atividade."),
             ("playlist", "▤", "Playlists", "Analise playlists, selecione itens e ajuste opções por mídia."),
             ("settings", "⚙", "Aparência", "Personalize tema, gradientes, pastas e comportamento."),
+            ("backgrounds", "▧", "Fundos", "Importe imagens e vídeos, edite e aplique fundos personalizados."),
             ("dependencies", "◈", "Dependências", "Confira yt-dlp, FFmpeg e FFprobe."),
             ("updates", "⟳", "Atualizações", "Atualize ou recupere arquivos oficiais do aplicativo."),
             ("help", "?", "Ajuda", "Guias de uso, qualidade, playlists e segurança."),
@@ -1681,6 +1696,10 @@ class MediaDownloaderApp:
         self.pages_area = ttk.Frame(content_wrap)
         self.pages_area.pack(fill="both", expand=True)
         self._attach_ambient_layer(self.pages_area)
+        try:
+            self._load_app_background_source()
+        except (OSError, ValueError, TypeError) as exc:
+            self.logger.warning("Fundo personalizado não foi carregado: %s", type(exc).__name__)
 
     def _card(self, parent, padding=16):
         return RoundedCard(parent, self, padding=padding)
