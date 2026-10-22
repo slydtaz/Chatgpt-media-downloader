@@ -1657,12 +1657,8 @@ class MediaDownloaderApp:
         hero.pack(fill="x",pady=(0,13))
         self.hero_accent_bar=tk.Frame(hero,bg=self.colors["accent"],width=4,bd=0,highlightthickness=0)
         self.hero_accent_bar.pack(side="left",fill="y",padx=(0,18))
-        self.hero_visual = tk.Canvas(
-            hero, width=238, height=154, bg=self.colors["panel2"],
-            highlightthickness=0, bd=0,
-        )
-        self.hero_visual.pack(side="right", fill="y", padx=(12, 0))
-        self.hero_visual.bind("<Configure>", lambda _event: self._render_static_visuals(), add="+")
+        # Keep the home hero focused on downloads; the atom belongs only to
+        # the loading preview and must not consume layout width here.
         hero_body=ttk.Frame(hero,style="Hero.TFrame")
         hero_body.pack(side="left",fill="both",expand=True)
         hero_top=ttk.Frame(hero_body,style="Hero.TFrame")
@@ -1705,8 +1701,10 @@ class MediaDownloaderApp:
         self.quality=ttk.Combobox(quality_box,textvariable=self.quality_var,state="readonly",width=19)
         self.quality.pack(anchor="w")
         self._sync_quality()
-        buttons=ttk.Frame(controls,style="Hero.TFrame")
-        buttons.pack(side="right",anchor="s",padx=(12,0))
+        # Keep actions in a dedicated row so they never overlap the format fields
+        # on narrow windows or when the interface is scaled.
+        buttons=ttk.Frame(hero_body,style="Hero.TFrame")
+        buttons.pack(fill="x",pady=(10,0))
         self.download_btn=RoundedGlowButton(buttons,text="↓  BAIXAR AGORA",style="Accent.TButton",command=self.start_download)
         self.download_btn.pack(side="right")
         self.analyze_playlist_btn=RoundedGlowButton(buttons,text="Analisar playlist",style="Secondary.TButton",command=self._start_playlist_analysis)
@@ -2202,6 +2200,14 @@ class MediaDownloaderApp:
         self.visual_hover_enabled_var = tk.BooleanVar(value=bool(self.config.get("visual_hover_enabled", True)))
         self.visual_hover_scale_var = tk.StringVar(value=self._display_setting_value("visual_hover_scale", self.config.get("visual_hover_scale", 1.06)))
         self.visual_hover_reveal_var = tk.StringVar(value=self._display_setting_value("visual_hover_reveal_seconds", self.config.get("visual_hover_reveal_seconds", 1.0)))
+        self.visual_pulse_depth_var = tk.StringVar(value=self._display_setting_value("visual_pulse_depth", self.config.get("visual_pulse_depth", 0.65)))
+        self.visual_brightness_min_var = tk.StringVar(value=self._display_setting_value("visual_brightness_min", self.config.get("visual_brightness_min", 0.10)))
+        self.visual_brightness_max_var = tk.StringVar(value=self._display_setting_value("visual_brightness_max", self.config.get("visual_brightness_max", 1.0)))
+        self.visual_border_glow_strength_var = tk.StringVar(value=self._display_setting_value("visual_border_glow_strength", self.config.get("visual_border_glow_strength", 0.90)))
+        self.visual_border_glow_width_var = tk.StringVar(value=self._display_setting_value("visual_border_glow_width", self.config.get("visual_border_glow_width", 2.5)))
+        self.visual_custom_color_vars = [
+            tk.StringVar(value=color) for color in self.config.get("visual_custom_colors", DEFAULT_CONFIG["visual_custom_colors"])
+        ]
         ttk.Checkbutton(
             effects, text="Usar a camada de luz ambiente e a arte do átomo",
             variable=self.visual_effects_var, command=self._preview_visual_effect_settings,
@@ -2231,11 +2237,26 @@ class MediaDownloaderApp:
             swatch.pack(side="left", padx=(0, 7))
             swatch.bind("<Button-1>", lambda _event, value=display_value: self.visual_palette_var.set(value))
             self.visual_palette_swatches.append(swatch)
+        custom_colors_frame = ttk.Frame(effects, style="Card.TFrame")
+        custom_colors_frame.pack(fill="x", pady=(0, 10))
+        ttk.Label(custom_colors_frame, text="PALETA PERSONALIZADA", style="Muted.TLabel", font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 5))
+        self.visual_custom_color_buttons = []
+        for index, color_var in enumerate(self.visual_custom_color_vars):
+            chosen_color = color_var.get()
+            color_button = tk.Button(
+                custom_colors_frame, text=f"Cor {index + 1}", width=9,
+                background=chosen_color, foreground=_contrast_text(chosen_color),
+                activebackground=chosen_color, relief="flat", bd=0, padx=8, pady=6,
+                cursor="hand2", command=lambda i=index: self._choose_visual_gradient_color(i),
+            )
+            color_button.pack(side="left", padx=(0, 7))
+            self.visual_custom_color_buttons.append(color_button)
+            color_var.trace_add("write", lambda *_args: self._preview_visual_effect_settings())
         effect_controls = ttk.Frame(effects, style="Card.TFrame")
         effect_controls.pack(fill="x", pady=(0, 10))
         for title, variable, values in (
-            ("PALETA DE CORES", self.visual_palette_var, ["Cósmica · roxo/azul", "Nebulosa violeta", "Aurora", "Oceano"]),
-            ("INTENSIDADE", self.visual_strength_var, ["Suave", "Equilibrado", "Vibrante"]),
+            ("PALETA DE CORES", self.visual_palette_var, ["Cósmica · roxo/azul", "Nebulosa violeta", "Aurora", "Oceano", "Personalizada"]),
+            ("INTENSIDADE DO GRADIENTE", self.visual_strength_var, ["Muito suave", "Suave", "Equilibrado", "Vibrante", "Muito vibrante", "Máxima"]),
             ("ÓRBITAS DO ÁTOMO", self.visual_orbits_var, ["2", "3", "4"]),
         ):
             group = ttk.Frame(effect_controls, style="Card.TFrame")
@@ -2245,15 +2266,29 @@ class MediaDownloaderApp:
         motion_controls = ttk.Frame(effects, style="Card.TFrame")
         motion_controls.pack(fill="x", pady=(0, 10))
         for title, variable, values in (
-            ("ESTILO DA LUZ", self.visual_background_style_var, ["Cósmica · roxo/azul/rosa", "Nebulosa difusa", "Aurora ondulada", "Luz nas bordas"]),
-            ("VELOCIDADE DO FUNDO", self.visual_background_speed_var, ["Lenta", "Normal", "Rápida"]),
-            ("CRESCIMENTO DO BOTÃO", self.visual_hover_scale_var, ["Suave · 1,04×", "Referência · 1,06×", "Forte · 1,10×"]),
-            ("REVELAR GRADIENTE", self.visual_hover_reveal_var, ["Rápido · 0,5 s", "Referência · 1 s", "Suave · 1,5 s"]),
+            ("MODO DE GRADIENTE", self.visual_background_style_var, ["Cósmica · roxo/azul/rosa", "Nebulosa difusa", "Aurora ondulada", "Luz nas bordas", "Diagonal", "De baixo para cima", "Bolhas em movimento", "Pulso de brilho"]),
+            ("VELOCIDADE / VIBRAÇÃO", self.visual_background_speed_var, ["Muito lenta", "Lenta", "Normal", "Rápida", "Muito rápida"]),
+            ("CRESCIMENTO DOS BOTÕES", self.visual_hover_scale_var, ["Desativado · 1,00×", "Suave · 1,03×", "Referência · 1,06×", "Forte · 1,10×", "Máximo · 1,15×"]),
+            ("REVELAR GRADIENTE", self.visual_hover_reveal_var, ["Instantâneo · 0,1 s", "Rápido · 0,5 s", "Referência · 1 s", "Suave · 1,5 s", "Lento · 2 s", "Muito lento · 3 s"]),
         ):
             group = ttk.Frame(motion_controls, style="Card.TFrame")
             group.pack(side="left", fill="x", expand=True, padx=(0, 8))
             ttk.Label(group, text=title, style="Muted.TLabel", font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 4))
             ttk.Combobox(group, textvariable=variable, values=values, state="readonly").pack(fill="x")
+        advanced_controls = ttk.Frame(effects, style="Card.TFrame")
+        advanced_controls.pack(fill="x", pady=(0, 10))
+        for title, variable, values in (
+            ("PULSAÇÃO DE BRILHO", self.visual_pulse_depth_var, ["Sem pulso", "Sutil", "Médio", "Forte", "Extremo"]),
+            ("BRILHO MÍNIMO", self.visual_brightness_min_var, ["Quase escuro · 5%", "Escuro · 15%", "Médio · 30%", "Claro · 50%"]),
+            ("BRILHO MÁXIMO", self.visual_brightness_max_var, ["Moderado · 60%", "Forte · 80%", "Máximo · 100%"]),
+            ("FORÇA DA BORDA NEON", self.visual_border_glow_strength_var, ["Discreto · 25%", "Médio · 55%", "Forte · 80%", "Máximo · 100%"]),
+            ("ESPESSURA DA BORDA", self.visual_border_glow_width_var, ["Fina · 1 px", "Média · 2,5 px", "Grossa · 4 px", "Muito grossa · 6 px"]),
+        ):
+            group = ttk.Frame(advanced_controls, style="Card.TFrame")
+            group.pack(side="left", fill="x", expand=True, padx=(0, 8), pady=(0, 4))
+            ttk.Label(group, text=title, style="Muted.TLabel", font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 4))
+            ttk.Combobox(group, textvariable=variable, values=values, state="readonly").pack(fill="x")
+            variable.trace_add("write", lambda *_args: self._preview_visual_effect_settings())
         ttk.Label(effects, text="PRÉVIA DINÂMICA DO GRADIENTE", style="Muted.TLabel", font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 5))
         self.visual_preview_canvas = tk.Canvas(effects, height=86, background=self.colors["panel2"], borderwidth=0, highlightthickness=1, highlightbackground=self.colors["border"])
         self.visual_preview_canvas.pack(fill="x", pady=(0, 9))
@@ -2264,8 +2299,23 @@ class MediaDownloaderApp:
         self.visual_background_speed_var.trace_add("write", lambda *_: self._preview_visual_effect_settings())
         self.visual_hover_scale_var.trace_add("write", lambda *_: self._preview_visual_effect_settings())
         self.visual_hover_reveal_var.trace_add("write", lambda *_: self._preview_visual_effect_settings())
+        for variable in (self.visual_pulse_depth_var, self.visual_brightness_min_var, self.visual_brightness_max_var,
+                         self.visual_border_glow_strength_var, self.visual_border_glow_width_var):
+            variable.trace_add("write", lambda *_: self._preview_visual_effect_settings())
         self.visual_preview_canvas.bind("<Configure>", lambda _event: self._render_static_visuals(), add="+")
         self._preview_visual_effect_settings()
+        loading_preview = self._card(body, 12)
+        loading_preview.pack(fill="x", pady=(0, 12))
+        ttk.Label(loading_preview, text="Prévia do carregamento", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            loading_preview,
+            text="A animação de átomo fica restrita a esta prévia e à inicialização; ela não aparece na tela inicial de downloads.",
+            style="Card.TLabel", wraplength=780, justify="left",
+        ).pack(anchor="w", pady=(4, 8))
+        RoundedGlowButton(
+            loading_preview, text="Pré-visualizar carregamento com átomo",
+            style="Secondary.TButton", command=self._start_loading_splash,
+        ).pack(anchor="w")
         appearance=self._card(body,15)
         appearance.pack(fill="x",pady=(0,12))
         ttk.Label(appearance,text="Aparência",style="CardTitle.TLabel").pack(anchor="w")
