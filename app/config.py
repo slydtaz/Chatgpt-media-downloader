@@ -139,6 +139,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "visual_brightness_max": 1.0,
     "visual_border_glow_strength": 0.90,
     "visual_border_glow_width": 2.5,
+    "app_background_asset": "",
+    "app_background_mode": "none",
+    "lively_executable": "",
+    "background_editor_brightness": 0.0,
+    "background_editor_saturation": 1.0,
+    "background_editor_duration": 0,
+    "wallpaper_monitor": 1,
     "visual_hover_enabled": True,
     "visual_hover_scale": 1.06,
     "visual_hover_reveal_seconds": 1.0,
@@ -273,6 +280,27 @@ def load_config() -> dict[str, Any]:
     data["visual_brightness_max"] = max(data["visual_brightness_min"], min(1.0, data["visual_brightness_max"]))
     data["visual_border_glow_strength"] = max(0.0, min(1.0, data["visual_border_glow_strength"]))
     data["visual_border_glow_width"] = max(1.0, min(6.0, data["visual_border_glow_width"]))
+    asset_id = str(data.get("app_background_asset", "") or "").strip().lower()
+    data["app_background_asset"] = asset_id if re.fullmatch(r"[a-f0-9]{32}", asset_id) else ""
+    if data.get("app_background_mode") not in {"none", "image"}:
+        data["app_background_mode"] = "none"
+    data["lively_executable"] = str(data.get("lively_executable") or "")[:1024]
+    try:
+        data["background_editor_brightness"] = max(-0.5, min(0.5, float(data.get("background_editor_brightness", 0.0))))
+    except (TypeError, ValueError):
+        data["background_editor_brightness"] = 0.0
+    try:
+        data["background_editor_saturation"] = max(0.0, min(3.0, float(data.get("background_editor_saturation", 1.0))))
+    except (TypeError, ValueError):
+        data["background_editor_saturation"] = 1.0
+    try:
+        data["background_editor_duration"] = max(0, min(3600, int(data.get("background_editor_duration", 0))))
+    except (TypeError, ValueError):
+        data["background_editor_duration"] = 0
+    try:
+        data["wallpaper_monitor"] = max(1, min(16, int(data.get("wallpaper_monitor", 1))))
+    except (TypeError, ValueError):
+        data["wallpaper_monitor"] = 1
 
     visual_enabled = data.get("visual_effects_enabled", True)
     if isinstance(visual_enabled, bool):
