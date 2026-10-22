@@ -2416,7 +2416,19 @@ class MediaDownloaderApp:
         theme_box=ttk.Frame(theme_density,style="Card.TFrame")
         theme_box.pack(side="left",fill="x",expand=True,padx=(0,12))
         ttk.Label(theme_box,text="TEMA",style="Muted.TLabel",font=("Segoe UI",8,"bold")).pack(anchor="w",pady=(0,4))
-        ttk.Combobox(theme_box,textvariable=self.settings_vars["theme"],values=["Sistema","Escuro","Claro","Preto OLED"],state="readonly").pack(fill="x")
+        self.theme_combo = ttk.Combobox(
+            theme_box, textvariable=self.settings_vars["theme"],
+            values=["Sistema", "Escuro", "Claro", "Preto OLED", "Personalizada"],
+            state="readonly",
+        )
+        self.theme_combo.pack(fill="x")
+        self.custom_background_notice = ttk.Label(
+            theme_box,
+            text="Escolha uma imagem na aba Fundos para ativar o modo Personalizada.",
+            foreground=self.colors["muted"], background=self.colors["panel"],
+            wraplength=400, justify="left",
+        )
+        self.custom_background_notice.pack(anchor="w", pady=(5, 0))
         density_box=ttk.Frame(theme_density,style="Card.TFrame")
         density_box.pack(side="left",fill="x",expand=True)
         ttk.Label(density_box,text="ESPAÇAMENTO",style="Muted.TLabel",font=("Segoe UI",8,"bold")).pack(anchor="w",pady=(0,4))
@@ -2574,7 +2586,9 @@ class MediaDownloaderApp:
     def _preview_theme_from_setting(self):
         if not hasattr(self,"settings_vars"):
             return
-        self.config["theme"]=self._stored_setting_value("theme",self.settings_vars.get("theme",tk.StringVar(value="Escuro")).get())
+        requested_theme = self.settings_vars.get("theme", tk.StringVar(value="Escuro")).get()
+        if requested_theme != "Personalizada":
+            self.config["theme"] = self._stored_setting_value("theme", requested_theme)
         self.config["ui_density"]=self._stored_setting_value("ui_density",self.settings_vars.get("ui_density",tk.StringVar(value="Confortável")).get())
         accent=self.settings_vars.get("accent_color",tk.StringVar(value="#8B5CF6")).get()
         if _valid_hex_color(accent):
@@ -2624,7 +2638,7 @@ class MediaDownloaderApp:
         if key=="subtitle_mode":
             return {"off":"Desativadas","manual":"Legendas manuais","all":"Manuais + automáticas"}.get(str(value),"Desativadas")
         if key=="theme":
-            return {"system":"Sistema","dark":"Escuro","light":"Claro","oled":"Preto OLED"}.get(str(value),"Escuro")
+            return {"system":"Sistema","dark":"Escuro","light":"Claro","oled":"Preto OLED","custom":"Personalizada"}.get(str(value),"Escuro")
         if key=="visual_palette":
             return {"cosmic":"Cósmica · roxo/azul","nebula":"Nebulosa violeta","aurora":"Aurora","ocean":"Oceano","custom":"Personalizada"}.get(str(value),"Cósmica · roxo/azul")
         if key=="visual_strength":
@@ -2664,6 +2678,21 @@ class MediaDownloaderApp:
         if key=="visual_border_glow_width":
             try: return {1.0:"Fina · 1 px",2.5:"Média · 2,5 px",4.0:"Grossa · 4 px",6.0:"Muito grossa · 6 px"}.get(round(float(value),2),"Média · 2,5 px")
             except (TypeError,ValueError): return "Média · 2,5 px"
+        if key=="background_editor_brightness":
+            try:
+                return {-0.5:"-50%",-0.25:"-25%",0.0:"Normal",0.25:"+25%",0.5:"+50%"}.get(round(float(value), 2), "Normal")
+            except (TypeError, ValueError):
+                return "Normal"
+        if key=="background_editor_saturation":
+            try:
+                return {0.0:"Sem cor",0.5:"50%",1.0:"Normal",1.5:"150%",2.0:"200%",3.0:"300%"}.get(round(float(value), 2), "Normal")
+            except (TypeError, ValueError):
+                return "Normal"
+        if key=="background_editor_duration":
+            try:
+                return {0:"Original",5:"5 segundos",10:"10 segundos",15:"15 segundos",30:"30 segundos",60:"60 segundos",300:"5 minutos",600:"10 minutos",3600:"60 minutos"}.get(int(value), "Original")
+            except (TypeError, ValueError):
+                return "Original"
         if key=="ui_density":
             return {"comfortable":"Confortável","compact":"Compacto"}.get(str(value),"Confortável")
         return str(value)
@@ -2674,7 +2703,13 @@ class MediaDownloaderApp:
         if key=="subtitle_mode":
             return {"Desativadas":"off","Legendas manuais":"manual","Manuais + automáticas":"all"}.get(str(value),"off")
         if key=="theme":
-            return {"Sistema":"system","Escuro":"dark","Claro":"light","Preto OLED":"oled"}.get(str(value),str(value))
+            return {"Sistema":"system","Escuro":"dark","Claro":"light","Preto OLED":"oled","Personalizada":"custom"}.get(str(value),str(value))
+        if key=="background_editor_brightness":
+            return {"-50%":-0.5,"-25%":-0.25,"Normal":0.0,"+25%":0.25,"+50%":0.5}.get(str(value), 0.0)
+        if key=="background_editor_saturation":
+            return {"Sem cor":0.0,"50%":0.5,"Normal":1.0,"150%":1.5,"200%":2.0,"300%":3.0}.get(str(value), 1.0)
+        if key=="background_editor_duration":
+            return {"Original":0,"5 segundos":5,"10 segundos":10,"15 segundos":15,"30 segundos":30,"60 segundos":60,"5 minutos":300,"10 minutos":600,"60 minutos":3600}.get(str(value), 0)
         if key=="visual_palette":
             return {"Cósmica · roxo/azul":"cosmic","Nebulosa violeta":"nebula","Aurora":"aurora","Oceano":"ocean","Personalizada":"custom"}.get(str(value),str(value))
         if key=="visual_strength":
@@ -2724,7 +2759,11 @@ class MediaDownloaderApp:
             return
         new_config=dict(self.config)
         for key in self.settings_vars:
-            new_config[key]=self._stored_setting_value(key,self.settings_vars[key].get())
+            value = self.settings_vars[key].get()
+            if key == "theme" and value == "Personalizada":
+                new_config[key] = self.config.get("theme", "oled")
+            else:
+                new_config[key] = self._stored_setting_value(key, value)
         new_config["accent_color"]=accent.upper()
         new_config["auto_video_quality"]=q
         new_config["developer_mode"]=bool(self.developer_mode_var.get())
@@ -2745,10 +2784,20 @@ class MediaDownloaderApp:
         new_config["visual_brightness_max"]=self._stored_setting_value("visual_brightness_max",self.visual_brightness_max_var.get())
         new_config["visual_border_glow_strength"]=self._stored_setting_value("visual_border_glow_strength",self.visual_border_glow_strength_var.get())
         new_config["visual_border_glow_width"]=self._stored_setting_value("visual_border_glow_width",self.visual_border_glow_width_var.get())
+        new_config["visual_custom_colors"]=[var.get().upper() for var in self.visual_custom_color_vars if _valid_hex_color(var.get())]
+        new_config["background_editor_brightness"]=self._stored_setting_value("background_editor_brightness", self.background_editor_brightness_var.get())
+        new_config["background_editor_saturation"]=self._stored_setting_value("background_editor_saturation", self.background_editor_saturation_var.get())
+        new_config["background_editor_duration"]=self._stored_setting_value("background_editor_duration", self.background_editor_duration_var.get())
         new_config["audio_bitrate"]=b
         try:
             save_config(new_config)
             self.config=load_config()
+            try:
+                self._load_app_background_source()
+            except (OSError, ValueError, TypeError) as background_error:
+                self._app_background_source_image = None
+                self.logger.warning("Fundo personalizado ignorado após salvar: %s", type(background_error).__name__)
+            self._update_custom_background_indicator()
             self.developer_mode_var.set(bool(self.config.get("developer_mode",False)))
             self._preview_developer_mode()
             self.animations_enabled_var.set(bool(self.config.get("animations_enabled", True)))
@@ -4303,6 +4352,11 @@ class MediaDownloaderApp:
             self.visual_hover_reveal_var.set(self._display_setting_value("visual_hover_reveal_seconds", self.config.get("visual_hover_reveal_seconds", 1.0)))
             self._preview_visual_effect_settings()
         self._apply_theme(self.config.get("theme","dark"))
+        self._update_custom_background_indicator()
+        if hasattr(self, "background_editor_brightness_var"):
+            self.background_editor_brightness_var.set(self._display_setting_value("background_editor_brightness", self.config.get("background_editor_brightness", 0.0)))
+            self.background_editor_saturation_var.set(self._display_setting_value("background_editor_saturation", self.config.get("background_editor_saturation", 1.0)))
+            self.background_editor_duration_var.set(self._display_setting_value("background_editor_duration", self.config.get("background_editor_duration", 0)))
         if hasattr(self,"playlist_strategy_var"):
             self.playlist_strategy_var.set(self._strategy_label(self.config.get("playlist_strategy","sequential")))
             self.playlist_parallelism_var.set(str(self.config.get("playlist_parallelism",3)))
