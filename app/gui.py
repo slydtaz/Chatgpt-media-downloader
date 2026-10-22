@@ -4,6 +4,9 @@ import os
 import re
 import math
 import io
+import shutil
+import subprocess
+import tempfile
 import queue
 import threading
 import time
@@ -2759,6 +2762,599 @@ class MediaDownloaderApp:
             messagebox.showinfo("Configuração","Personalização salva com sucesso.")
         except OSError as exc:
             messagebox.showerror("Configuração",f"Não foi possível salvar: {exc}")
+    def _build_backgrounds(self):
+        frame = ttk.Frame(self.pages_area)
+        self.page_frames["backgrounds"] = frame
+        self._attach_ambient_layer(frame)
+        scroll = ScrollableFrame(frame)
+        scroll.pack(fill="both", expand=True)
+        body = scroll.body
+        self._attach_ambient_layer(body)
+
+        ttk.Label(body, text="Sua biblioteca visual", style="Subtitle.TLabel").pack(anchor="w", pady=(0, 6))
+        ttk.Label(
+            body,
+            text="Importe imagens e vídeos, visualize-os e crie cópias editadas. Os arquivos são copiados para a pasta privada de dados do aplicativo, permanecem fora da instalação e não são executados.",
+            style="Card.TLabel", wraplength=760, justify="left",
+        ).pack(anchor="w", pady=(0, 12))
+
+        import_card = self._card(body, 14)
+        import_card.pack(fill="x", pady=(0, 12))
+        ttk.Label(import_card, text="Adicionar fundo", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            import_card,
+            text="Escolha um arquivo do computador ou informe uma URL HTTPS direta de imagem/vídeo (não a página de um site). Até 512 MiB por arquivo.",
+            style="Card.TLabel", wraplength=760, justify="left",
+        ).pack(anchor="w", pady=(4, 9))
+        import_actions = ttk.Frame(import_card, style="Card.TFrame")
+        import_actions.pack(fill="x")
+        self.background_import_file_btn = RoundedGlowButton(
+            import_actions, text="Importar arquivo…", style="Secondary.TButton",
+            command=self._choose_background_file,
+        )
+        self.background_import_file_btn.pack(side="left")
+        url_frame = ttk.Frame(import_card, style="Card.TFrame")
+        url_frame.pack(fill="x", pady=(10, 0))
+        self.background_url_var = tk.StringVar(value="")
+        self.background_url_entry = ttk.Entry(url_frame, textvariable=self.background_url_var)
+        self.background_url_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.background_import_url_btn = RoundedGlowButton(
+            url_frame, text="Importar URL HTTPS", style="Accent.TButton",
+            command=self._import_background_url,
+        )
+        self.background_import_url_btn.pack(side="right")
+        ttk.Label(
+            import_card,
+            text="Segurança: o tipo é conferido pela assinatura do arquivo, e o SHA-256 é verificado antes de usar a mídia. Isto detecta alterações, mas não é um antivírus; por isso arquivos nunca são tratados como programas.",
+            style="Muted.TLabel", wraplength=760, justify="left",
+        ).pack(anchor="w", pady=(9, 0))
+        self.background_status_var = tk.StringVar(value=f"Biblioteca: {background_store_dir()}")
+        ttk.Label(import_card, textvariable=self.background_status_var, style="Muted.TLabel", wraplength=760).pack(anchor="w", pady=(6, 0))
+
+        library = self._card(body, 14)
+        library.pack(fill="x", pady=(0, 12))
+        library_head = ttk.Frame(library, style="Card.TFrame")
+        library_head.pack(fill="x")
+        ttk.Label(library_head, text="Fundos salvos", style="CardTitle.TLabel").pack(side="left")
+        RoundedGlowButton(
+            library_head, text="Atualizar lista", style="Secondary.TButton",
+            command=self._refresh_background_library,
+        ).pack(side="right")
+        tree_frame = ttk.Frame(library, style="Card.TFrame")
+        tree_frame.pack(fill="x", pady=(8, 8))
+        self.background_tree = ttk.Treeview(
+            tree_frame, columns=("kind", "size", "status"), show="tree headings", height=7,
+            selectmode="browse",
+        )
+        self.background_tree.heading("#0", text="Arquivo")
+        self.background_tree.heading("kind", text="Tipo")
+        self.background_tree.heading("size", text="Tamanho")
+        self.background_tree.heading("status", text="Verificação")
+        self.background_tree.column("#0", width=330, minwidth=160, stretch=True)
+        self.background_tree.column("kind", width=80, minwidth=70, stretch=False, anchor="center")
+        self.background_tree.column("size", width=90, minwidth=70, stretch=False, anchor="e")
+        self.background_tree.column("status", width=160, minwidth=130, stretch=False, anchor="center")
+        self.background_tree.pack(side="left", fill="x", expand=True)
+        tree_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self.background_tree.yview)
+        tree_scroll.pack(side="right", fill="y")
+        self.background_tree.configure(yscrollcommand=tree_scroll.set)
+        self.background_tree.bind("<<TreeviewSelect>>", self._preview_background_selection, add="+")
+        actions1 = ttk.Frame(library, style="Card.TFrame")
+        actions1.pack(fill="x")
+        self.background_play_btn = RoundedGlowButton(
+            actions1, text="Reproduzir / abrir", style="Secondary.TButton",
+            command=self._play_background_selected,
+        )
+        self.background_play_btn.pack(side="left")
+        RoundedGlowButton(
+            actions1, text="Usar imagem no aplicativo", style="Accent.TButton",
+            command=self._use_background_in_app,
+        ).pack(side="left", padx=(7, 0))
+        RoundedGlowButton(
+            actions1, text="Definir no Windows", style="Secondary.TButton",
+            command=self._set_windows_background,
+        ).pack(side="left", padx=(7, 0))
+        RoundedGlowButton(
+            actions1, text="Excluir da biblioteca", style="Danger.TButton",
+            command=self._delete_background_selected,
+        ).pack(side="right")
+        actions2 = ttk.Frame(library, style="Card.TFrame")
+        actions2.pack(fill="x", pady=(7, 0))
+        RoundedGlowButton(
+            actions2, text="Retirar fundo do aplicativo", style="Secondary.TButton",
+            command=self._clear_app_background,
+        ).pack(side="left")
+        RoundedGlowButton(
+            actions2, text="Retirar fundo do Windows", style="Secondary.TButton",
+            command=self._clear_windows_background,
+        ).pack(side="left", padx=(7, 0))
+        RoundedGlowButton(
+            actions2, text="Localizar Lively.exe…", style="Secondary.TButton",
+            command=self._locate_lively_executable,
+        ).pack(side="right")
+
+        preview = self._card(body, 14)
+        preview.pack(fill="x", pady=(0, 12))
+        ttk.Label(preview, text="Pré-visualização", style="CardTitle.TLabel").pack(anchor="w")
+        self.background_preview_image_label = tk.Label(
+            preview, text="Selecione um arquivo da biblioteca.",
+            background=self.colors["panel2"], foreground=self.colors["muted"],
+            width=58, height=9, anchor="center", bd=0, highlightthickness=0,
+        )
+        self.background_preview_image_label.pack(fill="x", pady=(8, 6))
+        self.background_preview_details_var = tk.StringVar(value="A integridade do arquivo será verificada ao abri-lo ou aplicá-lo.")
+        ttk.Label(
+            preview, textvariable=self.background_preview_details_var, style="Card.TLabel",
+            wraplength=760, justify="left",
+        ).pack(anchor="w")
+
+        editor = self._card(body, 14)
+        editor.pack(fill="x", pady=(0, 22))
+        ttk.Label(editor, text="Editor rápido", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            editor,
+            text="Cria uma cópia nova sem alterar o original: brilho, saturação/vibração e duração máxima do vídeo. Para vídeos, use FFmpeg/FFprobe configurados na aba Dependências; imagens são processadas localmente.",
+            style="Card.TLabel", wraplength=760, justify="left",
+        ).pack(anchor="w", pady=(4, 10))
+        editor_row = ttk.Frame(editor, style="Card.TFrame")
+        editor_row.pack(fill="x")
+        self.background_editor_brightness_var = tk.StringVar(value=self._display_setting_value("background_editor_brightness", self.config.get("background_editor_brightness", 0.0)))
+        self.background_editor_saturation_var = tk.StringVar(value=self._display_setting_value("background_editor_saturation", self.config.get("background_editor_saturation", 1.0)))
+        self.background_editor_duration_var = tk.StringVar(value=self._display_setting_value("background_editor_duration", self.config.get("background_editor_duration", 0)))
+        for title, variable, values in (
+            ("BRILHO", self.background_editor_brightness_var, ["-50%", "-25%", "Normal", "+25%", "+50%"]),
+            ("SATURAÇÃO / VIBRAÇÃO", self.background_editor_saturation_var, ["Sem cor", "50%", "Normal", "150%", "200%", "300%"]),
+            ("DURAÇÃO MÁXIMA", self.background_editor_duration_var, ["Original", "5 segundos", "10 segundos", "15 segundos", "30 segundos", "60 segundos", "5 minutos", "10 minutos", "60 minutos"]),
+        ):
+            group = ttk.Frame(editor_row, style="Card.TFrame")
+            group.pack(side="left", fill="x", expand=True, padx=(0, 8))
+            ttk.Label(group, text=title, style="Muted.TLabel", font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(0, 4))
+            ttk.Combobox(group, textvariable=variable, values=values, state="readonly").pack(fill="x")
+        editor_actions = ttk.Frame(editor, style="Card.TFrame")
+        editor_actions.pack(fill="x", pady=(10, 0))
+        RoundedGlowButton(
+            editor_actions, text="Aplicar ajustes a uma cópia…", style="Accent.TButton",
+            command=self._edit_background_selected,
+        ).pack(side="left")
+        ttk.Label(
+            editor_actions,
+            text="O arquivo original permanece intacto; a cópia é adicionada à biblioteca após validar novamente seu formato.",
+            style="Muted.TLabel", wraplength=510, justify="left",
+        ).pack(side="left", padx=(10, 0))
+        self._refresh_background_library()
+
+    def _background_selected_id_value(self) -> str:
+        try:
+            selection = self.background_tree.selection()
+            return str(selection[0]) if selection else ""
+        except (AttributeError, tk.TclError):
+            return ""
+
+    def _refresh_background_library(self, select_id: str = ""):
+        if not hasattr(self, "background_tree"):
+            return
+        try:
+            for item in self.background_tree.get_children():
+                self.background_tree.delete(item)
+            assets = list_background_assets(verify=False)
+            for record in assets:
+                size = int(record.get("size", 0))
+                size_label = f"{size / (1024 * 1024):.1f} MiB" if size >= 1024 * 1024 else f"{size / 1024:.0f} KiB"
+                integrity = "Registro íntegro" if record.get("valid") else "Inválido / alterado"
+                kind = "Imagem" if record.get("kind") == "image" else "Vídeo"
+                self.background_tree.insert(
+                    "", "end", iid=record["id"], text=record.get("name", "Fundo"),
+                    values=(kind, size_label, integrity),
+                )
+            if select_id and self.background_tree.exists(select_id):
+                self.background_tree.selection_set(select_id)
+                self.background_tree.focus(select_id)
+                self.background_tree.see(select_id)
+                self._preview_background_selection()
+            elif assets and not self.background_tree.selection():
+                first_id = str(assets[0].get("id", ""))
+                if first_id and self.background_tree.exists(first_id):
+                    self.background_tree.selection_set(first_id)
+                    self._preview_background_selection()
+            self._update_custom_background_indicator()
+        except (OSError, ValueError, tk.TclError) as exc:
+            if hasattr(self, "background_status_var"):
+                self.background_status_var.set(f"Não foi possível ler a biblioteca: {exc}")
+
+    def _choose_background_file(self):
+        filename = filedialog.askopenfilename(
+            parent=self.root, title="Importar fundo",
+            filetypes=[("Imagens e vídeos", "*.png *.jpg *.jpeg *.gif *.webp *.bmp *.mp4 *.m4v *.mov *.webm *.mkv *.avi"),
+                       ("Todos os arquivos", "*.*")],
+        )
+        if filename:
+            self._start_background_import(lambda: import_background_file(filename), "arquivo local")
+
+    def _import_background_url(self):
+        url = self.background_url_var.get().strip()
+        if not url:
+            self.background_status_var.set("Cole uma URL HTTPS direta para uma imagem ou vídeo.")
+            self.background_url_entry.focus_set()
+            return
+        self._start_background_import(lambda: import_background_url(url), "URL HTTPS")
+
+    def _start_background_import(self, worker, label: str):
+        if self._background_import_busy:
+            return
+        self._background_import_busy = True
+        self.background_status_var.set(f"Importando {label}; validando o conteúdo…")
+        self.background_import_file_btn.configure(state="disabled")
+        self.background_import_url_btn.configure(state="disabled")
+
+        def task():
+            try:
+                record = worker()
+                error = ""
+            except Exception as exc:
+                record = None
+                error = str(exc)
+            try:
+                self.root.after(0, lambda r=record, e=error: self._finish_background_import(r, e))
+            except tk.TclError:
+                pass
+
+        threading.Thread(target=task, name="background-import", daemon=True).start()
+
+    def _finish_background_import(self, record, error: str):
+        self._background_import_busy = False
+        self.background_import_file_btn.configure(state="normal")
+        self.background_import_url_btn.configure(state="normal")
+        if error:
+            self.background_status_var.set(f"Importação cancelada: {error}")
+            return
+        self.background_url_var.set("")
+        self.background_status_var.set(f"Adicionado à biblioteca: {record.get('name', 'fundo')}")
+        self._refresh_background_library(select_id=record["id"])
+
+    def _preview_background_selection(self, _event=None):
+        asset_id = self._background_selected_id_value()
+        if not asset_id:
+            return
+        try:
+            record, path = resolve_background_asset(asset_id)
+            if record["kind"] == "image":
+                if Image is None or ImageTk is None:
+                    self.background_preview_image_label.configure(image="", text="Prévia de imagem indisponível nesta instalação.")
+                else:
+                    with Image.open(path) as source:
+                        if source.width * source.height > 50_000_000:
+                            raise ValueError("Imagem muito grande para pré-visualizar com segurança.")
+                        source.load()
+                        picture = source.convert("RGBA")
+                        picture.thumbnail((700, 250), getattr(Image, "Resampling", Image).LANCZOS)
+                    self._background_preview_photo = ImageTk.PhotoImage(picture, master=self.root)
+                    self.background_preview_image_label.configure(image=self._background_preview_photo, text="")
+            else:
+                self.background_preview_image_label.configure(image="", text="Vídeo verificado — use “Reproduzir / abrir” para tocar no reprodutor padrão do computador.")
+            self.background_preview_details_var.set(
+                f"{record['name']} · {record['size'] / (1024 * 1024):.1f} MiB · SHA-256 conferido · {record['mime']}"
+            )
+        except (OSError, ValueError, TypeError) as exc:
+            self.background_preview_image_label.configure(image="", text="Este item não será aberto porque a validação falhou.")
+            self.background_preview_details_var.set(f"Verificação falhou: {exc}")
+
+    def _play_background_selected(self):
+        asset_id = self._background_selected_id_value()
+        if not asset_id:
+            messagebox.showinfo("Fundos", "Selecione um arquivo da biblioteca.", parent=self.root)
+            return
+        try:
+            _record, path = resolve_background_asset(asset_id)
+            if os.name == "nt":
+                os.startfile(str(path))
+            elif __import__("platform").system() == "Darwin":
+                subprocess.Popen(["open", str(path)], shell=False, close_fds=True)
+            else:
+                subprocess.Popen(["xdg-open", str(path)], shell=False, close_fds=True)
+        except (OSError, ValueError, FileNotFoundError) as exc:
+            messagebox.showerror("Fundos", f"Não foi possível abrir este arquivo: {exc}", parent=self.root)
+
+    def _use_background_in_app(self):
+        asset_id = self._background_selected_id_value()
+        if not asset_id:
+            messagebox.showinfo("Fundos", "Selecione uma imagem da biblioteca.", parent=self.root)
+            return
+        try:
+            record, path = resolve_background_asset(asset_id)
+            if record.get("kind") != "image":
+                messagebox.showinfo("Fundos", "Nesta etapa, o fundo do aplicativo aceita imagens; vídeos podem ser reproduzidos aqui e definidos no Windows com Lively.", parent=self.root)
+                return
+            with Image.open(path) as source:
+                if source.width * source.height > 50_000_000:
+                    raise ValueError("Imagem muito grande para usar como plano de fundo.")
+                source.load()
+                prepared = source.convert("RGB")
+                prepared.thumbnail((4200, 2600), getattr(Image, "Resampling", Image).LANCZOS)
+            updated = dict(self.config)
+            updated["app_background_asset"] = asset_id
+            updated["app_background_mode"] = "image"
+            save_config(updated)
+            self.config = __import__("app.config", fromlist=["load_config"]).load_config()
+            self._app_background_source_image = prepared.copy()
+            self._render_ambient_layers()
+            self._update_custom_background_indicator()
+            self.background_status_var.set(f"Fundo do aplicativo aplicado: {record['name']}")
+        except (OSError, ValueError, TypeError) as exc:
+            messagebox.showerror("Fundos", f"Não foi possível aplicar o fundo: {exc}", parent=self.root)
+
+    def _clear_app_background(self):
+        updated = dict(self.config)
+        updated["app_background_asset"] = ""
+        updated["app_background_mode"] = "none"
+        try:
+            save_config(updated)
+            self.config = __import__("app.config", fromlist=["load_config"]).load_config()
+            self._app_background_source_image = None
+            self._render_ambient_layers()
+            self._update_custom_background_indicator()
+            self.background_status_var.set("Fundo personalizado do aplicativo removido.")
+        except OSError as exc:
+            messagebox.showerror("Fundos", f"Não foi possível remover o fundo: {exc}", parent=self.root)
+
+    def _locate_lively_executable(self):
+        path = filedialog.askopenfilename(
+            parent=self.root, title="Selecionar executável do Lively Wallpaper",
+            filetypes=[("Lively Wallpaper", "Lively.exe livelycu.exe"), ("Executáveis", "*.exe"), ("Todos os arquivos", "*.*")],
+        )
+        if not path:
+            return
+        candidate = Path(path).expanduser()
+        if not candidate.is_file() or candidate.name.lower() not in {"lively.exe", "livelycu.exe", "livelycu"}:
+            messagebox.showerror("Lively Wallpaper", "Escolha o Lively.exe ou livelycu.exe oficial. O aplicativo não executará arquivos de mídia.", parent=self.root)
+            return
+        updated = dict(self.config)
+        updated["lively_executable"] = str(candidate.resolve())
+        try:
+            save_config(updated)
+            self.config = __import__("app.config", fromlist=["load_config"]).load_config()
+            self.background_status_var.set(f"Executável Lively registrado: {candidate.name}")
+        except OSError as exc:
+            messagebox.showerror("Lively Wallpaper", f"Não foi possível salvar o caminho: {exc}", parent=self.root)
+
+    def _find_lively_executable(self) -> Path | None:
+        configured = str(self.config.get("lively_executable", "") or "")
+        candidates = [Path(configured).expanduser()] if configured else []
+        for name in ("lively.exe", "livelycu.exe"):
+            located = shutil.which(name)
+            if located:
+                candidates.append(Path(located))
+        local = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local")))
+        program_files = Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+        candidates.extend([
+            local / "Programs" / "Lively Wallpaper" / "Lively.exe",
+            local / "Lively Wallpaper" / "Lively.exe",
+            program_files / "Lively Wallpaper" / "Lively.exe",
+        ])
+        for candidate in candidates:
+            try:
+                resolved = candidate.resolve(strict=True)
+                if resolved.is_file() and resolved.name.lower() in {"lively.exe", "livelycu.exe"}:
+                    return resolved
+            except OSError:
+                continue
+        return None
+
+    def _set_windows_background(self):
+        asset_id = self._background_selected_id_value()
+        if not asset_id:
+            messagebox.showinfo("Papel de parede", "Selecione uma imagem ou vídeo da biblioteca.", parent=self.root)
+            return
+        if os.name != "nt":
+            messagebox.showinfo("Papel de parede", "A definição automática do papel de parede está disponível nesta etapa apenas no Windows.", parent=self.root)
+            return
+        try:
+            record, path = resolve_background_asset(asset_id)
+            updated = dict(self.config)
+            if record["kind"] == "image":
+                import ctypes
+                previous_buffer = ctypes.create_unicode_buffer(32768)
+                previous = ""
+                try:
+                    ctypes.windll.user32.SystemParametersInfoW(0x0073, len(previous_buffer), previous_buffer, 0)
+                    previous = previous_buffer.value
+                except (AttributeError, OSError):
+                    previous = str(self.config.get("windows_wallpaper_previous", "") or "")
+                ok = ctypes.windll.user32.SystemParametersInfoW(
+                    0x0014, 0, str(path), 0x0001 | 0x0002,
+                )
+                if not ok:
+                    raise OSError("O Windows recusou a alteração do papel de parede.")
+                updated["windows_wallpaper_previous"] = previous[:2048]
+                updated["windows_wallpaper_mode"] = "image"
+            else:
+                lively = self._find_lively_executable()
+                if lively is None:
+                    messagebox.showinfo(
+                        "Vídeo no papel de parede",
+                        "Para usar vídeo como papel de parede do Windows, instale o Lively Wallpaper e depois use “Localizar Lively.exe…”. O Windows não define vídeos como papel de parede por meio da API nativa de imagem.",
+                        parent=self.root,
+                    )
+                    return
+                monitor = int(self.config.get("wallpaper_monitor", 1))
+                result = subprocess.run(
+                    [str(lively), "setwp", "--file", str(path), "--monitor", str(monitor)],
+                    shell=False, capture_output=True, text=True, timeout=40,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+                if result.returncode != 0:
+                    raise OSError((result.stderr or result.stdout or "Lively não aceitou o vídeo.")[-800:])
+                updated["windows_wallpaper_mode"] = "video"
+            updated["windows_wallpaper_asset"] = asset_id
+            save_config(updated)
+            self.config = __import__("app.config", fromlist=["load_config"]).load_config()
+            self.background_status_var.set(f"Papel de parede do Windows definido: {record['name']}")
+        except (OSError, ValueError, FileNotFoundError, subprocess.TimeoutExpired) as exc:
+            messagebox.showerror("Papel de parede", f"Não foi possível definir o papel de parede: {exc}", parent=self.root)
+
+    def _clear_windows_background(self):
+        if os.name != "nt":
+            messagebox.showinfo("Papel de parede", "A definição automática do papel de parede está disponível apenas no Windows.", parent=self.root)
+            return
+        mode = str(self.config.get("windows_wallpaper_mode", "none") or "none")
+        try:
+            if mode == "video":
+                lively = self._find_lively_executable()
+                if lively is None:
+                    messagebox.showinfo("Papel de parede", "Localize o Lively.exe para retirar o vídeo em execução.", parent=self.root)
+                    return
+                monitor = int(self.config.get("wallpaper_monitor", 1))
+                result = subprocess.run(
+                    [str(lively), "closewp", "--monitor", str(monitor)],
+                    shell=False, capture_output=True, text=True, timeout=30,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+                if result.returncode != 0:
+                    raise OSError((result.stderr or result.stdout or "Lively não confirmou o encerramento.")[-800:])
+            elif mode == "image":
+                previous = str(self.config.get("windows_wallpaper_previous", "") or "")
+                if previous and Path(previous).is_file():
+                    import ctypes
+                    ok = ctypes.windll.user32.SystemParametersInfoW(
+                        0x0014, 0, previous, 0x0001 | 0x0002,
+                    )
+                    if not ok:
+                        raise OSError("O Windows não restaurou o papel de parede anterior.")
+            updated = dict(self.config)
+            updated["windows_wallpaper_mode"] = "none"
+            updated["windows_wallpaper_asset"] = ""
+            save_config(updated)
+            self.config = __import__("app.config", fromlist=["load_config"]).load_config()
+            self.background_status_var.set("Papel de parede personalizado removido; se disponível, o anterior foi restaurado.")
+        except (OSError, ValueError, FileNotFoundError, subprocess.TimeoutExpired) as exc:
+            messagebox.showerror("Papel de parede", f"Não foi possível retirar o fundo: {exc}", parent=self.root)
+
+    def _delete_background_selected(self):
+        asset_id = self._background_selected_id_value()
+        if not asset_id:
+            messagebox.showinfo("Fundos", "Selecione um arquivo da biblioteca.", parent=self.root)
+            return
+        try:
+            record, _path = resolve_background_asset(asset_id)
+        except (ValueError, OSError, FileNotFoundError) as exc:
+            messagebox.showerror("Fundos", f"O arquivo não passou na verificação e não será aberto: {exc}", parent=self.root)
+            return
+        if not messagebox.askyesno("Excluir fundo", f"Excluir “{record['name']}” da biblioteca?", parent=self.root):
+            return
+        if self.config.get("app_background_asset") == asset_id:
+            self._clear_app_background()
+        if self.config.get("windows_wallpaper_asset") == asset_id:
+            self._clear_windows_background()
+        try:
+            delete_background_asset(asset_id)
+            self._refresh_background_library()
+            self.background_status_var.set(f"Fundo removido: {record['name']}")
+        except (OSError, ValueError, FileNotFoundError) as exc:
+            messagebox.showerror("Fundos", f"Não foi possível excluir o fundo: {exc}", parent=self.root)
+
+    def _editor_values(self):
+        brightness = {"-50%": -0.5, "-25%": -0.25, "Normal": 0.0, "+25%": 0.25, "+50%": 0.5}.get(self.background_editor_brightness_var.get(), 0.0)
+        saturation = {"Sem cor": 0.0, "50%": 0.5, "Normal": 1.0, "150%": 1.5, "200%": 2.0, "300%": 3.0}.get(self.background_editor_saturation_var.get(), 1.0)
+        duration = {"Original": 0, "5 segundos": 5, "10 segundos": 10, "15 segundos": 15, "30 segundos": 30, "60 segundos": 60, "5 minutos": 300, "10 minutos": 600, "60 minutos": 3600}.get(self.background_editor_duration_var.get(), 0)
+        return brightness, saturation, duration
+
+    def _edit_background_selected(self):
+        asset_id = self._background_selected_id_value()
+        if not asset_id:
+            messagebox.showinfo("Editor de fundos", "Selecione uma imagem ou vídeo primeiro.", parent=self.root)
+            return
+        try:
+            record, path = resolve_background_asset(asset_id)
+            brightness, saturation, duration = self._editor_values()
+            updated = dict(self.config)
+            updated.update({
+                "background_editor_brightness": brightness,
+                "background_editor_saturation": saturation,
+                "background_editor_duration": duration,
+            })
+            save_config(updated)
+            self.config = __import__("app.config", fromlist=["load_config"]).load_config()
+            self.background_status_var.set("Preparando uma cópia editada…")
+
+            def worker():
+                from PIL import ImageEnhance
+                from .config import APP_DATA as DATA_DIR
+                temporary_dir = DATA_DIR / "temp"
+                temporary_dir.mkdir(parents=True, exist_ok=True)
+                if record["kind"] == "image":
+                    if Image is None:
+                        raise RuntimeError("Pillow não está disponível para editar imagens nesta instalação.")
+                    with Image.open(path) as source:
+                        if source.width * source.height > 50_000_000:
+                            raise ValueError("Imagem grande demais para editar com segurança.")
+                        source.load()
+                        result = source.convert("RGBA")
+                    result = ImageEnhance.Brightness(result).enhance(max(0.0, 1.0 + brightness))
+                    result = ImageEnhance.Color(result).enhance(saturation)
+                    with tempfile.NamedTemporaryFile(prefix="bg-edit-", suffix=".png", dir=temporary_dir, delete=False) as out:
+                        output_path = Path(out.name)
+                    try:
+                        result.save(output_path, format="PNG")
+                        result_record = import_background_file(output_path)
+                    finally:
+                        output_path.unlink(missing_ok=True)
+                    return result_record
+
+                ffmpeg_info = self.dep_infos.get("ffmpeg")
+                ffmpeg_path = Path(ffmpeg_info.path) if ffmpeg_info and getattr(ffmpeg_info, "path", None) else None
+                if ffmpeg_path is None or not ffmpeg_path.is_file():
+                    ffmpeg_path = Path(shutil.which("ffmpeg")) if shutil.which("ffmpeg") else None
+                if ffmpeg_path is None or not ffmpeg_path.is_file():
+                    raise RuntimeError("FFmpeg não foi encontrado. Configure-o na aba Dependências.")
+                with tempfile.NamedTemporaryFile(prefix="bg-edit-", suffix=".mp4", dir=temporary_dir, delete=False) as out:
+                    output_path = Path(out.name)
+                try:
+                    command = [
+                        str(ffmpeg_path), "-hide_banner", "-loglevel", "error", "-y",
+                        "-i", str(path),
+                        "-vf", f"eq=brightness={brightness:.3f}:saturation={saturation:.3f}",
+                    ]
+                    if duration > 0:
+                        command.extend(["-t", str(duration)])
+                    command.extend([
+                        "-map", "0:v:0", "-map", "0:a?", "-c:v", "libx264",
+                        "-preset", "veryfast", "-crf", "23", "-c:a", "aac",
+                        "-movflags", "+faststart", str(output_path),
+                    ])
+                    completed = subprocess.run(
+                        command, shell=False, capture_output=True, text=True,
+                        timeout=1800, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                    )
+                    if completed.returncode != 0 or not output_path.is_file() or output_path.stat().st_size < 12:
+                        raise RuntimeError((completed.stderr or completed.stdout or "FFmpeg não conseguiu editar o vídeo.")[-1000:])
+                    return import_background_file(output_path)
+                finally:
+                    output_path.unlink(missing_ok=True)
+
+            self._start_background_import(worker, "cópia editada")
+        except (OSError, ValueError, FileNotFoundError) as exc:
+            messagebox.showerror("Editor de fundos", f"Não foi possível editar o arquivo: {exc}", parent=self.root)
+
+    def _update_custom_background_indicator(self):
+        active = bool(self.config.get("app_background_mode") == "image" and self.config.get("app_background_asset"))
+        if hasattr(self, "settings_vars") and "theme" in self.settings_vars:
+            if active:
+                self.settings_vars["theme"].set("Personalizada")
+            else:
+                self.settings_vars["theme"].set(self._display_setting_value("theme", self.config.get("theme", "oled")))
+        combo = getattr(self, "theme_combo", None)
+        if combo is not None:
+            try:
+                combo.configure(state="disabled" if active else "readonly")
+            except tk.TclError:
+                pass
+        label = getattr(self, "custom_background_notice", None)
+        if label is not None:
+            label.configure(
+                text=("Personalizada · o fundo de imagem está ativo; a cor de fundo não pode ser alterada. Remova o fundo na aba Fundos para voltar a escolher um tema."
+                      if active else "Quando um fundo personalizado está ativo, a cor do fundo é controlada pela imagem escolhida."),
+                foreground="#34D399" if active else self.colors["muted"],
+            )
+
     def _build_dependencies(self):
         frame = ttk.Frame(self.pages_area)
         self.page_frames["dependencies"] = frame
