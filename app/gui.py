@@ -1323,6 +1323,31 @@ class MediaDownloaderApp:
         except tk.TclError:
             pass
 
+    def _custom_background_active(self) -> bool:
+        return bool(
+            self.config.get("app_background_mode") == "image"
+            and self.config.get("app_background_asset")
+            and self._app_background_source_image is not None
+        )
+
+    def _load_app_background_source(self) -> bool:
+        """Load a registered image as inert pixels after media and hash validation."""
+        self._app_background_source_image = None
+        asset_id = str(self.config.get("app_background_asset", "") or "")
+        if self.config.get("app_background_mode") != "image" or not asset_id or Image is None:
+            return False
+        record, path = resolve_background_asset(asset_id)
+        if record.get("kind") != "image":
+            raise ValueError("Somente imagens verificadas podem ser usadas como fundo do aplicativo nesta etapa.")
+        with Image.open(path) as source:
+            if source.width * source.height > 50_000_000:
+                raise ValueError("A imagem tem dimensões excessivas para o fundo do aplicativo.")
+            source.load()
+            rendered = source.convert("RGB")
+            rendered.thumbnail((4200, 2600), getattr(Image, "Resampling", Image).LANCZOS)
+            self._app_background_source_image = rendered.copy()
+        return True
+
     def _render_ambient_layers(self):
         if Image is None or ImageTk is None or not getattr(self, "_ambient_canvases", None):
             return
@@ -1343,6 +1368,7 @@ class MediaDownloaderApp:
                 brightness_min=self.config.get("visual_brightness_min", 0.10),
                 brightness_max=self.config.get("visual_brightness_max", 1.0),
                 pulse_depth=self.config.get("visual_pulse_depth", 0.65),
+                base_image=self._app_background_source_image if self._custom_background_active() else None,
             )
             if image is None:
                 return
@@ -1381,6 +1407,7 @@ class MediaDownloaderApp:
                 brightness_min=self.config.get("visual_brightness_min", 0.10),
                 brightness_max=self.config.get("visual_brightness_max", 1.0),
                 pulse_depth=self.config.get("visual_pulse_depth", 0.65),
+                base_image=self._app_background_source_image if self._custom_background_active() else None,
             )
             if image is None or ImageTk is None:
                 return
@@ -3502,6 +3529,7 @@ class MediaDownloaderApp:
                     brightness_min=self.config.get("visual_brightness_min", 0.10),
                     brightness_max=self.config.get("visual_brightness_max", 1.0),
                     pulse_depth=self.config.get("visual_pulse_depth", 0.65),
+                    base_image=self._app_background_source_image if self._custom_background_active() else None,
                 )
                 preview.delete("all")
                 if image is not None and ImageTk is not None:
