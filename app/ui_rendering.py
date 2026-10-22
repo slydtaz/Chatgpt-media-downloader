@@ -108,6 +108,7 @@ def render_rounded_button(
     gradient_phase: float = 0.0,
     radius: int | None = None,
     scale: int = 4,
+    border_width: float = 2.5,
 ):
     """Render a transparent button background with smooth double gradient borders."""
     if Image is None or ImageDraw is None or ImageChops is None:
@@ -122,9 +123,13 @@ def render_rounded_button(
     gradient_phase = float(gradient_phase) % 1.0
     canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
 
+    try:
+        border_width = max(1.0, min(6.0, float(border_width)))
+    except (TypeError, ValueError):
+        border_width = 2.5
     outer_inset = 0.7
-    mid_inset = 2.35
-    inner_inset = 3.95
+    mid_inset = outer_inset + border_width
+    inner_inset = mid_inset + max(1.0, border_width * 0.65)
     def shape_mask(inset: float):
         mask = Image.new("L", (w, h), 0)
         draw = ImageDraw.Draw(mask)
