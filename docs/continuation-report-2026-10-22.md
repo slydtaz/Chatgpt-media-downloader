@@ -1,36 +1,40 @@
 # Relatório de continuidade — 22/10/2026
 
-## Status executivo
-A execução agendada foi registrada como concluída, mas o resultado foi parcial. A branch de trabalho existe e os workflows anteriores passaram. Esta continuação adiciona confirmação explícita para alterações de papel de parede do Windows e atualiza o manifesto de validação. A validação da nova alteração ainda depende do CI acionado pelo commit mais recente.
+## Estado verificado
+- Branch pública: https://github.com/slydtaz/Chatgpt-media-downloader/tree/feature/reusable-neon-ui-library
+- Nenhuma alteração ou merge na `main`.
+- Commit confirmado de interface/segurança Windows: `48329fd6db3651d6441e3675848730c87f3a0200`.
+- Checkpoint atualizado: `3c793fe43b5ab63403b6b3ecc6d762d83a28a159`.
+- CI do aplicativo no commit `c27c365c44673c7bcdc0119781491e7eb1ff7941`: sucesso em Windows/Ubuntu, Python 3.10/3.12 — https://github.com/slydtaz/Chatgpt-media-downloader/actions/runs/39800128056
+- CI e empacotamento da biblioteca: sucesso em Windows/Ubuntu, Python 3.10/3.12 — https://github.com/slydtaz/Chatgpt-media-downloader/actions/runs/39800127989
+- Artefato independente da biblioteca: https://github.com/slydtaz/Chatgpt-media-downloader/actions/runs/39800127989/artifacts/12434802923
+- Tamanho informado pelo GitHub: 22.760 bytes. SHA-256 do arquivo de artefato ZIP do GitHub Actions: `51b5dbf46649eadb8c46ef6cbed1c0d57e3b820ecb849f200c915b40288476ce`. Não é um hash de um ZIP de continuidade separado.
+- Release atual permanece v5.4.0-beta.3; nenhuma nova release de executável foi criada.
 
-## Evidências remotas
-- Branch: https://github.com/slydtaz/Chatgpt-media-downloader/tree/feature/reusable-neon-ui-library
-- Commit de base verificado: https://github.com/slydtaz/Chatgpt-media-downloader/commit/891e31aeca133b562c93935f2a51b3203780629a
-- Testes do aplicativo (antes da última mudança): https://github.com/slydtaz/Chatgpt-media-downloader/actions/runs/39787096130 — sucesso, matriz Windows/Ubuntu e Python 3.10/3.12.
-- Testes/empacotamento da biblioteca: https://github.com/slydtaz/Chatgpt-media-downloader/actions/runs/39787096094 — sucesso, matriz Windows/Ubuntu e Python 3.10/3.12; pacote gerado.
-- Release existente: https://github.com/slydtaz/Chatgpt-media-downloader/releases/tag/v5.4.0-beta.3 (pré-release existente; nenhuma release nova publicada).
-
-## Mudança desta continuação
-- `app/gui.py`: confirmação explícita antes de definir ou remover fundo do Windows; nenhuma instalação automática; cancelamento aborta a ação. Commit: `48329fd6db3651d6441e3675848730c87f3a0200`.
-- `ui_library/MANIFEST.json`: CI anterior documentado e nova mudança marcada como aguardando CI.
+## Alterações
+- `app/gui.py`: confirmação explícita antes de definir/remover papel de parede do Windows, descrição de restauração possível e uso opcional de Lively já instalado, sem instalação automática; cancelamento interrompe a ação.
+- `ui_library/MANIFEST.json`: registra os testes anteriores e ressalva ausência de validação manual da GUI Windows.
+- `HANDOFF.md` e este relatório: atualizados com evidência de CI e hash do artefato real.
 
 ## Matriz de requisitos
 | Requisito | Estado |
 |---|---|
-| Branch pública independente da main | Concluído e verificado |
-| Biblioteca reutilizável, documentação, presets, testes e empacotamento | Concluído em nível de código; CI anterior passou |
-| Home/Aparência/gradientes/neon | Parcial; testes automatizados prévios passaram, falta captura visual real da última versão |
-| Aba Fundos, armazenamento local e verificação SHA-256 | Parcialmente concluído; testes de armazenamento anteriores existem |
-| Importação por URL e proteção SSRF | Parcial; verificação DNS antes da conexão não elimina DNS rebinding/TOCTOU |
-| Player de vídeo dentro do app | Não concluído; não confundir com abrir mídia externamente |
-| Wallpaper de imagem Windows reversível | Implementado com tentativa de restaurar caminho anterior; não validado manualmente nesta rodada |
-| Wallpaper de vídeo via Lively opcional | Implementação presente; não validada em Windows real |
-| Confirmação explícita para ações do Windows | Implementada nesta continuação; CI ainda deve ser confirmado |
-| Build/teste GUI real Windows | Não concluído nesta rodada |
-| Nova release de EXE | Não publicada (corretamente bloqueada pela validação pendente) |
+| Branch separada da main e biblioteca reutilizável | Concluído e verificado remotamente |
+| Testes da aplicação no CI | Passaram no commit verificado |
+| Testes/empacotamento da biblioteca no CI | Passaram no commit verificado |
+| Confirmação de alterações no wallpaper | Implementada; CI posterior passou; teste manual Windows pendente |
+| Home/Aparência/gradientes/neon | Parcial; falta inspeção visual/capturas atuais |
+| Aba Fundos, importação local e persistência | Parcialmente implementado; testes existentes passam |
+| Importação URL com SSRF resistente a DNS rebinding | Parcial; DNS TOCTOU ainda precisa ser resolvido |
+| Editor de mídia completo | Parcial |
+| Player de vídeo dentro do app | Não concluído |
+| Papel de parede de vídeo via Lively | Implementado em código; Windows real não validado manualmente |
+| ZIP de continuidade regenerado localmente | Não concluído; bytes de fontes originais não estavam disponíveis para materialização nesta sessão |
+| Nova pré-release do executável | Não publicada, corretamente bloqueada pela validação pendente |
 
-## Próximas ações
-- Confirmar os workflows acionados após o commit `48329fd6db3651d6441e3675848730c87f3a0200`.
-- Resolver DNS rebinding/TOCTOU e adicionar testes.
-- Implementar player interno de vídeo com backend suportado ou declarar a limitação.
-- Fazer teste manual em Windows real, gerar capturas reais e então atualizar os artefatos de continuidade.
+## Próximos passos
+1. Resolver DNS rebinding/TOCTOU e adicionar testes de URL.
+2. Implementar player interno com backend suportado ou manter o recurso explicitamente parcial.
+3. Validar manualmente em Windows real, testar restauração de papel de parede e Lively, e gerar capturas reais.
+4. Gerar pacote de continuidade com hash após obter bytes verificáveis dos arquivos-fonte.
+5. Não publicar EXE até cumprir os gates de segurança e validação Windows.
