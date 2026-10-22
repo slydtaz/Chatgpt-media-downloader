@@ -2,7 +2,7 @@ name: Tests
 
 on:
   push:
-    branches: [main, master, 'beta/**']
+    branches: [main, master, 'beta/**', 'feature/reusable-neon-ui-library']
   pull_request:
   workflow_dispatch:
 
