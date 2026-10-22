@@ -12,7 +12,7 @@ class EffectsTests(unittest.TestCase):
             self.assertTrue(all(len(c)==7 and c.startswith("#") for c in colors))
     def test_gradient_positions_differ(self):
         cfg=GradientConfig(colors=("#FF0000","#0000FF"),intensity=1,pulse_strength=0)
-        self.assertNotEqual(sample_gradient(cfg,.05,.5,0),sample_gradient(cfg,.95,.5,0))
+        self.assertNotEqual(sample_gradient(cfg,.05,.5,0),sample_gradient(cfg,.45,.5,0))
     def test_phase_changes_output(self):
         cfg=GradientConfig(colors=("#FF0000","#0000FF"),intensity=1,pulse_strength=0,speed=1)
         self.assertNotEqual(sample_gradient(cfg,.25,.5,0),sample_gradient(cfg,.25,.5,2))
