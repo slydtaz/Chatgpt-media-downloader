@@ -26,7 +26,20 @@ def _rgb(value: str) -> tuple[int, int, int]:
     value = value.lstrip("#")
     return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))
 
-def palette_colors(name: str = "cosmic") -> tuple[str, ...]:
+def palette_colors(name: str = "cosmic", custom_colors=None) -> tuple[str, ...]:
+    """Return a built-in palette or a validated user palette (3–8 HEX colors)."""
+    if str(name).strip().lower() == "custom" and isinstance(custom_colors, (list, tuple)):
+        cleaned = []
+        for value in custom_colors:
+            value = str(value or "").strip().upper()
+            if len(value) == 7 and value.startswith("#"):
+                try:
+                    int(value[1:], 16)
+                except ValueError:
+                    continue
+                cleaned.append(value)
+        if len(cleaned) >= 3:
+            return tuple(cleaned[:8])
     return PALETTES.get(str(name).strip().lower(), PALETTES["cosmic"])
 
 def _clamp_strength(value: float) -> float:
@@ -43,6 +56,10 @@ def render_ambient_gradient(
     *,
     phase: float = 0.0,
     style: str = "cosmic",
+    custom_colors=None,
+    brightness_min: float = 0.10,
+    brightness_max: float = 1.0,
+    pulse_depth: float = 0.0,
 ):
     """Render moving translucent light over a true OLED-black base.
 
@@ -62,8 +79,18 @@ def render_ambient_gradient(
     except (TypeError, ValueError):
         phase = 0.0
     style = str(style or "cosmic").strip().lower()
-    if style not in {"cosmic", "nebula", "aurora", "edge-light"}:
+    if style not in {"cosmic", "nebula", "aurora", "edge-light", "diagonal", "bottom-up", "bubbles", "pulse"}:
         style = "cosmic"
+    try:
+        brightness_min = max(0.0, min(1.0, float(brightness_min)))
+        brightness_max = max(brightness_min, min(1.0, float(brightness_max)))
+        pulse_depth = max(0.0, min(1.0, float(pulse_depth)))
+    except (TypeError, ValueError):
+        brightness_min, brightness_max, pulse_depth = 0.10, 1.0, 0.0
+    if pulse_depth > 0.001:
+        wave = (math.sin(phase) + 1.0) / 2.0
+        pulse_factor = brightness_min + (brightness_max - brightness_min) * wave
+        strength *= (1.0 - pulse_depth) + pulse_depth * pulse_factor
 
     # Keep the loop cheap at fullscreen sizes; blur at 520 px and upscale.
     render_factor = min(1.0, 520.0 / max(width, height))
@@ -74,7 +101,7 @@ def render_ambient_gradient(
         resampling = getattr(Image, "Resampling", Image).LANCZOS
         return base.resize((width, height), resampling) if base.size != (width, height) else base
 
-    colors = palette_colors(palette)
+    colors = palette_colors(palette, custom_colors)
     glow = Image.new("RGBA", (work_w, work_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(glow)
     short_side = min(work_w, work_h)
@@ -83,6 +110,22 @@ def render_ambient_gradient(
         blobs = (
             (0.00, 0.08, 0.57, 0), (1.00, 0.18, 0.53, 2),
             (0.85, 1.02, 0.51, 1), (0.12, 0.96, 0.44, 4),
+        )
+    elif style == "diagonal":
+        blobs = (
+            (0.02, 1.02, 0.48, 0), (0.32, 0.72, 0.42, 4),
+            (0.68, 0.30, 0.42, 2), (1.02, -0.02, 0.48, 1),
+        )
+    elif style == "bottom-up":
+        blobs = (
+            (0.02, 1.04, 0.52, 0), (0.34, 0.93, 0.48, 4),
+            (0.70, 0.99, 0.47, 2), (0.98, 1.03, 0.49, 1),
+        )
+    elif style == "bubbles":
+        blobs = (
+            (0.08, 0.86, 0.24, 0), (0.28, 0.24, 0.20, 4),
+            (0.54, 0.62, 0.22, 2), (0.78, 0.18, 0.24, 1),
+            (0.96, 0.76, 0.20, 3),
         )
     elif style == "aurora":
         blobs = (
@@ -112,9 +155,8 @@ def render_ambient_gradient(
         draw.ellipse((cx-radius, cy-radius, cx+radius, cy+radius),
                      fill=(*color, min(220, alpha)))
 
-    if style in {"cosmic", "nebula"}:
-        # Saturated diagonal light ribbons break up broad blobs into a nebula-like
-        # field while leaving the OLED-black base visible between streaks.
+    if style in {"cosmic", "nebula", "diagonal", "pulse"}:
+        # Saturated ribbons add movement without a harsh full-screen color wash.
         for index, color_value in enumerate(colors[:4]):
             ribbon = []
             for step in range(101):
@@ -129,6 +171,28 @@ def render_ambient_gradient(
                 width=max(2, round(short_side * (0.035 if style == "nebula" else 0.025))),
                 joint="curve",
             )
+
+    if style == "bottom-up":
+        for index, color_value in enumerate(colors[:4]):
+            points = []
+            for step in range(81):
+                t = step / 80
+                y = work_h * (0.98 - t * 0.92)
+                x = work_w * (0.12 + index * 0.25 + math.sin(t * math.tau + motion * 0.65 + index) * 0.06)
+                points.append((round(x), round(y)))
+            draw.line(points, fill=(*_rgb(color_value), round(50 + 80 * strength)),
+                      width=max(6, round(short_side * 0.07)), joint="curve")
+
+    if style == "bubbles":
+        # Additional softly blurred circles behave like luminous bubbles.
+        for index in range(9):
+            x = (0.08 + (index * 0.137 + 0.10 * math.sin(motion * 0.7 + index)) % 0.84) * work_w
+            y = (0.10 + (index * 0.193 - motion * (0.025 + 0.004 * (index % 3))) % 0.82) * work_h
+            radius = max(3, round(short_side * (0.035 + 0.015 * (index % 3))))
+            color = _rgb(colors[index % len(colors)])
+            alpha = round((85 + 90 * strength) * strength)
+            draw.ellipse((round(x-radius), round(y-radius), round(x+radius), round(y+radius)),
+                         fill=(*color, min(220, alpha)))
 
     if style == "aurora":
         # A few wide, saturated ribbons add a more ribbon-like alternative.
@@ -169,9 +233,17 @@ def render_gradient_preview(
     *,
     phase: float = 0.0,
     style: str = "cosmic",
+    custom_colors=None,
+    brightness_min: float = 0.10,
+    brightness_max: float = 1.0,
+    pulse_depth: float = 0.0,
 ):
     """Render a reference preview of the same animated light-over-black effect."""
-    image = render_ambient_gradient(width, height, palette, strength, phase=phase, style=style)
+    image = render_ambient_gradient(
+        width, height, palette, strength, phase=phase, style=style,
+        custom_colors=custom_colors, brightness_min=brightness_min,
+        brightness_max=brightness_max, pulse_depth=pulse_depth,
+    )
     if image is None:
         return None
     return image.convert("RGB")
