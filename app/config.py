@@ -128,11 +128,17 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "animations_enabled": False,
     "visual_effects_enabled": True,
     "visual_palette": "cosmic",
+    "visual_custom_colors": ["#743BEB", "#4F46E5", "#1687F8", "#21B6EB", "#B52CE3"],
     "visual_strength": 0.80,
     "visual_orbits": 3,
     "visual_background_animated": True,
     "visual_background_style": "cosmic",
     "visual_background_speed": 0.85,
+    "visual_pulse_depth": 0.65,
+    "visual_brightness_min": 0.10,
+    "visual_brightness_max": 1.0,
+    "visual_border_glow_strength": 0.90,
+    "visual_border_glow_width": 2.5,
     "visual_hover_enabled": True,
     "visual_hover_scale": 1.06,
     "visual_hover_reveal_seconds": 1.0,
@@ -211,13 +217,23 @@ def load_config() -> dict[str, Any]:
     data["accent_color"] = accent.upper()
     if data.get("ui_density") not in {"comfortable", "compact"}:
         data["ui_density"] = "comfortable"
-    if data.get("visual_palette") not in {"cosmic", "nebula", "aurora", "ocean"}:
+    if data.get("visual_palette") not in {"cosmic", "nebula", "aurora", "ocean", "custom"}:
         data["visual_palette"] = "cosmic"
+    custom_colors = data.get("visual_custom_colors", DEFAULT_CONFIG["visual_custom_colors"])
+    if not isinstance(custom_colors, list):
+        custom_colors = list(DEFAULT_CONFIG["visual_custom_colors"])
+    custom_colors = [
+        str(color).strip().upper() for color in custom_colors[:8]
+        if isinstance(color, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", color.strip())
+    ]
+    if len(custom_colors) < 3:
+        custom_colors = list(DEFAULT_CONFIG["visual_custom_colors"])
+    while len(custom_colors) < 5:
+        custom_colors.append(custom_colors[len(custom_colors) % len(custom_colors)])
+    data["visual_custom_colors"] = custom_colors[:8]
     try:
-        data["visual_strength"] = float(data.get("visual_strength", 0.55))
+        data["visual_strength"] = max(0.0, min(1.0, float(data.get("visual_strength", 0.55))))
     except (TypeError, ValueError):
-        data["visual_strength"] = 0.55
-    if data["visual_strength"] not in {0.30, 0.55, 0.80}:
         data["visual_strength"] = 0.55
     try:
         data["visual_orbits"] = int(data.get("visual_orbits", 3))
@@ -225,26 +241,39 @@ def load_config() -> dict[str, Any]:
         data["visual_orbits"] = 3
     if data["visual_orbits"] not in {2, 3, 4}:
         data["visual_orbits"] = 3
-    if data.get("visual_background_style") not in {"cosmic", "nebula", "aurora", "edge-light"}:
+    if data.get("visual_background_style") not in {"cosmic", "nebula", "aurora", "edge-light", "diagonal", "bottom-up", "bubbles", "pulse"}:
         data["visual_background_style"] = "cosmic"
     try:
         data["visual_background_speed"] = float(data.get("visual_background_speed", 0.85))
     except (TypeError, ValueError):
         data["visual_background_speed"] = 0.85
-    if data["visual_background_speed"] not in {0.45, 0.85, 1.25}:
+    if not (0.1 <= data["visual_background_speed"] <= 3.0):
         data["visual_background_speed"] = 0.85
     try:
         data["visual_hover_scale"] = float(data.get("visual_hover_scale", 1.06))
     except (TypeError, ValueError):
         data["visual_hover_scale"] = 1.06
-    if data["visual_hover_scale"] not in {1.04, 1.06, 1.10}:
-        data["visual_hover_scale"] = 1.06
+    data["visual_hover_scale"] = max(1.0, min(1.15, data["visual_hover_scale"]))
     try:
         data["visual_hover_reveal_seconds"] = float(data.get("visual_hover_reveal_seconds", 1.0))
     except (TypeError, ValueError):
         data["visual_hover_reveal_seconds"] = 1.0
-    if data["visual_hover_reveal_seconds"] not in {0.5, 1.0, 1.5}:
-        data["visual_hover_reveal_seconds"] = 1.0
+    data["visual_hover_reveal_seconds"] = max(0.1, min(3.0, data["visual_hover_reveal_seconds"]))
+    for key, default in (("visual_pulse_depth", 0.65), ("visual_brightness_min", 0.10),
+                          ("visual_brightness_max", 1.0), ("visual_border_glow_strength", 0.90),
+                          ("visual_border_glow_width", 2.5)):
+        try:
+            data[key] = float(data.get(key, default))
+        except (TypeError, ValueError):
+            data[key] = default
+        if not __import__("math").isfinite(data[key]):
+            data[key] = default
+    data["visual_pulse_depth"] = max(0.0, min(1.0, data["visual_pulse_depth"]))
+    data["visual_brightness_min"] = max(0.0, min(1.0, data["visual_brightness_min"]))
+    data["visual_brightness_max"] = max(data["visual_brightness_min"], min(1.0, data["visual_brightness_max"]))
+    data["visual_border_glow_strength"] = max(0.0, min(1.0, data["visual_border_glow_strength"]))
+    data["visual_border_glow_width"] = max(1.0, min(6.0, data["visual_border_glow_width"]))
+
     visual_enabled = data.get("visual_effects_enabled", True)
     if isinstance(visual_enabled, bool):
         data["visual_effects_enabled"] = visual_enabled
