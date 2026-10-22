@@ -3196,6 +3196,12 @@ class MediaDownloaderApp:
         if os.name != "nt":
             messagebox.showinfo("Papel de parede", "A definição automática do papel de parede está disponível nesta etapa apenas no Windows.", parent=self.root)
             return
+        if not messagebox.askyesno(
+            "Confirmar alteração do Windows",
+            "Isso vai alterar o papel de parede do Windows. Para imagens, o aplicativo tentará guardar o caminho do papel anterior para restaurá-lo depois. Para vídeos, será usado o Lively já instalado e selecionado; nenhuma aplicação será instalada automaticamente. Deseja continuar?",
+            parent=self.root,
+        ):
+            return
         try:
             record, path = resolve_background_asset(asset_id)
             updated = dict(self.config)
@@ -3245,6 +3251,15 @@ class MediaDownloaderApp:
             messagebox.showinfo("Papel de parede", "A definição automática do papel de parede está disponível apenas no Windows.", parent=self.root)
             return
         mode = str(self.config.get("windows_wallpaper_mode", "none") or "none")
+        if mode == "none":
+            messagebox.showinfo("Papel de parede", "O aplicativo não registra um fundo personalizado ativo do Windows.", parent=self.root)
+            return
+        if not messagebox.askyesno(
+            "Confirmar restauração do Windows",
+            "Deseja remover o fundo personalizado do Windows? Para imagens, tentaremos restaurar o caminho do papel anterior, se ele ainda existir. Para vídeos, o Lively será solicitado a fechar o papel de parede selecionado.",
+            parent=self.root,
+        ):
+            return
         try:
             if mode == "video":
                 lively = self._find_lively_executable()
