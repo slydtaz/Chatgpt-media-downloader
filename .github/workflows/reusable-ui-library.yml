@@ -1,0 +1,44 @@
+name: Reusable Neon UI Library
+
+on:
+  push:
+    branches: [feature/reusable-neon-ui-library]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.10", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m compileall -q ui_library/src ui_library/tests
+      - run: python -m unittest discover -s ui_library/tests -v
+
+  package:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python ui_library/tools/package.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reusable-neon-ui-0.1.0
+          path: |
+            ui_library/dist/reusable-neon-ui-0.1.0.zip
+            ui_library/dist/SHA256SUMS.txt
+          retention-days: 30

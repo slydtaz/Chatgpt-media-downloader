@@ -1,0 +1,19 @@
+{
+  "name": "reusable-neon-ui",
+  "version": "0.1.0",
+  "python": ">=3.10",
+  "runtime_dependencies": [],
+  "optional_dependency": "Pillow for image renderers",
+  "toolkit": "tkinter",
+  "modules": [
+    "src/reusable_neon_ui/config.py",
+    "src/reusable_neon_ui/effects.py",
+    "src/reusable_neon_ui/widgets.py",
+    "src/reusable_neon_ui/pillow_effects.py",
+    "src/reusable_neon_ui/rounded_rendering.py"
+  ],
+  "validation": {
+    "unit_tests": "included; CI run pending",
+    "windows_gui": "not validated in this run"
+  }
+}
